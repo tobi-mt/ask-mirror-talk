@@ -1,0 +1,30 @@
+version: "3.9"
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: mirror
+      POSTGRES_PASSWORD: mirror
+      POSTGRES_DB: mirror_talk
+    volumes:
+      - mirror_pg:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://mirror:mirror@db:5432/mirror_talk
+      RSS_URL: ${RSS_URL}
+      TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:-faster_whisper}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-20}
+      ADMIN_ENABLED: ${ADMIN_ENABLED:-true}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+volumes:
+  mirror_pg:

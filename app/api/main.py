@@ -9,7 +9,7 @@ from sqlalchemy import text
 import time
 
 from app.core.config import settings
-from app.core.db import get_db
+from app.core.db import get_db, init_db
 from app.core.logging import setup_logging
 from app.qa.service import answer_question
 from app.ingestion.pipeline import run_ingestion
@@ -29,6 +29,11 @@ class AskRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 
 @app.post("/ask")

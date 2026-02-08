@@ -51,6 +51,11 @@ def main():
         action="store_true",
         help="Show what would be processed without actually doing it",
     )
+    parser.add_argument(
+        "--no-confirm",
+        action="store_true",
+        help="Skip confirmation prompt (for automated runs)",
+    )
     args = parser.parse_args()
 
     if not settings.rss_url:
@@ -108,13 +113,14 @@ def main():
             return 0
 
         # Confirm with user
-        logger.info("\nAbout to ingest %s new episodes", len(new_episodes))
-        logger.info("Estimated time: %s minutes", len(new_episodes) * 3)
-        
-        response = input("\nProceed? [y/N]: ")
-        if response.lower() not in ["y", "yes"]:
-            logger.info("Cancelled by user")
-            return 0
+        if not args.no_confirm:
+            logger.info("\nAbout to ingest %s new episodes", len(new_episodes))
+            logger.info("Estimated time: %s minutes", len(new_episodes) * 3)
+            
+            response = input("\nProceed? [y/N]: ")
+            if response.lower() not in ["y", "yes"]:
+                logger.info("Cancelled by user")
+                return 0
 
         # Run the optimized ingestion
         logger.info("\nStarting ingestion...\n")

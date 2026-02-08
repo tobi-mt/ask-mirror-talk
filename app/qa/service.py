@@ -38,7 +38,7 @@ def answer_question(db: Session, question: str, user_ip: str):
         db,
         question=question,
         answer=response["answer"],
-        episode_ids=[e["id"] for e in response["citations"]],
+        episode_ids=[c["episode_id"] for c in response["citations"]],
         latency_ms=latency_ms,
         user_ip=user_ip,
     )

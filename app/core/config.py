@@ -15,11 +15,37 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def fix_database_url(cls, v: str) -> str:
-        """Fix Render's postgres:// URL to work with SQLAlchemy 2.0+ (if needed)"""
-        # Only convert if Render provides the old format
-        # Your current setup already uses postgresql+psycopg:// so this won't run
-        if v.startswith("postgres://") and not v.startswith("postgresql"):
-            return v.replace("postgres://", "postgresql+psycopg://", 1)
+        """
+        Fix database URL for psycopg3 compatibility.
+        
+        We use psycopg3 (psycopg[binary]>=3.1.0), which requires the +psycopg dialect.
+        
+        Conversions:
+        - postgres://...       → postgresql+psycopg://...
+        - postgresql://...     → postgresql+psycopg://...  
+        - postgresql+psycopg2://... → postgresql+psycopg://...
+        - postgresql+psycopg://...  → postgresql+psycopg://... (no change)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        original = v
+        
+        if v.startswith("postgres://"):
+            #Render provides postgres://, convert to postgresql+psycopg://
+            v = v.replace("postgres://", "postgresql+psycopg://", 1)
+        elif v.startswith("postgresql+psycopg2://"):
+            # Wrong dialect, we use psycopg3, not psycopg2
+            v = v.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+        elif v.startswith("postgresql://") and "+psycopg" not in v:
+            # Missing dialect, add +psycopg for psycopg3
+            v = v.replace("postgresql://", "postgresql+psycopg://", 1)
+        
+        if original != v:
+            logger.info(f"Database URL converted for psycopg3 compatibility")
+            logger.info(f"  From: {original.split('@')[0].split('//')[0]}://***")
+            logger.info(f"  To:   {v.split('@')[0].split('//')[0]}://***")
+        
         return v
 
     # Storage
@@ -52,6 +78,7 @@ class Settings(BaseSettings):
 
     # API
     rate_limit_per_minute: int = 20
+    allowed_origins: str = ""  # comma-separated origins for CORS
 
     # Admin dashboard
     admin_enabled: bool = True

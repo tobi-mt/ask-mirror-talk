@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, Request, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 import ipaddress
@@ -19,6 +20,18 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name)
+
+# Configure CORS - allows your WordPress site to call the API
+if settings.allowed_origins:
+    origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
+    logger.info(f"CORS enabled for origins: {origins}")
 
 _rate_limit_bucket: dict[str, list[float]] = {}
 _security = HTTPBasic()

@@ -48,9 +48,9 @@ services:
       - key: LOG_LEVEL
         value: INFO
       
-      # Optional: CORS for your WordPress site
+      # CORS for your WordPress site
       - key: ALLOWED_ORIGINS
-        value: https://yourdomain.com,https://www.yourdomain.com
+        value: https://mirrortalkpodcast.com,https://www.mirrortalkpodcast.com
 
   # Automatic ingestion - Wednesdays at 5 AM Central European Time (CET)
   # Checks for new episodes and processes them automatically

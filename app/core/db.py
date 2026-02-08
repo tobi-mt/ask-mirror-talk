@@ -1,14 +1,29 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+import logging
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# For psycopg3 (psycopg[binary]), SQLAlchemy 2.0+ uses postgresql+psycopg:// dialect
+# Log the database URL (redacted) for debugging
+url_parts = settings.database_url.split('@')
+if len(url_parts) > 1:
+    logger.info("Database URL format: %s://***@%s", settings.database_url.split(':')[0], url_parts[1])
+else:
+    logger.info("Database URL format: %s://...", settings.database_url.split(':')[0])
+# Ensure we're using psycopg3, not psycopg2
+engine = create_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    echo=False  # Set to True for SQL query logging
+)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -10,6 +11,16 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+psycopg://mirror:mirror@localhost:5432/mirror_talk"
+    
+    @field_validator("database_url")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        """Fix Render's postgres:// URL to work with SQLAlchemy 2.0+ (if needed)"""
+        # Only convert if Render provides the old format
+        # Your current setup already uses postgresql+psycopg:// so this won't run
+        if v.startswith("postgres://") and not v.startswith("postgresql"):
+            return v.replace("postgres://", "postgresql+psycopg://", 1)
+        return v
 
     # Storage
     data_dir: str = "data"

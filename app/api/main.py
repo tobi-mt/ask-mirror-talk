@@ -3,6 +3,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 import ipaddress
 import secrets
+import logging
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -15,6 +16,7 @@ from app.qa.service import answer_question
 from app.ingestion.pipeline import run_ingestion
 
 setup_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name)
 
@@ -33,7 +35,19 @@ def health():
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    """Initialize database on application startup."""
+    logger.info("=" * 60)
+    logger.info("Starting Ask Mirror Talk API")
+    logger.info(f"Environment: {settings.environment}")
+    logger.info(f"Database URL: {settings.database_url[:50]}...")
+    logger.info("=" * 60)
+    
+    try:
+        init_db()
+        logger.info("✓ Application startup complete")
+    except Exception as e:
+        logger.error(f"✗ Application startup failed: {e}", exc_info=True)
+        raise
 
 
 @app.post("/ask")

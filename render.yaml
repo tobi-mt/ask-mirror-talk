@@ -9,7 +9,7 @@ services:
     region: oregon  # Change to your preferred region
     plan: starter  # $7/month - 512MB RAM, sufficient for most workloads
     # Alternative: standard ($25/month, 2GB RAM) for heavier traffic
-    buildCommand: "pip install -e '.[transcription,embeddings]'"
+    buildCommand: "./render-build.sh"
     startCommand: "uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
     envVars:
@@ -62,7 +62,7 @@ services:
     # "0 4 * * 3" = 4:00 AM UTC every Wednesday = 5:00 AM CET (0 = Sunday, 3 = Wednesday)
     # Note: CET is UTC+1, CEST is UTC+2. Using 4 AM UTC works for standard time.
     schedule: "0 4 * * 3"  # 4 AM UTC = 5 AM CET every Wednesday
-    buildCommand: "pip install -e '.[transcription,embeddings]'"
+    buildCommand: "./render-build.sh"
     startCommand: "python scripts/bulk_ingest.py --max-episodes 3"
     envVars:
       # RSS Feed Configuration

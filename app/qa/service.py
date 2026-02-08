@@ -1,3 +1,4 @@
+import gc
 import time
 from sqlalchemy.orm import Session
 
@@ -41,6 +42,9 @@ def answer_question(db: Session, question: str, user_ip: str):
         latency_ms=latency_ms,
         user_ip=user_ip,
     )
+
+    # Explicit garbage collection to free up memory
+    gc.collect()
 
     return {
         "question": question,

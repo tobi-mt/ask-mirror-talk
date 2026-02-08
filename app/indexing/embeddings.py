@@ -3,15 +3,27 @@ import math
 from app.core.config import settings
 
 
-def embed_text(text: str) -> list[float]:
-    if settings.embedding_provider == "sentence_transformers":
+# Singleton for caching the embedding model
+_embedding_model = None
+
+
+def _get_embedding_model():
+    """Lazy load and cache the embedding model."""
+    global _embedding_model
+    if _embedding_model is None:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
             raise RuntimeError(
                 "sentence-transformers not installed. Install optional dependency 'embeddings'."
             ) from exc
-        model = SentenceTransformer("all-MiniLM-L6-v2")
+        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedding_model
+
+
+def embed_text(text: str) -> list[float]:
+    if settings.embedding_provider == "sentence_transformers":
+        model = _get_embedding_model()
         vec = model.encode([text])[0]
         return vec.tolist()
 

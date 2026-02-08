@@ -18,4 +18,9 @@ COPY scripts /app/scripts
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Optimized for memory: single worker with limited concurrency
+# Adjust based on available memory:
+# - <512MB: --workers 1 --limit-concurrency 5
+# - 512MB-2GB: --workers 1 --limit-concurrency 10
+# - >2GB: --workers 2 --limit-concurrency 20
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--limit-concurrency", "10"]

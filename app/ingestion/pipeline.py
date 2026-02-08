@@ -1,3 +1,4 @@
+import gc
 import logging
 from pathlib import Path
 
@@ -79,6 +80,9 @@ def run_ingestion(db: Session):
 
             repository.create_chunks(db, episode_id=episode.id, chunks=enriched_chunks)
             processed += 1
+            
+            # Force garbage collection after each episode to free memory
+            gc.collect()
 
         repository.finish_ingest_run(db, run.id, status="success", message=f"processed={processed}")
         return {"processed": processed}

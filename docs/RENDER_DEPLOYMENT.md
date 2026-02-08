@@ -9,9 +9,26 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
 **Deployment Setup:**
 - ✅ **1 Web Service** - FastAPI application
 - ✅ **1 Cron Job** - Automatic ingestion (Wednesdays at 5 AM CET)
-- ✅ **1 PostgreSQL Database** - With pgvector extension
+- ✅ **1 PostgreSQL Database** - With pgvector extensi### Current Setup: ~$14/month
 
-**Total Cost:** ~$14/month ($7 web + $7 database)
+| Service | Plan | Cost |
+|---------|------|------|
+| Web Service | Starter | $7/month |
+| PostgreSQL | Basic | $7/month |
+| Cron Job | - | **FREE** |
+| **TOTAL** | | **$14/month** |
+
+### Upgrade Options
+
+**For Better Performance:**
+- Web Service Standard: $25/month (2GB RAM, better CPU)
+- PostgreSQL Pro: $20/month (4GB RAM, 50GB storage)
+
+**Free Tier Option (Testing Only):**
+- PostgreSQL Free: 256MB RAM, 1GB storage (90-day trial, then expires)
+- Note: Not recommended for production
+
+**Important:** Database plan is selected during deployment, not in the YAML file.* ~$14/month ($7 web + $7 database)
 
 **Features:**
 - 🔄 Automatic episode ingestion every Wednesday at 5 AM CET
@@ -39,6 +56,7 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
    - Connect your GitHub repository
    - Select `ask-mirror-talk`
    - Render will automatically detect `render.yaml`
+   - **Important:** When prompted, select **"Basic"** database plan ($7/month)
 
 3. **Set Environment Variables** (if not using render.yaml defaults)
    - `ADMIN_PASSWORD` - Set a secure password
@@ -46,6 +64,7 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
 
 4. **Deploy!**
    - Click "Apply"
+   - Select database plan: **Basic** ($7/month recommended)
    - Wait 5-10 minutes for first deploy
    - Get your URL: `https://ask-mirror-talk.onrender.com`
 
@@ -61,7 +80,7 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
    - Database: `mirror_talk`
    - User: `mirror`
    - Region: `Oregon` (or nearest to you)
-   - Plan: `Standard` ($7/month)
+   - Plan: `Basic` ($7/month) - recommended for production
    - PostgreSQL Version: `16`
 3. Click "Create Database"
 4. **Enable pgvector:**
@@ -70,9 +89,11 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
    psql <connection-string>
    
    # Enable extension
-   CREATE EXTENSION vector;
+   CREATE EXTENSION IF NOT EXISTS vector;
    \q
    ```
+
+**Note:** Render usually installs pgvector automatically, but verify it's enabled.
 
 #### Step 2: Create Web Service
 

@@ -97,10 +97,9 @@ databases:
   - name: mirror-talk-db
     databaseName: mirror_talk
     user: mirror
-    plan: standard  # $7/month - 1GB RAM, 10GB storage (new pricing)
-    # Alternative: free (256MB, 1GB, expires after 90 days) or pro ($20/month)
-    # Note: Render automatically installs pgvector extension
-    postgresMajorVersion: "16"
+    plan: starter  # $7/month - Options: starter, standard, pro, pro plus
+    ipAllowList: []
+    # Note: Render automatically installs pgvector extension for PostgreSQL 12+
 
 # Optional: If you need to manually trigger ingestion before Wednesday
 # You can add a second cron job for testing or backup runs

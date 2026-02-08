@@ -25,7 +25,8 @@ services:
       
       # AI/ML Configuration
       - key: EMBEDDING_PROVIDER
-        value: sentence_transformers
+        value: local  # Use lightweight embeddings (no ML models, low memory)
+        # Options: local (fast, ~0MB) | sentence_transformers (better quality, ~300MB RAM)
       
       - key: WHISPER_MODEL
         value: base  # Options: tiny, base, small (base = good balance)
@@ -78,7 +79,8 @@ services:
       
       # AI/ML Configuration
       - key: EMBEDDING_PROVIDER
-        value: sentence_transformers
+        value: local  # Use lightweight embeddings (no ML models, low memory)
+        # Options: local (fast, ~0MB) | sentence_transformers (better quality, ~300MB RAM)
       
       - key: WHISPER_MODEL
         value: base

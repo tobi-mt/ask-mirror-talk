@@ -97,7 +97,8 @@ databases:
   - name: mirror-talk-db
     databaseName: mirror_talk
     user: mirror
-    plan: starter  # $7/month - Options: starter, standard, pro, pro plus
+    plan: basic-256mb  # $6/month - 256MB RAM, 0.1 CPU (sufficient for podcast ingestion)
+    # Alternatives: basic-1gb ($19/month), basic-4gb ($75/month)
     ipAllowList: []
     # Note: Render automatically installs pgvector extension for PostgreSQL 12+
 

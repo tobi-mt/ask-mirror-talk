@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Depends, Request, HTTPException, BackgroundTasks
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 import ipaddress
@@ -9,7 +9,7 @@ from sqlalchemy import text
 import time
 
 from app.core.config import settings
-from app.core.db import get_db, init_db
+from app.core.db import get_db, init_db, SessionLocal
 from app.core.logging import setup_logging
 from app.qa.service import answer_question
 from app.ingestion.pipeline import run_ingestion
@@ -47,9 +47,18 @@ def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
     return response
 
 
+def _run_ingestion_bg() -> None:
+    db = SessionLocal()
+    try:
+        run_ingestion(db)
+    finally:
+        db.close()
+
+
 @app.post("/ingest")
-def ingest(db: Session = Depends(get_db)):
-    return run_ingestion(db)
+def ingest(background_tasks: BackgroundTasks):
+    background_tasks.add_task(_run_ingestion_bg)
+    return {"status": "accepted"}
 
 
 def _enforce_rate_limit(ip: str):

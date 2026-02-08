@@ -1,0 +1,108 @@
+# Render.com deployment configuration for Ask Mirror Talk
+# Optimized for weekly podcast releases (Wednesdays at 5 AM CET)
+
+services:
+  # Main API service - handles all web requests
+  - type: web
+    name: ask-mirror-talk
+    runtime: python
+    region: oregon  # Change to your preferred region
+    plan: starter   # $7/month - upgrade to standard for production
+    buildCommand: "pip install -e '.[transcription,embeddings]'"
+    startCommand: "uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
+    healthCheckPath: /health
+    envVars:
+      # RSS Feed Configuration
+      - key: RSS_URL
+        value: https://anchor.fm/s/261b1464/podcast/rss
+      
+      # Database Connection (auto-linked from database below)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mirror-talk-db
+          property: connectionString
+      
+      # AI/ML Configuration
+      - key: EMBEDDING_PROVIDER
+        value: sentence_transformers
+      
+      - key: WHISPER_MODEL
+        value: base  # Options: tiny, base, small (base = good balance)
+      
+      - key: CHUNK_SIZE
+        value: 1000
+      
+      - key: CHUNK_OVERLAP
+        value: 200
+      
+      # Admin Access
+      - key: ADMIN_USER
+        value: admin
+      
+      - key: ADMIN_PASSWORD
+        generateValue: true  # Render will generate a secure password
+        # Or set manually: value: your-secure-password
+      
+      # Optional: Logging
+      - key: LOG_LEVEL
+        value: INFO
+      
+      # Optional: CORS for your WordPress site
+      - key: ALLOWED_ORIGINS
+        value: https://yourdomain.com,https://www.yourdomain.com
+
+  # Automatic ingestion - Wednesdays at 5 AM Central European Time (CET)
+  # Checks for new episodes and processes them automatically
+  - type: cron
+    name: mirror-talk-ingestion
+    runtime: python
+    region: oregon
+    # Schedule: "minute hour day month weekday"
+    # "0 4 * * 3" = 4:00 AM UTC every Wednesday = 5:00 AM CET (0 = Sunday, 3 = Wednesday)
+    # Note: CET is UTC+1, CEST is UTC+2. Using 4 AM UTC works for standard time.
+    schedule: "0 4 * * 3"  # 4 AM UTC = 5 AM CET every Wednesday
+    buildCommand: "pip install -e '.[transcription,embeddings]'"
+    startCommand: "python scripts/bulk_ingest.py --max-episodes 3"
+    envVars:
+      # RSS Feed Configuration
+      - key: RSS_URL
+        value: https://anchor.fm/s/261b1464/podcast/rss
+      
+      # Database Connection (auto-linked from database)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mirror-talk-db
+          property: connectionString
+      
+      # AI/ML Configuration
+      - key: EMBEDDING_PROVIDER
+        value: sentence_transformers
+      
+      - key: WHISPER_MODEL
+        value: base
+      
+      - key: CHUNK_SIZE
+        value: 1000
+      
+      - key: CHUNK_OVERLAP
+        value: 200
+      
+      # Optional: Logging
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  # PostgreSQL database with pgvector extension
+  - name: mirror-talk-db
+    databaseName: mirror_talk
+    user: mirror
+    plan: starter  # $7/month - 256MB RAM, 1GB storage
+    # Note: Render automatically installs pgvector extension
+    postgresMajorVersion: "16"
+
+# Optional: If you need to manually trigger ingestion before Wednesday
+# You can add a second cron job for testing or backup runs
+# - type: cron
+#   name: mirror-talk-ingestion-backup
+#   schedule: "0 17 * * 0"  # 5 PM every Sunday (backup check)
+#   ... (same config as above)

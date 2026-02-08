@@ -1,0 +1,160 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║     🎙️  MIRROR TALK: SOULFUL CONVERSATIONS                    ║
+║         Ask Mirror Talk - Quick Reference Card                 ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+📡 YOUR RSS FEED
+https://anchor.fm/s/261b1464/podcast/rss
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 QUICKEST WAY TO GET STARTED
+
+  ./scripts/setup_mirror_talk.sh
+
+  Then choose option 1 (5 episodes, 15-25 min)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 MANUAL COMMANDS
+
+1️⃣  Configure Feed
+   export RSS_URL='https://anchor.fm/s/261b1464/podcast/rss'
+
+2️⃣  Start Services
+   docker-compose -f docker-compose.prod.yml up -d db
+   sleep 5
+
+3️⃣  Ingest Episodes (choose one)
+   # Quick test (5 episodes, ~15-25 min)
+   docker-compose -f docker-compose.prod.yml run --rm app \
+     python scripts/bulk_ingest.py --max-episodes 5
+
+   # Standard (10 episodes, ~30-50 min)
+   docker-compose -f docker-compose.prod.yml run --rm app \
+     python scripts/bulk_ingest.py --max-episodes 10
+
+   # All episodes (1-3 hours)
+   docker-compose -f docker-compose.prod.yml run --rm app \
+     python scripts/bulk_ingest.py
+
+4️⃣  Start API
+   docker-compose -f docker-compose.prod.yml up -d app
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 CHECK STATUS
+
+  curl http://localhost:8000/status | jq
+
+  Look for: "ready": true
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧪 TEST IT
+
+  curl -X POST http://localhost:8000/ask \
+    -H 'Content-Type: application/json' \
+    -d '{"question": "What topics does Mirror Talk cover?"}' | jq
+
+  If you get an answer with citations → SUCCESS! ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 MONITOR PROGRESS
+
+  docker-compose -f docker-compose.prod.yml logs -f app
+
+  Look for:
+  [1/5] Processing episode: Episode Title
+    ├─ Downloaded audio
+    ├─ Transcription complete
+    ├─ Created 12 chunks
+    └─ ✓ Episode complete
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 AUTO-UPDATES (After Initial Setup)
+
+  docker-compose -f docker-compose.prod.yml up -d worker
+
+  Checks for new episodes every hour automatically!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 ADMIN DASHBOARD
+
+  http://localhost:8000/admin
+  
+  Username: admin
+  Password: change-me-please (update in .env!)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ PERFORMANCE
+
+  Processing Speed: 3-5 min per episode (6-10x faster!)
+  
+  5 episodes  → 15-25 minutes
+  10 episodes → 30-50 minutes
+  20 episodes → 1-2 hours
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 SAMPLE QUESTIONS FOR YOUR PODCAST
+
+  • "What is the PACT method?"
+  • "How does money relate to spirituality?"
+  • "What did Julie Murphy say about financial wellness?"
+  • "What topics does Mirror Talk explore?"
+  • "Tell me about emotional wellness"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🆘 TROUBLESHOOTING
+
+  Service not responding?
+    docker-compose -f docker-compose.prod.yml restart app
+
+  Check what's running:
+    docker-compose -f docker-compose.prod.yml ps
+
+  View all logs:
+    docker-compose -f docker-compose.prod.yml logs
+
+  Check database:
+    docker-compose exec db psql -U mirror -d mirror_talk \
+      -c "SELECT COUNT(*) FROM episodes;"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ SUCCESS CHECKLIST
+
+  ☐ Run setup script: ./scripts/setup_mirror_talk.sh
+  ☐ Wait for ingestion to complete (~15-25 min for 5 episodes)
+  ☐ Check status: curl http://localhost:8000/status
+  ☐ Test a question: curl http://localhost:8000/ask ...
+  ☐ See answer with citations
+  ☐ Start worker for auto-updates (optional)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 FULL DOCUMENTATION
+
+  Quick Start:    MIRROR_TALK_SETUP.md
+  Ingestion:      INGESTION_SUMMARY.md
+  Memory Fix:     MEMORY_FIX_SUMMARY.md
+  Detailed Guide: INGESTION_QUICKSTART.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 YOU'RE READY TO GO!
+
+Run this now: ./scripts/setup_mirror_talk.sh
+
+Your Ask Mirror Talk service will be answering questions about
+personal growth, spirituality, and well-being in ~15-25 minutes! 🚀
+
+╚════════════════════════════════════════════════════════════════╝

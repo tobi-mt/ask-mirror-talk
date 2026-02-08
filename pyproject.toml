@@ -36,6 +36,11 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["wordpress*", "docs*", "scripts*"]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"

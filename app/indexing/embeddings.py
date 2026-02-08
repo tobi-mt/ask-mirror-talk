@@ -31,6 +31,21 @@ def embed_text(text: str) -> list[float]:
     return _hashed_embedding(text, settings.embedding_dim)
 
 
+def embed_text_batch(texts: list[str]) -> list[list[float]]:
+    """Embed multiple texts at once for better performance."""
+    if not texts:
+        return []
+    
+    if settings.embedding_provider == "sentence_transformers":
+        model = _get_embedding_model()
+        # Batch encoding is much faster than encoding one at a time
+        vecs = model.encode(texts)
+        return [vec.tolist() for vec in vecs]
+    
+    # Local deterministic fallback
+    return [_hashed_embedding(text, settings.embedding_dim) for text in texts]
+
+
 def _hashed_embedding(text: str, dim: int) -> list[float]:
     tokens = [t for t in text.lower().split() if t.isalpha()]
     if not tokens:

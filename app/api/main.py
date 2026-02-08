@@ -61,6 +61,33 @@ def ingest(background_tasks: BackgroundTasks):
     return {"status": "accepted"}
 
 
+@app.get("/status")
+def status(db: Session = Depends(get_db)):
+    """Get ingestion and system status."""
+    from sqlalchemy import text, func
+    from app.storage.models import Episode, Chunk, IngestRun
+    
+    # Get counts
+    episode_count = db.scalar(text("SELECT COUNT(*) FROM episodes"))
+    chunk_count = db.scalar(text("SELECT COUNT(*) FROM chunks"))
+    
+    # Get latest ingest run
+    latest_run = db.query(IngestRun).order_by(IngestRun.started_at.desc()).first()
+    
+    return {
+        "status": "ok",
+        "episodes": episode_count or 0,
+        "chunks": chunk_count or 0,
+        "ready": (chunk_count or 0) > 0,
+        "latest_ingest_run": {
+            "status": latest_run.status if latest_run else None,
+            "started_at": latest_run.started_at.isoformat() if latest_run and latest_run.started_at else None,
+            "finished_at": latest_run.finished_at.isoformat() if latest_run and latest_run.finished_at else None,
+            "message": latest_run.message if latest_run else None,
+        } if latest_run else None,
+    }
+
+
 def _enforce_rate_limit(ip: str):
     now = time.time()
     window = 60

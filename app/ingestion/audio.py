@@ -10,7 +10,17 @@ def download_audio(audio_url: str, dest_dir: str, filename: str) -> Path:
     if file_path.exists():
         return file_path
 
-    with httpx.stream("GET", audio_url, timeout=120.0) as response:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; MirrorTalkBot/1.0)"
+    }
+
+    with httpx.stream(
+        "GET",
+        audio_url,
+        timeout=120.0,
+        follow_redirects=True,
+        headers=headers,
+    ) as response:
         response.raise_for_status()
         with open(file_path, "wb") as f:
             for chunk in response.iter_bytes():

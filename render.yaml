@@ -7,7 +7,8 @@ services:
     name: ask-mirror-talk
     runtime: python
     region: oregon  # Change to your preferred region
-    plan: starter   # $7/month - upgrade to standard for production
+    plan: starter  # $7/month - 512MB RAM, sufficient for most workloads
+    # Alternative: standard ($25/month, 2GB RAM) for heavier traffic
     buildCommand: "pip install -e '.[transcription,embeddings]'"
     startCommand: "uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
     healthCheckPath: /health
@@ -96,7 +97,8 @@ databases:
   - name: mirror-talk-db
     databaseName: mirror_talk
     user: mirror
-    plan: starter  # $7/month - 256MB RAM, 1GB storage
+    plan: standard  # $7/month - 1GB RAM, 10GB storage (new pricing)
+    # Alternative: free (256MB, 1GB, expires after 90 days) or pro ($20/month)
     # Note: Render automatically installs pgvector extension
     postgresMajorVersion: "16"
 

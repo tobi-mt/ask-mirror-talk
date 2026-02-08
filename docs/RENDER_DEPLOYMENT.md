@@ -61,7 +61,7 @@ Complete guide for deploying Ask Mirror Talk to Render.com with automatic weekly
    - Database: `mirror_talk`
    - User: `mirror`
    - Region: `Oregon` (or nearest to you)
-   - Plan: `Starter` ($7/month)
+   - Plan: `Standard` ($7/month)
    - PostgreSQL Version: `16`
 3. Click "Create Database"
 4. **Enable pgvector:**
@@ -332,7 +332,7 @@ SELECT title, published_at FROM episodes ORDER BY published_at DESC LIMIT 5;
 | Service | Plan | Cost |
 |---------|------|------|
 | Web Service | Starter | $7/month |
-| PostgreSQL | Starter | $7/month |
+| PostgreSQL | Standard | $7/month |
 | Cron Job | - | **FREE** |
 | **TOTAL** | | **$14/month** |
 
@@ -340,12 +340,11 @@ SELECT title, published_at FROM episodes ORDER BY published_at DESC LIMIT 5;
 
 **For Better Performance:**
 - Web Service Standard: $25/month (2GB RAM, better CPU)
-- PostgreSQL Standard: $20/month (4GB RAM, 50GB storage)
+- PostgreSQL Pro: $20/month (4GB RAM, 50GB storage)
 
 **Free Tier Option (Testing Only):**
-- Use Render's free web service (spins down after 15 min inactivity)
-- External free PostgreSQL (Supabase, Neon)
-- Cron jobs don't work on free tier ❌
+- PostgreSQL Free: 256MB RAM, 1GB storage (expires after 90 days)
+- Note: Not recommended for production
 
 ---
 

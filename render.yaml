@@ -5,12 +5,12 @@ services:
   # Main API service - handles all web requests
   - type: web
     name: ask-mirror-talk
-    runtime: python
+    runtime: docker  # Changed from 'python' to 'docker' to support ffmpeg
     region: oregon  # Change to your preferred region
     plan: starter  # $7/month - 512MB RAM, sufficient for most workloads
     # Alternative: standard ($25/month, 2GB RAM) for heavier traffic
-    buildCommand: "./render-build.sh"
-    startCommand: "uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       # RSS Feed Configuration
@@ -56,14 +56,15 @@ services:
   # Checks for new episodes and processes them automatically
   - type: cron
     name: mirror-talk-ingestion
-    runtime: python
+    runtime: docker  # Changed from 'python' to 'docker' to support ffmpeg
     region: oregon
     # Schedule: "minute hour day month weekday"
     # "0 4 * * 3" = 4:00 AM UTC every Wednesday = 5:00 AM CET (0 = Sunday, 3 = Wednesday)
     # Note: CET is UTC+1, CEST is UTC+2. Using 4 AM UTC works for standard time.
     schedule: "0 4 * * 3"  # 4 AM UTC = 5 AM CET every Wednesday
-    buildCommand: "./render-build.sh"
-    startCommand: "python scripts/bulk_ingest.py --max-episodes 3"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python scripts/bulk_ingest.py --max-episodes 3
     envVars:
       # RSS Feed Configuration
       - key: RSS_URL

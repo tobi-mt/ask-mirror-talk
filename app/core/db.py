@@ -19,10 +19,14 @@ if len(url_parts) > 1:
 else:
     logger.info("Database URL format: %s://...", settings.database_url.split(':')[0])
 # Ensure we're using psycopg3, not psycopg2
+# Add connection pool settings to prevent idle timeouts
 engine = create_engine(
     settings.database_url,
-    pool_pre_ping=True,
-    echo=False  # Set to True for SQL query logging
+    pool_pre_ping=True,  # Verify connections before using them
+    pool_recycle=3600,   # Recycle connections after 1 hour
+    pool_size=5,         # Number of connections to maintain
+    max_overflow=10,     # Max additional connections
+    echo=False           # Set to True for SQL query logging
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 

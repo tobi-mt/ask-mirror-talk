@@ -112,7 +112,7 @@ def main():
             logger.info("\nRun without --dry-run to actually process these episodes")
             return 0
 
-        # Confirm with user
+        # Confirm with user BEFORE opening database connection
         if not args.no_confirm:
             logger.info("\nAbout to ingest %s new episodes", len(new_episodes))
             logger.info("Estimated time: %s minutes", len(new_episodes) * 3)
@@ -121,9 +121,16 @@ def main():
             if response.lower() not in ["y", "yes"]:
                 logger.info("Cancelled by user")
                 return 0
+        
+        # Close the old database session to avoid idle timeout
+        db.close()
+        
+        # Open a fresh database connection for ingestion
+        logger.info("\nOpening fresh database connection...")
+        db = SessionLocal()
 
         # Run the optimized ingestion
-        logger.info("\nStarting ingestion...\n")
+        logger.info("Starting ingestion...\n")
         result = run_ingestion_optimized(db, max_episodes=args.max_episodes)
         
         logger.info("\n" + "=" * 60)

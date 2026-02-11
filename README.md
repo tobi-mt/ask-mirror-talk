@@ -100,3 +100,51 @@ Use the assets in `wordpress/` for the Ask Mirror Talk page.
 - `app/indexing/` chunking + tagging + embeddings
 - `app/qa/` retrieval + answer builder
 - `wordpress/` front-end assets
+
+## 🚀 Quick Start - Deploy to Railway + Neon
+
+**NEW**: Complete deployment setup for Railway and Neon is ready! ✅
+
+### What You Get
+- **Database**: Neon Serverless Postgres with pgvector
+- **Hosting**: Railway container platform
+- **Cost**: $0/month (free tiers)
+- **Setup Time**: ~30 minutes
+
+### 📖 Documentation
+
+| File | Purpose | Start Here |
+|------|---------|------------|
+| `RAILWAY_NEON_SETUP.md` | Complete deployment guide (5 parts) | ⭐ **NEW USERS** |
+| `DEPLOYMENT_CHECKLIST.md` | Interactive step-by-step checklist | Use alongside guide |
+| `README_QUICK_START.md` | Quick reference & commands | For quick lookup |
+| `SETUP_COMPLETE.md` | Overview & summary | Read first for context |
+
+### ⚡ Quick Deploy
+
+```bash
+# 1. Set up Neon database
+# Go to: https://neon.tech
+# Create project → Enable pgvector extension
+# Copy connection string
+
+# 2. Initialize database
+export DATABASE_URL="postgresql+psycopg://your-neon-connection-string"
+python scripts/setup_neon.py
+
+# 3. Deploy to Railway
+# Go to: https://railway.app
+# New Project → Deploy from GitHub
+# Add environment variables from .env.railway
+# Generate domain → Done!
+```
+
+### 📁 Files Created
+
+**Configuration**: `railway.toml`, `.env.railway`, `railway-build.sh`  
+**Scripts**: `scripts/setup_neon.py`, `scripts/quick_deploy.sh`  
+**Docs**: Complete guides in root directory
+
+See `RAILWAY_NEON_FILES.txt` for complete file listing.
+
+---

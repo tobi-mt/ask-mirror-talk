@@ -13,8 +13,9 @@ import time
 from app.core.config import settings
 from app.core.db import get_db, init_db, SessionLocal
 from app.core.logging import setup_logging
-from app.qa.service import answer_question
-from app.ingestion.pipeline import run_ingestion
+# Lazy imports to speed up startup:
+# - app.qa.service (loads ML models)
+# - app.ingestion.pipeline (heavy dependencies)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -91,11 +92,17 @@ def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    # Lazy import to avoid loading ML models at startup
+    from app.qa.service import answer_question
+    
     response = answer_question(db, payload.question.strip(), user_ip=request.client.host)
     return response
 
 
 def _run_ingestion_bg() -> None:
+    # Lazy import to avoid loading heavy dependencies at startup
+    from app.ingestion.pipeline import run_ingestion
+    
     db = SessionLocal()
     try:
         run_ingestion(db)

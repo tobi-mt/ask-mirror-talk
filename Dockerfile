@@ -53,10 +53,10 @@ RUN pip install --no-cache-dir --no-deps -e . \
 EXPOSE 8000
 
 # Health check - ensure the app starts responding quickly
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Railway has a ~100s healthcheck window, so start-period must be shorter
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Use exec form with sh -c to allow environment variable expansion
-# Railway will provide $PORT at runtime
-# Reduced timeout-keep-alive and added --limit-concurrency for faster startup
-CMD ["sh", "-c", "uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 30 --limit-concurrency 100"]
+# Minimal flags for fastest startup
+CMD ["sh", "-c", "exec uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

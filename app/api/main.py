@@ -11,11 +11,12 @@ from sqlalchemy import text
 import time
 
 from app.core.config import settings
-from app.core.db import get_db, init_db, SessionLocal
+from app.core.db import get_db, get_session_local
 from app.core.logging import setup_logging
 # Lazy imports to speed up startup:
 # - app.qa.service (loads ML models)
 # - app.ingestion.pipeline (heavy dependencies)
+# - init_db (creates DB connection)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -30,9 +31,11 @@ async def _init_db_background():
     """Initialize database in background without blocking startup."""
     global _db_initialized
     import asyncio
-    await asyncio.sleep(1)  # Give app time to start
+    await asyncio.sleep(2)  # Give app time to start and pass healthcheck
     
     try:
+        # Lazy import to avoid loading at startup
+        from app.core.db import init_db
         init_db()
         _db_initialized = True
         logger.info("✓ Background database initialization complete")
@@ -103,7 +106,7 @@ def _run_ingestion_bg() -> None:
     # Lazy import to avoid loading heavy dependencies at startup
     from app.ingestion.pipeline import run_ingestion
     
-    db = SessionLocal()
+    db = get_session_local()()
     try:
         run_ingestion(db)
     finally:

@@ -4,9 +4,15 @@ A production-ready MVP for a content-grounded Q&A experience on Mirror Talk podc
 
 ## 🚀 Quick Links
 
-- **[Railway Deployment Guide](RAILWAY_SETUP_GUIDE.md)** - Complete deployment to Railway with Neon Postgres
+### Deployment
+- **[Railway Quickstart](RAILWAY_QUICKSTART.md)** - ⚡ Fastest way to deploy (5 minutes)
+- **[Railway Setup Guide](RAILWAY_SETUP_GUIDE.md)** - Complete deployment walkthrough
 - **[Ingestion Guide](INGESTION_COMPLETE_GUIDE.md)** - How to ingest all podcast episodes
-- **[Deployment Success](DEPLOYMENT_SUCCESS.md)** - Latest deployment status and next steps
+- **[Environment Variables](railway.env.example)** - All required configuration
+
+### Status & Reference
+- **[Deployment Success](DEPLOYMENT_SUCCESS.md)** - Latest deployment status
+- **[Final Setup Summary](FINAL_SETUP_SUMMARY.md)** - Quick checklist
 - **[Local Setup](LOCAL_SETUP.md)** - Run locally with Docker
 
 ## What’s Included

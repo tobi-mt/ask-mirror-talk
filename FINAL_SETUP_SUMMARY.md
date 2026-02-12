@@ -33,11 +33,18 @@ Go to your Railway dashboard → Your Service → Settings → Variables and add
 
 **Required:**
 ```env
-DATABASE_URL=postgresql://user:password@host/dbname
+DATABASE_URL=postgresql+psycopg://neondb_owner:YOUR_PASSWORD@ep-snowy-smoke-aj2dycz7-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-snowy-smoke-aj2dycz7-pooler
 RSS_URL=https://anchor.fm/s/261b1464/podcast/rss
 ADMIN_USER=tobi
 ADMIN_PASSWORD=@GoingPlaces#2026
 ```
+
+⚠️ **CRITICAL for Neon Database:** The `DATABASE_URL` must include:
+- `postgresql+psycopg://` (not just `postgresql://`)
+- `-pooler` hostname
+- `&options=endpoint%3D<your-endpoint>-pooler` parameter (forces IPv4, prevents "Network unreachable" errors)
+
+See **NEON_IPV6_FIX.md** for detailed connection troubleshooting.
 
 **Optional (with sensible defaults already in code):**
 ```env
@@ -76,6 +83,7 @@ The workflow will run every 6 hours automatically.
 |----------|---------|
 | **RAILWAY_SETUP_GUIDE.md** | Complete deployment walkthrough |
 | **INGESTION_COMPLETE_GUIDE.md** | All ingestion methods & troubleshooting |
+| **NEON_IPV6_FIX.md** | 🔴 Fix for "Network unreachable" database errors |
 | **railway.env.example** | All required environment variables |
 
 ## ✅ Checklist

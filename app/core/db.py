@@ -30,6 +30,7 @@ def get_engine():
         
         # Ensure we're using psycopg3, not psycopg2
         # Add connection pool settings to prevent idle timeouts
+        # Force IPv4 for Neon compatibility on Railway
         _engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,  # Verify connections before using them
@@ -37,7 +38,10 @@ def get_engine():
             pool_size=5,         # Number of connections to maintain
             max_overflow=10,     # Max additional connections
             echo=False,          # Set to True for SQL query logging
-            connect_args={"connect_timeout": 10}  # 10 second timeout
+            connect_args={
+                "connect_timeout": 10,  # 10 second timeout
+                "options": "-c client_encoding=utf8",  # Ensure UTF-8 encoding
+            }
         )
     return _engine
 

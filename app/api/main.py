@@ -21,6 +21,25 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name)
 
+# Track if DB is initialized
+_db_initialized = False
+
+
+async def _init_db_background():
+    """Initialize database in background without blocking startup."""
+    global _db_initialized
+    import asyncio
+    await asyncio.sleep(1)  # Give app time to start
+    
+    try:
+        init_db()
+        _db_initialized = True
+        logger.info("✓ Background database initialization complete")
+    except Exception as e:
+        logger.error(f"✗ Background database initialization failed: {e}", exc_info=True)
+        logger.warning("⚠️  Some endpoints may not work until database is accessible")
+
+
 # Configure CORS - allows your WordPress site to call the API
 if settings.allowed_origins:
     origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
@@ -43,11 +62,12 @@ class AskRequest(BaseModel):
 
 @app.get("/health")
 def health():
+    """Health check endpoint - returns OK even if database is not ready."""
     return {"status": "ok"}
 
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     """Initialize database on application startup."""
     logger.info("=" * 60)
     logger.info("Starting Ask Mirror Talk API")
@@ -55,12 +75,13 @@ def on_startup():
     logger.info(f"Database URL: {settings.database_url[:50]}...")
     logger.info("=" * 60)
     
-    try:
-        init_db()
-        logger.info("✓ Application startup complete")
-    except Exception as e:
-        logger.error(f"✗ Application startup failed: {e}", exc_info=True)
-        raise
+    # Skip DB initialization during healthcheck to start faster
+    # DB will be initialized on first request if needed
+    logger.info("✓ Application startup complete (DB init deferred)")
+    
+    # Initialize DB in background to not block startup
+    import asyncio
+    asyncio.create_task(_init_db_background())
 
 
 @app.post("/ask")
@@ -91,28 +112,46 @@ def ingest(background_tasks: BackgroundTasks):
 @app.get("/status")
 def status(db: Session = Depends(get_db)):
     """Get ingestion and system status."""
-    from sqlalchemy import text, func
-    from app.storage.models import Episode, Chunk, IngestRun
+    global _db_initialized
     
-    # Get counts
-    episode_count = db.scalar(text("SELECT COUNT(*) FROM episodes"))
-    chunk_count = db.scalar(text("SELECT COUNT(*) FROM chunks"))
+    if not _db_initialized:
+        return {
+            "status": "initializing",
+            "db_ready": False,
+            "message": "Database is still initializing"
+        }
     
-    # Get latest ingest run
-    latest_run = db.query(IngestRun).order_by(IngestRun.started_at.desc()).first()
-    
-    return {
-        "status": "ok",
-        "episodes": episode_count or 0,
-        "chunks": chunk_count or 0,
-        "ready": (chunk_count or 0) > 0,
-        "latest_ingest_run": {
-            "status": latest_run.status if latest_run else None,
-            "started_at": latest_run.started_at.isoformat() if latest_run and latest_run.started_at else None,
-            "finished_at": latest_run.finished_at.isoformat() if latest_run and latest_run.finished_at else None,
-            "message": latest_run.message if latest_run else None,
-        } if latest_run else None,
-    }
+    try:
+        from sqlalchemy import text, func
+        from app.storage.models import Episode, Chunk, IngestRun
+        
+        # Get counts
+        episode_count = db.scalar(text("SELECT COUNT(*) FROM episodes"))
+        chunk_count = db.scalar(text("SELECT COUNT(*) FROM chunks"))
+        
+        # Get latest ingest run
+        latest_run = db.query(IngestRun).order_by(IngestRun.started_at.desc()).first()
+        
+        return {
+            "status": "ok",
+            "db_ready": True,
+            "episodes": episode_count or 0,
+            "chunks": chunk_count or 0,
+            "ready": (chunk_count or 0) > 0,
+            "latest_ingest_run": {
+                "status": latest_run.status if latest_run else None,
+                "started_at": latest_run.started_at.isoformat() if latest_run and latest_run.started_at else None,
+                "finished_at": latest_run.finished_at.isoformat() if latest_run and latest_run.finished_at else None,
+                "message": latest_run.message if latest_run else None,
+            } if latest_run else None,
+        }
+    except Exception as e:
+        logger.error(f"Error getting status: {e}")
+        return {
+            "status": "error",
+            "db_ready": False,
+            "message": str(e)
+        }
 
 
 def _enforce_rate_limit(ip: str):

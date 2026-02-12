@@ -52,6 +52,11 @@ RUN pip install --no-cache-dir --no-deps -e . \
 # Railway provides PORT environment variable dynamically
 EXPOSE 8000
 
-# Use shell form to allow environment variable expansion
+# Health check - ensure the app starts responding quickly
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+
+# Use exec form with sh -c to allow environment variable expansion
 # Railway will provide $PORT at runtime
-CMD uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 75
+# Reduced timeout-keep-alive and added --limit-concurrency for faster startup
+CMD ["sh", "-c", "uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 30 --limit-concurrency 100"]

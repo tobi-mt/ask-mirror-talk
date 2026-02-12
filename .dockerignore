@@ -1,0 +1,83 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Documentation
+*.md
+!README.md
+docs/
+DEPLOYMENT_*.md
+RAILWAY_*.md
+SETUP_*.md
+GITHUB_*.md
+IDLE_*.md
+*_FIX*.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Data directories (don't include in image)
+data/
+audio/
+transcripts/
+
+# Environment files
+.env
+.env.*
+!.env.railway
+
+# Docker
+Dockerfile.worker
+docker-compose*.yml
+
+# Scripts (only copy needed ones)
+scripts/*.sh
+!scripts/setup_neon.py
+!scripts/bulk_ingest.py
+
+# WordPress files (not needed in container)
+wordpress/
+setup-github-mirror.sh
+
+# Bitbucket files
+.bitbucket/
+
+# Other
+.agents/
+.neon
+TEMP_*.md
+test_*.py

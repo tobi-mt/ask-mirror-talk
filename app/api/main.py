@@ -18,10 +18,18 @@ from app.core.logging import setup_logging
 # - app.ingestion.pipeline (heavy dependencies)
 # - init_db (creates DB connection)
 
+# Setup logging BEFORE any other operations
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# Log startup immediately
+logger.info("="*60)
+logger.info("STARTING ASK MIRROR TALK API")
+logger.info("="*60)
+
 app = FastAPI(title=settings.app_name)
+
+logger.info("✓ FastAPI app created")
 
 # Track if DB is initialized
 _db_initialized = False
@@ -67,17 +75,18 @@ class AskRequest(BaseModel):
 @app.get("/health")
 def health():
     """Health check endpoint - returns OK even if database is not ready."""
+    logger.info("Health check called")
     return {"status": "ok"}
 
 
 @app.on_event("startup")
 async def on_startup():
     """Initialize database on application startup."""
-    logger.info("=" * 60)
-    logger.info("Starting Ask Mirror Talk API")
+    logger.info("="*60)
+    logger.info("STARTUP EVENT TRIGGERED")
     logger.info(f"Environment: {settings.environment}")
-    logger.info(f"Database URL: {settings.database_url[:50]}...")
-    logger.info("=" * 60)
+    logger.info(f"App name: {settings.app_name}")
+    logger.info("="*60)
     
     # Skip DB initialization during healthcheck to start faster
     # DB will be initialized on first request if needed
@@ -85,6 +94,7 @@ async def on_startup():
     
     # Initialize DB in background to not block startup
     import asyncio
+    logger.info("Starting background DB initialization task...")
     asyncio.create_task(_init_db_background())
 
 

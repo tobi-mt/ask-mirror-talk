@@ -6,7 +6,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Use simpler command for faster startup
-startCommand = "uvicorn app.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
+# Don't specify startCommand - let Dockerfile CMD handle it
+# Railway will use the CMD from Dockerfile which properly expands $PORT
 healthcheckPath = "/health"
 healthcheckTimeout = 300

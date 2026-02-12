@@ -62,14 +62,30 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
     citations = []
     for chunk in ranked:
         episode = chunk["episode"]
-        start = _format_timestamp(chunk["start_time"])
-        end = _format_timestamp(chunk["end_time"])
+        start_seconds = int(chunk["start_time"])
+        end_seconds = int(chunk["end_time"])
+        start = _format_timestamp(start_seconds)
+        end = _format_timestamp(end_seconds)
+        
+        # Get audio URL from episode and add timestamp parameter
+        audio_url = episode.get("audio_url", "")
+        episode_url = audio_url
+        
+        # Add timestamp to URL if audio_url exists
+        if audio_url:
+            # For most podcast players, add #t=start_time
+            episode_url = f"{audio_url}#t={start_seconds}"
+        
         citations.append(
             {
                 "episode_id": episode["id"],
                 "episode_title": episode["title"],
                 "timestamp_start": start,
                 "timestamp_end": end,
+                "timestamp_start_seconds": start_seconds,
+                "timestamp_end_seconds": end_seconds,
+                "audio_url": audio_url,
+                "episode_url": episode_url,
             }
         )
 

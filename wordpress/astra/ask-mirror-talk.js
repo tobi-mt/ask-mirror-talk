@@ -22,6 +22,18 @@
     return `${mins}:${String(secs).padStart(2, '0')}`;
   }
 
+  // Helper: Parse timestamp string to seconds (handles "0:04:42" format)
+  function parseTimestampToSeconds(timestamp) {
+    if (!timestamp) return 0;
+    const parts = timestamp.split(':').map(p => parseInt(p, 10));
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return parseInt(timestamp, 10) || 0;
+  }
+
   // Helper: Show loading state
   function setLoading(isLoading) {
     if (isLoading) {
@@ -66,25 +78,54 @@
         li.className = "citation-item";
         
         const episodeTitle = citation.episode_title || "Unknown Episode";
-        const timestampStart = formatTimestamp(citation.timestamp_start);
-        const timestampEnd = formatTimestamp(citation.timestamp_end);
         
-        // Create clickable citation with podcast link if available
-        if (citation.episode_url) {
+        // Use seconds if available, otherwise parse the timestamp strings
+        const startSeconds = citation.timestamp_start_seconds !== undefined 
+          ? citation.timestamp_start_seconds 
+          : parseTimestampToSeconds(citation.timestamp_start);
+        const endSeconds = citation.timestamp_end_seconds !== undefined 
+          ? citation.timestamp_end_seconds 
+          : parseTimestampToSeconds(citation.timestamp_end);
+        
+        const timestampStart = formatTimestamp(startSeconds);
+        const timestampEnd = formatTimestamp(endSeconds);
+        
+        // Create podcast link with timestamp
+        let podcastUrl = citation.episode_url || citation.audio_url || '';
+        
+        // If we have audio_url but not episode_url, add timestamp
+        if (!citation.episode_url && citation.audio_url && startSeconds) {
+          podcastUrl = `${citation.audio_url}#t=${startSeconds}`;
+        }
+        
+        // Create clickable citation with podcast link
+        if (podcastUrl) {
           const link = document.createElement("a");
-          link.href = citation.episode_url;
+          link.href = podcastUrl;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
           link.className = "citation-link";
+          link.title = `Listen from ${timestampStart}`;
+          
+          // Show range if start and end are different
+          const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
+            ? `${timestampStart} - ${timestampEnd}` 
+            : timestampStart;
+          
           link.innerHTML = `
             <span class="citation-title">${episodeTitle}</span>
-            <span class="citation-time">${timestampStart}${timestampEnd ? ' - ' + timestampEnd : ''}</span>
+            <span class="citation-time">🎧 ${timeDisplay}</span>
           `;
           li.appendChild(link);
         } else {
+          // No link available, just show text
+          const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
+            ? `${timestampStart} - ${timestampEnd}` 
+            : timestampStart;
+          
           li.innerHTML = `
             <span class="citation-title">${episodeTitle}</span>
-            <span class="citation-time">${timestampStart}${timestampEnd ? ' - ' + timestampEnd : ''}</span>
+            <span class="citation-time">${timeDisplay}</span>
           `;
         }
         

@@ -167,6 +167,11 @@
   text-decoration: none;
   color: inherit;
   gap: 12px;
+  cursor: pointer;
+}
+
+.citation-link:hover {
+  text-decoration: none;
 }
 
 .citation-title {
@@ -183,11 +188,17 @@
   background: #f5f2ed;
   padding: 4px 10px;
   border-radius: 4px;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .citation-link:hover .citation-title {
   color: #1a1815;
   text-decoration: underline;
+}
+
+.citation-link:hover .citation-time {
+  background: #2e2a24;
+  color: #fff;
 }
 
 /* Responsive Design */

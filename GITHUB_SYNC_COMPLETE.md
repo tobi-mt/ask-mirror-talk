@@ -118,6 +118,21 @@ Follow **RAILWAY_NEON_SETUP.md** for the complete deployment process.
 
 ---
 
+## ⚠️ UPDATE: Railway Config Fixed (Feb 11, 2026)
+
+If you encountered the error:
+```
+Failed to parse your service config. Error: deploy.restartPolicyType: Invalid input
+```
+
+This has been **fixed**! The `railway.toml` configuration has been corrected and pushed to GitHub.
+
+**Action**: Refresh your Railway dashboard or redeploy to pick up the fix.
+
+See: **RAILWAY_CONFIG_FIX.md** for details.
+
+---
+
 **Last Sync**: February 11, 2026  
-**Commits Pushed**: 2 commits (29 files, 2,804+ lines)  
+**Commits Pushed**: 3 commits (railway.toml fix included)  
 **Status**: ✅ Ready for Railway Deployment

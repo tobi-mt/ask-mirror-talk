@@ -1,6 +1,21 @@
 <?php
 /**
- * Ask Mirror Talk shortcode + AJAX handler for Astra theme.
+ * Ask     <div class="ask-mirror-talk">
+        <h2>Ask Mirror Talk</h2>
+        <form id="ask-mirror-talk-form">
+            <label for="ask-mirror-talk-input">What's on your heart?</label>
+            <textarea id="ask-mirror-talk-input" rows="4" placeholder="Ask a question..."></textarea>
+            <button type="submit" id="ask-mirror-talk-submit">Ask</button>
+        </form>
+        <div class="ask-mirror-talk-response">
+            <h3>Response</h3>
+            <div id="ask-mirror-talk-output"></div>
+        </div>
+        <div class="ask-mirror-talk-citations">
+            <h3>Referenced Episodes</h3>
+            <ul id="ask-mirror-talk-citations"></ul>
+        </div>
+    </div>tcode + AJAX handler for Astra theme.
  *
  * Usage: [ask_mirror_talk]
  * Requires WPGetAPI to be configured with:

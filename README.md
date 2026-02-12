@@ -2,6 +2,13 @@
 
 A production-ready MVP for a content-grounded Q&A experience on Mirror Talk podcast episodes. The system ingests the podcast RSS feed, transcribes episodes, chunks and indexes content, and serves answers with episode/timestamp references.
 
+## 🚀 Quick Links
+
+- **[Railway Deployment Guide](RAILWAY_SETUP_GUIDE.md)** - Complete deployment to Railway with Neon Postgres
+- **[Ingestion Guide](INGESTION_COMPLETE_GUIDE.md)** - How to ingest all podcast episodes
+- **[Deployment Success](DEPLOYMENT_SUCCESS.md)** - Latest deployment status and next steps
+- **[Local Setup](LOCAL_SETUP.md)** - Run locally with Docker
+
 ## What’s Included
 - RSS ingestion with auto-detection of new episodes
 - Long-form transcription (faster-whisper)

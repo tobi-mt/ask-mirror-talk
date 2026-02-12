@@ -1,0 +1,47 @@
+name: Update Latest Episodes
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
+jobs:
+  update-episodes:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install -e .
+      
+      - name: Update latest episodes
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RSS_URL: ${{ secrets.RSS_URL }}
+          MAX_EPISODES_PER_RUN: 10
+          EMBEDDING_PROVIDER: local
+          WHISPER_MODEL: base
+          TRANSCRIPTION_PROVIDER: faster_whisper
+        run: |
+          echo "Starting episode update..."
+          python scripts/update_latest_episodes.py
+          echo "Episode update complete!"
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Episode update failed! Check the logs."
+          exit 1

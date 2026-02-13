@@ -9,4 +9,4 @@ dockerfilePath = "Dockerfile"
 # Don't specify startCommand - let Dockerfile CMD handle it
 # Railway will use the CMD from Dockerfile which properly expands $PORT
 healthcheckPath = "/health"
-healthcheckTimeout = 300
+healthcheckTimeout = 600

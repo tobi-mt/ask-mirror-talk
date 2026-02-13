@@ -28,6 +28,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md /app/
 
 # Install core Python dependencies
+# Updated 2026-02-13: Added requests for faster-whisper
 RUN pip install --no-cache-dir \
     fastapi==0.115.0 \
     uvicorn[standard]==0.30.0 \
@@ -38,6 +39,7 @@ RUN pip install --no-cache-dir \
     pgvector==0.2.5 \
     alembic==1.13.0 \
     httpx==0.27.0 \
+    requests>=2.31.0 \
     feedparser==6.0.11 \
     apscheduler==3.10.4 \
     tenacity==8.3.0 \

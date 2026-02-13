@@ -1,12 +1,22 @@
 # Railway deployment configuration
 # This file is automatically detected by Railway
 
+# NOTE: Railway doesn't support per-service dockerfilePath in railway.toml
+# You MUST configure Dockerfile path in Railway Dashboard for each service:
+#
+# mirror-talk-api service:
+#   Settings > Build > Docker > Dockerfile Path: Dockerfile.api
+#   Settings > Deploy > Healthcheck: Enable, path=/health, timeout=300
+#   Settings > Deploy > Start Command: (leave default - uses CMD from Dockerfile)
+#
+# mirror-talk-ingestion service:
+#   Settings > Build > Docker > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Healthcheck: Disable
+#   Settings > Deploy > Start Command: python scripts/bulk_ingest.py --max-episodes 20 --no-confirm
+#   Settings > Variables > WHISPER_MODEL: tiny
+
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
 
 [deploy]
-# Don't specify startCommand or healthcheck here
-# Configure these per-service in Railway Dashboard:
-# - mirror-talk-api: Use default CMD, enable healthcheck to /health
-# - mirror-talk-ingestion: Custom start command, disable healthcheck
+# Per-service configuration done in Railway Dashboard (see comments above)

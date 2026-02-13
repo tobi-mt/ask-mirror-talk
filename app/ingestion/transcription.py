@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 
 # Singleton for caching the Whisper model
@@ -12,15 +13,21 @@ def _get_whisper_model(model_name: str):
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise RuntimeError(
-                "faster-whisper is not installed. Install optional dependency 'transcription'."
+                "faster-whisper is not installed. Use TRANSCRIPTION_PROVIDER=openai instead."
             ) from exc
         _whisper_models[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8")
     return _whisper_models[model_name]
 
 
 def transcribe_audio(audio_path: Path, provider: str, model_name: str):
+    # Use OpenAI Whisper API if provider is "openai"
+    if provider == "openai":
+        from .transcription_openai import transcribe_audio_openai
+        return transcribe_audio_openai(audio_path)
+    
+    # Original faster-whisper implementation
     if provider != "faster_whisper":
-        raise ValueError("Unsupported transcription provider")
+        raise ValueError(f"Unsupported transcription provider: {provider}")
 
     model = _get_whisper_model(model_name)
     segments, info = model.transcribe(str(audio_path), beam_size=5)

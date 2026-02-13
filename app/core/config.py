@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
 
     # Transcription
-    transcription_provider: str = "faster_whisper"  # faster_whisper | none
-    whisper_model: str = "base"
+    transcription_provider: str = "openai"  # openai | faster_whisper | none
+    whisper_model: str = "tiny"  # Only used if transcription_provider="faster_whisper"
 
     # API
     rate_limit_per_minute: int = 20

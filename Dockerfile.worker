@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-# Force rebuild - updated 2026-02-13 18:00 UTC
-ENV REBUILD_DATE=2026-02-13-18-00
+# Force rebuild - updated 2026-02-14 08:45 UTC
+ENV REBUILD_DATE=2026-02-14-08-45
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
@@ -9,7 +9,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install runtime dependencies first
+# Install runtime dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
@@ -19,7 +19,7 @@ RUN apt-get update \
 
 COPY pyproject.toml README.md /app/
 
-# Install lightweight dependencies first (fast)
+# Install core dependencies (NO ML PACKAGES - use OpenAI instead)
 RUN pip install --no-cache-dir \
     fastapi==0.115.0 \
     uvicorn[standard]==0.30.0 \
@@ -35,9 +35,10 @@ RUN pip install --no-cache-dir \
     apscheduler==3.10.4 \
     tenacity==8.3.0 \
     python-multipart==0.0.9 \
-    python-dotenv==1.0.1
+    python-dotenv==1.0.1 \
+    openai>=1.0.0
 
-# Install build tools temporarily for PyAV
+# Install build tools temporarily for PyAV only
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -57,12 +58,6 @@ RUN apt-get update \
         gcc \
         python3-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Install ML dependencies (slower, but use binary wheels)
-RUN pip install --no-cache-dir \
-    --only-binary=:all: \
-    faster-whisper==1.0.3 \
-    sentence-transformers>=2.6.0
 
 COPY app /app/app
 COPY scripts /app/scripts

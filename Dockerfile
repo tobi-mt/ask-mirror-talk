@@ -8,6 +8,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 
 # Install essential runtime dependencies including FFmpeg and PyAV dependencies
+# Updated 2026-02-13: Added libavcodec-dev and other FFmpeg libs for PyAV
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \

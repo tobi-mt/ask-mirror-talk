@@ -7,8 +7,8 @@ Your deployment is **using the wrong Dockerfile**:
 
 ## The Fix
 Configure each Railway service to use the **correct Dockerfile**:
-- `mirror-talk-api` → `Dockerfile.api` (lightweight, 200MB)
-- `mirror-talk-ingestion` → `Dockerfile.worker` (heavy, 1.5GB)
+- `mirror-talk-api` → `Dockerfile` (default, lightweight, 200MB)
+- `mirror-talk-ingestion` → `Dockerfile.worker` (override, heavy, 1.5GB)
 
 ---
 
@@ -19,8 +19,7 @@ Go to: https://railway.app/dashboard
 
 ### 2. Configure API Service
 **mirror-talk-api** → **Settings** → **Build**:
-- **Dockerfile Path**: `Dockerfile.api` ✅
-- Click **Save**
+- **Dockerfile Path**: Leave as default (uses `Dockerfile`) ✅
 
 **Settings** → **Deploy**:
 - **Healthcheck**: Enable ✅
@@ -29,9 +28,9 @@ Go to: https://railway.app/dashboard
 - Click **Save**
 - Click **Deploy** (top right) 🚀
 
-### 3. Configure Ingestion Service
+### 3. Configure Ingestion Service (IMPORTANT!)
 **mirror-talk-ingestion** → **Settings** → **Build**:
-- **Dockerfile Path**: `Dockerfile.worker` ✅
+- **Dockerfile Path**: `Dockerfile.worker` ✅ (MUST SET THIS!)
 - Click **Save**
 
 **Settings** → **Deploy**:
@@ -66,8 +65,10 @@ Go to: https://railway.app/dashboard
 
 | File | Change |
 |------|--------|
-| `Dockerfile` → `Dockerfile.api` | Renamed for clarity |
-| `railway.toml` | Updated with configuration instructions |
+| `Dockerfile` | Restored as default (lightweight API image) |
+| `Dockerfile.api` | Kept for reference (identical to Dockerfile) |
+| `Dockerfile.worker` | Heavy ingestion image |
+| `railway.toml` | Removed explicit dockerfilePath (uses default) |
 | `RAILWAY_SERVICE_CONFIG.md` | Full step-by-step guide |
 
 ---

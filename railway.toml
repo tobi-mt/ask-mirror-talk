@@ -1,22 +1,23 @@
 # Railway deployment configuration
 # This file is automatically detected by Railway
 
-# Default Dockerfile for API service (lightweight)
-# Override in Railway Dashboard for ingestion service to use Dockerfile.worker
+# Strategy: Use default "Dockerfile" (lightweight API image)
+# Override per-service in Railway Dashboard using custom Dockerfile path
 
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile.api"
+# dockerfilePath defaults to "Dockerfile" (API image)
 
 [deploy]
-# Configure per-service in Railway Dashboard:
+# Per-service configuration in Railway Dashboard:
 #
-# mirror-talk-api service (uses this default):
+# mirror-talk-api service:
+#   Settings > Build: Leave default (uses Dockerfile)
 #   Settings > Deploy > Healthcheck: Enable, path=/health, timeout=300
-#   Settings > Deploy > Start Command: (leave default - uses CMD from Dockerfile)
+#   Settings > Deploy > Start Command: (leave default)
 #
-# mirror-talk-ingestion service (override Dockerfile in Dashboard):
-#   Settings > Build > Docker > Dockerfile Path: Dockerfile.worker
+# mirror-talk-ingestion service:
+#   Settings > Build > Dockerfile Path: Dockerfile.worker (MUST OVERRIDE)
 #   Settings > Deploy > Healthcheck: Disable
 #   Settings > Deploy > Start Command: python scripts/bulk_ingest.py --max-episodes 20 --no-confirm
 #   Settings > Variables > WHISPER_MODEL: tiny

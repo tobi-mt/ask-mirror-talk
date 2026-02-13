@@ -7,13 +7,18 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install only essential runtime dependencies
-# Note: Removed build-essential to save ~500MB
+# Install essential runtime dependencies including FFmpeg and PyAV dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswresample-dev \
         libpq5 \
         curl \
+        gcc \
+        python3-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/*
@@ -21,8 +26,7 @@ RUN apt-get update \
 # Copy dependency files
 COPY pyproject.toml README.md /app/
 
-# Install core Python dependencies only (no ML libraries for now)
-# This reduces image size from 9GB to ~1.5GB
+# Install core Python dependencies
 RUN pip install --no-cache-dir \
     fastapi==0.115.0 \
     uvicorn[standard]==0.30.0 \
@@ -38,7 +42,8 @@ RUN pip install --no-cache-dir \
     tenacity==8.3.0 \
     python-multipart==0.0.9 \
     python-dotenv==1.0.1 \
-    && pip install --no-cache-dir --no-deps faster-whisper==1.0.3 \
+    av>=12.0.0 \
+    faster-whisper==1.0.3 \
     && rm -rf /root/.cache/pip /tmp/* /var/tmp/*
 
 # Copy application code

@@ -6,7 +6,16 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl ffmpeg \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        ffmpeg \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswresample-dev \
+        gcc \
+        python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md /app/

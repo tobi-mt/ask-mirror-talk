@@ -9,42 +9,62 @@ RuntimeError: faster-whisper is not installed. Install optional dependency 'tran
 
 ## Root Cause
 - `faster-whisper` requires `PyAV` (the `av` Python module)
-- `PyAV` requires FFmpeg system libraries
-- Railway's Nixpacks builder wasn't installing these dependencies
+- `PyAV` requires FFmpeg system libraries (libavcodec, libavformat, etc.)
+- Railway's Dockerfile wasn't installing PyAV dependencies or the av module
+- The project uses Dockerfile builds (not Nixpacks), so `nixpacks.toml` was ignored
 
 ## Solution Applied
 
-### 1. Created `requirements.txt`
+### 1. Updated `Dockerfile` and `Dockerfile.worker`
+Added FFmpeg development libraries and build tools:
+```dockerfile
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswresample-dev \
+        gcc \
+        python3-dev \
+        ...
+```
+
+### 2. Added PyAV to pip install
+```dockerfile
+RUN pip install --no-cache-dir \
+    ...
+    av>=12.0.0 \
+    faster-whisper==1.0.3 \
+    ...
+```
+Removed `--no-deps` flag from faster-whisper to ensure all dependencies are installed.
+
+### 3. Created `requirements.txt` (for reference)
 Added all dependencies including:
 - `av>=12.0.0` (PyAV for audio processing)
 - `faster-whisper>=1.0.0`
 - `sentence-transformers>=2.6.0`
 
-### 2. Created `nixpacks.toml`
-Configured Railway to install FFmpeg system libraries:
-```toml
-[phases.setup]
-aptPkgs = ["ffmpeg", "libavcodec-dev", "libavformat-dev", "libavutil-dev", "libswresample-dev"]
+### 4. Created `nixpacks.toml` (not used, but for future reference)
+Note: This file is ignored because `railway.toml` specifies Dockerfile builds.
 
-[phases.install]
-cmds = ["pip install -r requirements.txt"]
-```
-
-### 3. Updated `pyproject.toml`
+### 5. Updated `pyproject.toml`
 Made transcription and embeddings core dependencies instead of optional.
 
 ## Deployment
 
 The fix has been:
 ✅ Committed to git
-✅ Pushed to Bitbucket (commit `4213c06`)
+✅ Pushed to Bitbucket (commits `4213c06`, `31526d2`, `9d8042c`)
 
 Railway will automatically:
 1. Detect the push
-2. Rebuild both services with new dependencies
-3. Install FFmpeg libraries
-4. Install PyAV module
-5. Deploy the updated services
+2. Rebuild both services with new Dockerfile
+3. Install FFmpeg libraries (libavcodec, libavformat, etc.)
+4. Install PyAV module (av>=12.0.0)
+5. Install faster-whisper with dependencies
+6. Deploy the updated services
 
 ## Next Steps
 
@@ -135,8 +155,10 @@ curl -X POST "https://your-railway-app.railway.app/ask" \
 
 ## Files Changed
 
-- ✅ `requirements.txt` - Created with all dependencies
-- ✅ `nixpacks.toml` - Created with FFmpeg system packages
+- ✅ `Dockerfile` - Added FFmpeg dev libraries, gcc, python3-dev, av module
+- ✅ `Dockerfile.worker` - Added FFmpeg dev libraries, gcc, python3-dev
+- ✅ `requirements.txt` - Created with all dependencies (for reference)
+- ✅ `nixpacks.toml` - Created (not used, but for future Nixpacks builds)
 - ✅ `pyproject.toml` - Updated to make dependencies non-optional
 - ✅ `scripts/bulk_ingest.py` - Already fixed session bug
 

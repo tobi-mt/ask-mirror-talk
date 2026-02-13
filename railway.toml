@@ -6,7 +6,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Don't specify startCommand - let Dockerfile CMD handle it
-# Railway will use the CMD from Dockerfile which properly expands $PORT
-healthcheckPath = "/health"
-healthcheckTimeout = 600
+# Don't specify startCommand or healthcheck here
+# Configure these per-service in Railway Dashboard:
+# - mirror-talk-api: Use default CMD, enable healthcheck to /health
+# - mirror-talk-ingestion: Custom start command, disable healthcheck

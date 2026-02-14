@@ -13,6 +13,7 @@ from pathlib import Path
 
 # OpenAI Whisper API file size limit (25MB)
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB in bytes
+MAX_COMPRESSIBLE_SIZE = 60 * 1024 * 1024  # 60MB - Skip files larger than this
 
 
 def compress_audio(input_path: Path, output_path: Path, target_bitrate: str = "64k") -> None:
@@ -83,6 +84,13 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
     temp_file = None
     
     if file_size > MAX_FILE_SIZE:
+        # Check if file is too large to compress safely
+        if file_size > MAX_COMPRESSIBLE_SIZE:
+            raise ValueError(
+                f"Audio file too large to compress: {file_size / 1024 / 1024:.2f}MB > 60MB limit. "
+                "Episode will be skipped."
+            )
+        
         print(f"  ⚠️  Audio file is {file_size / 1024 / 1024:.2f}MB (limit: 25MB)")
         print(f"  🔧 Compressing audio...")
         
@@ -92,14 +100,20 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
         temp_file.close()
         
         try:
-            # Try 64k bitrate first (aggressive compression)
-            compress_audio(audio_path, temp_path, target_bitrate="64k")
+            # Use lower bitrate for large files to ensure they compress below 25MB
+            if file_size > 40 * 1024 * 1024:  # >40MB
+                bitrate = "48k"
+                print(f"  📉 Using lower bitrate (48k) for large file")
+            else:
+                bitrate = "64k"
+            
+            compress_audio(audio_path, temp_path, target_bitrate=bitrate)
             compressed_size = temp_path.stat().st_size
             
             if compressed_size > MAX_FILE_SIZE:
                 # Still too large, try even lower bitrate
-                print(f"  ⚠️  First compression: {compressed_size / 1024 / 1024:.2f}MB, trying lower bitrate...")
-                compress_audio(audio_path, temp_path, target_bitrate="48k")
+                print(f"  ⚠️  First compression: {compressed_size / 1024 / 1024:.2f}MB, trying 32k bitrate...")
+                compress_audio(audio_path, temp_path, target_bitrate="32k")
                 compressed_size = temp_path.stat().st_size
             
             if compressed_size > MAX_FILE_SIZE:

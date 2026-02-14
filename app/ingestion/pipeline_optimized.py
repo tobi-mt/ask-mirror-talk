@@ -67,73 +67,87 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
             logger.info("[%s/%s] Processing episode: %s", 
                        idx + 1, len(entries), entry["title"])
             
-            # 1. Create episode
-            episode = repository.create_episode(db, **entry)
-            logger.info("  ├─ Created episode (id=%s)", episode.id)
+            try:
+                # 1. Create episode
+                episode = repository.create_episode(db, **entry)
+                logger.info("  ├─ Created episode (id=%s)", episode.id)
+                
+                # 2. Download audio
+                audio_filename = f"episode_{episode.id}.mp3"
+                audio_path = download_audio(entry["audio_url"], settings.audio_dir, audio_filename)
+                logger.info("  ├─ Downloaded audio: %s", audio_path.name)
+
+                # 3. Transcribe
+                logger.info("  ├─ Transcribing (model=%s)...", settings.whisper_model)
+                transcript = transcribe_audio(
+                    audio_path,
+                    provider=settings.transcription_provider,
+                    model_name=settings.whisper_model,
+                )
+                logger.info("  ├─ Transcription complete (%s segments)", len(transcript["segments"]))
+
+                # 4. Save transcript
+                repository.create_transcript(
+                    db,
+                    episode_id=episode.id,
+                    provider=settings.transcription_provider,
+                    raw_text=transcript["raw_text"],
+                    segments=transcript["segments"],
+                )
+
+                # 5. Chunk segments
+                chunks = chunk_segments(
+                    transcript["segments"],
+                    max_chars=settings.max_chunk_chars,
+                    min_chars=settings.min_chunk_chars,
+                )
+                logger.info("  ├─ Created %s chunks", len(chunks))
+
+                # 6. Tag chunks (fast, no need to batch)
+                tagged_chunks = []
+                for chunk in chunks:
+                    topic, tone, domain = tag_chunk(chunk["text"])
+                    tagged_chunks.append({
+                        "start": chunk["start"],
+                        "end": chunk["end"],
+                        "text": chunk["text"],
+                        "topic": topic,
+                        "emotional_tone": tone,
+                        "growth_domain": domain,
+                    })
+
+                # 7. BATCH EMBED all chunks at once (MUCH FASTER!)
+                logger.info("  ├─ Embedding %s chunks (batch mode)...", len(tagged_chunks))
+                chunk_texts = [c["text"] for c in tagged_chunks]
+                embeddings = embed_text_batch(chunk_texts)
+                
+                # Combine tags with embeddings
+                enriched_chunks = []
+                for tagged_chunk, embedding in zip(tagged_chunks, embeddings):
+                    enriched_chunks.append({**tagged_chunk, "embedding": embedding})
+
+                # 8. BATCH INSERT all chunks at once (MUCH FASTER!)
+                logger.info("  ├─ Saving %s chunks to database...", len(enriched_chunks))
+                _bulk_create_chunks(db, episode.id, enriched_chunks)
+                
+                logger.info("  └─ ✓ Episode complete (id=%s)", episode.id)
+                processed += 1
+                
+            except ValueError as e:
+                # Handle known errors (e.g., file too large, compression failed)
+                logger.warning("  └─ ⚠️  Skipping episode: %s", str(e))
+                skipped += 1
+                continue
+                
+            except Exception as e:
+                # Log error but continue with next episode
+                logger.error("  └─ ❌ Episode failed: %s", str(e), exc_info=True)
+                skipped += 1
+                continue
             
-            # 2. Download audio
-            audio_filename = f"episode_{episode.id}.mp3"
-            audio_path = download_audio(entry["audio_url"], settings.audio_dir, audio_filename)
-            logger.info("  ├─ Downloaded audio: %s", audio_path.name)
-
-            # 3. Transcribe
-            logger.info("  ├─ Transcribing (model=%s)...", settings.whisper_model)
-            transcript = transcribe_audio(
-                audio_path,
-                provider=settings.transcription_provider,
-                model_name=settings.whisper_model,
-            )
-            logger.info("  ├─ Transcription complete (%s segments)", len(transcript["segments"]))
-
-            # 4. Save transcript
-            repository.create_transcript(
-                db,
-                episode_id=episode.id,
-                provider=settings.transcription_provider,
-                raw_text=transcript["raw_text"],
-                segments=transcript["segments"],
-            )
-
-            # 5. Chunk segments
-            chunks = chunk_segments(
-                transcript["segments"],
-                max_chars=settings.max_chunk_chars,
-                min_chars=settings.min_chunk_chars,
-            )
-            logger.info("  ├─ Created %s chunks", len(chunks))
-
-            # 6. Tag chunks (fast, no need to batch)
-            tagged_chunks = []
-            for chunk in chunks:
-                topic, tone, domain = tag_chunk(chunk["text"])
-                tagged_chunks.append({
-                    "start": chunk["start"],
-                    "end": chunk["end"],
-                    "text": chunk["text"],
-                    "topic": topic,
-                    "emotional_tone": tone,
-                    "growth_domain": domain,
-                })
-
-            # 7. BATCH EMBED all chunks at once (MUCH FASTER!)
-            logger.info("  ├─ Embedding %s chunks (batch mode)...", len(tagged_chunks))
-            chunk_texts = [c["text"] for c in tagged_chunks]
-            embeddings = embed_text_batch(chunk_texts)
-            
-            # Combine tags with embeddings
-            enriched_chunks = []
-            for tagged_chunk, embedding in zip(tagged_chunks, embeddings):
-                enriched_chunks.append({**tagged_chunk, "embedding": embedding})
-
-            # 8. BATCH INSERT all chunks at once (MUCH FASTER!)
-            logger.info("  ├─ Saving %s chunks to database...", len(enriched_chunks))
-            _bulk_create_chunks(db, episode.id, enriched_chunks)
-            
-            logger.info("  └─ ✓ Episode complete (id=%s)", episode.id)
-            processed += 1
-            
-            # Force garbage collection after each episode to free memory
-            gc.collect()
+            finally:
+                # Force garbage collection after each episode to free memory
+                gc.collect()
 
         message = f"processed={processed}, skipped={skipped}"
         repository.finish_ingest_run(db, run.id, status="success", message=message)

@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     # Transcription
     transcription_provider: str = "openai"  # openai | faster_whisper | none
     whisper_model: str = "tiny"  # Only used if transcription_provider="faster_whisper"
+    openai_api_key: str | None = None  # OpenAI API key for transcription (optional if using faster_whisper)
 
     # API
     rate_limit_per_minute: int = 20

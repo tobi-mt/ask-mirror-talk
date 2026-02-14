@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-# Force rebuild - updated 2026-02-14 12:15 UTC (OOM fix + optimization)
-ENV REBUILD_DATE=2026-02-14-12-15
+# Force rebuild - updated 2026-02-14 23:30 UTC (FFmpeg direct compression for low memory)
+ENV REBUILD_DATE=2026-02-14-23-30
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
@@ -36,8 +36,7 @@ RUN pip install --no-cache-dir \
     tenacity==8.3.0 \
     python-multipart==0.0.9 \
     python-dotenv==1.0.1 \
-    openai>=1.0.0 \
-    pydub>=0.25.1
+    openai>=1.0.0
 
 # Install build tools temporarily for PyAV only
 RUN apt-get update \

@@ -6,6 +6,7 @@ Cost: ~$0.006 per minute of audio (~$0.24 for a 40-min episode)
 Handles OpenAI's 25MB file size limit by compressing audio if needed.
 """
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -16,28 +17,40 @@ MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB in bytes
 
 def compress_audio(input_path: Path, output_path: Path, target_bitrate: str = "64k") -> None:
     """
-    Compress audio file to reduce size using FFmpeg via pydub.
+    Compress audio file to reduce size using FFmpeg directly (low memory, fast).
     
     Args:
         input_path: Original audio file
         output_path: Path for compressed audio
         target_bitrate: Target audio bitrate (e.g., "64k", "96k", "128k")
     """
-    try:
-        from pydub import AudioSegment
-    except ImportError as exc:
-        raise RuntimeError(
-            "pydub not installed. Run: pip install pydub"
-        ) from exc
+    # Use FFmpeg directly instead of pydub to minimize memory usage
+    # This streams the audio instead of loading it all into memory
+    cmd = [
+        "ffmpeg",
+        "-i", str(input_path),
+        "-ac", "1",  # Convert to mono
+        "-ar", "16000",  # Reduce sample rate to 16kHz (good for speech)
+        "-b:a", target_bitrate,  # Set bitrate
+        "-y",  # Overwrite output file
+        "-loglevel", "error",  # Only show errors
+        str(output_path)
+    ]
     
-    # Load audio and export with compression
-    audio = AudioSegment.from_file(input_path)
-    audio.export(
-        output_path,
-        format="mp3",
-        bitrate=target_bitrate,
-        parameters=["-ac", "1"]  # Convert to mono to further reduce size
-    )
+    try:
+        print(f"  🔧 Running FFmpeg compression (bitrate={target_bitrate})...")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,  # 120 second timeout (increased for large files)
+            check=True
+        )
+        print(f"  ✅ FFmpeg compression complete")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"FFmpeg compression failed: {e.stderr}") from e
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"FFmpeg compression timed out after 120 seconds") from None
 
 
 def transcribe_audio_openai(audio_path: Path) -> dict:

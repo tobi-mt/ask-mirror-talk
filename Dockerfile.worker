@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-# Force rebuild - updated 2026-02-14 23:30 UTC (FFmpeg direct compression for low memory)
-ENV REBUILD_DATE=2026-02-14-23-30
+# Force rebuild - updated 2026-02-15 00:00 UTC (DISABLE compression to prevent OOM)
+ENV REBUILD_DATE=2026-02-15-00-00
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1

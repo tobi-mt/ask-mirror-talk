@@ -3,55 +3,18 @@ OpenAI Whisper API-based transcription.
 Uses OpenAI's hosted Whisper model instead of running locally.
 Cost: ~$0.006 per minute of audio (~$0.24 for a 40-min episode)
 
-Handles OpenAI's 25MB file size limit by compressing audio if needed.
+IMPORTANT: OpenAI Whisper API has a 25MB file size limit.
+Files larger than 25MB will be SKIPPED (compression disabled to prevent OOM crashes).
 """
 import os
-import subprocess
-import tempfile
+import logging
 from pathlib import Path
 
 
+logger = logging.getLogger(__name__)
+
 # OpenAI Whisper API file size limit (25MB)
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB in bytes
-MAX_COMPRESSIBLE_SIZE = 60 * 1024 * 1024  # 60MB - Skip files larger than this
-
-
-def compress_audio(input_path: Path, output_path: Path, target_bitrate: str = "64k") -> None:
-    """
-    Compress audio file to reduce size using FFmpeg directly (low memory, fast).
-    
-    Args:
-        input_path: Original audio file
-        output_path: Path for compressed audio
-        target_bitrate: Target audio bitrate (e.g., "64k", "96k", "128k")
-    """
-    # Use FFmpeg directly instead of pydub to minimize memory usage
-    # This streams the audio instead of loading it all into memory
-    cmd = [
-        "ffmpeg",
-        "-i", str(input_path),
-        "-ac", "1",  # Convert to mono
-        "-ar", "16000",  # Reduce sample rate to 16kHz (good for speech)
-        "-b:a", target_bitrate,  # Set bitrate
-        "-y",  # Overwrite output file
-        "-loglevel", "error",  # Only show errors
-        str(output_path)
-    ]
-    
-    try:
-        print(f"  🔧 Running FFmpeg compression (bitrate={target_bitrate})...")
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=120,  # 120 second timeout (increased for large files)
-            check=True
-        )
-        print(f"  ✅ FFmpeg compression complete")
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"FFmpeg compression failed: {e.stderr}") from e
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"FFmpeg compression timed out after 120 seconds") from None
 
 
 def transcribe_audio_openai(audio_path: Path) -> dict:
@@ -79,73 +42,35 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
     
     client = OpenAI(api_key=api_key)
     
-    # Check file size and compress if needed
+    # Check file size - SKIP compression to avoid OOM crashes
     file_size = audio_path.stat().st_size
-    temp_file = None
     
     if file_size > MAX_FILE_SIZE:
-        # Check if file is too large to compress safely
-        if file_size > MAX_COMPRESSIBLE_SIZE:
-            raise ValueError(
-                f"Audio file too large to compress: {file_size / 1024 / 1024:.2f}MB > 60MB limit. "
-                "Episode will be skipped."
-            )
-        
-        print(f"  ⚠️  Audio file is {file_size / 1024 / 1024:.2f}MB (limit: 25MB)")
-        print(f"  🔧 Compressing audio...")
-        
-        # Create temporary compressed file
-        temp_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-        temp_path = Path(temp_file.name)
-        temp_file.close()
-        
-        try:
-            # Use lower bitrate for large files to ensure they compress below 25MB
-            if file_size > 40 * 1024 * 1024:  # >40MB
-                bitrate = "48k"
-                print(f"  📉 Using lower bitrate (48k) for large file")
-            else:
-                bitrate = "64k"
-            
-            compress_audio(audio_path, temp_path, target_bitrate=bitrate)
-            compressed_size = temp_path.stat().st_size
-            
-            if compressed_size > MAX_FILE_SIZE:
-                # Still too large, try even lower bitrate
-                print(f"  ⚠️  First compression: {compressed_size / 1024 / 1024:.2f}MB, trying 32k bitrate...")
-                compress_audio(audio_path, temp_path, target_bitrate="32k")
-                compressed_size = temp_path.stat().st_size
-            
-            if compressed_size > MAX_FILE_SIZE:
-                # Give up if still too large
-                os.unlink(temp_path)
-                raise ValueError(
-                    f"Audio file too large even after compression: {compressed_size / 1024 / 1024:.2f}MB > 25MB"
-                )
-            
-            print(f"  ✅ Compressed to {compressed_size / 1024 / 1024:.2f}MB")
-            audio_path_to_use = temp_path
-        except Exception as e:
-            # Clean up temp file on error
-            if temp_path.exists():
-                os.unlink(temp_path)
-            raise
-    else:
-        audio_path_to_use = audio_path
+        # File too large - skip it (compression causes OOM crashes on Railway)
+        logger.warning(
+            f"Audio file too large: {file_size / 1024 / 1024:.2f}MB > 25MB limit. "
+            "Skipping episode (compression disabled to prevent container crashes)."
+        )
+        raise ValueError(
+            f"Audio file too large: {file_size / 1024 / 1024:.2f}MB > 25MB. "
+            "Episode skipped."
+        )
+    
+    # File is within limits - transcribe directly
+    logger.info(f"Audio file size: {file_size / 1024 / 1024:.2f}MB (within 25MB limit)")
     
     try:
         # Open and transcribe the audio file
-        with open(audio_path_to_use, "rb") as audio_file:
+        with open(audio_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
                 response_format="verbose_json",
                 timestamp_granularities=["segment"]
             )
-    finally:
-        # Clean up temporary compressed file
-        if temp_file and Path(temp_file.name).exists():
-            os.unlink(temp_file.name)
+    except Exception as e:
+        logger.error(f"OpenAI transcription failed: {e}")
+        raise
     
     # Format segments to match faster-whisper format
     segments = []

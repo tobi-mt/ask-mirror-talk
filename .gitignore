@@ -50,4 +50,6 @@ Thumbs.db
 
 __pycache__/
 venv/
-data/
+data/.env
+*.txt
+*.md~

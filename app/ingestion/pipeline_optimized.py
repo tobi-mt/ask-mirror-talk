@@ -17,18 +17,29 @@ from app.storage import models
 logger = logging.getLogger(__name__)
 
 
-def run_ingestion_optimized(db: Session, max_episodes: int | None = None):
-    """Optimized ingestion pipeline with batching and better logging."""
-    if not settings.rss_url:
-        raise ValueError("RSS URL is not configured")
-
+def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entries_to_process: list | None = None):
+    """Optimized ingestion pipeline with batching and better logging.
+    
+    Args:
+        db: Database session
+        max_episodes: Maximum number of episodes to process
+        entries_to_process: Pre-filtered list of entries to process. If None, will fetch and filter from RSS feed.
+    """
     max_episodes = max_episodes or settings.max_episodes_per_run
     run = repository.create_ingest_run(db, status="started")
     
     logger.info("Starting ingestion run (max_episodes=%s)", max_episodes)
     
-    feed = fetch_feed(settings.rss_url)
-    entries = normalize_entries(feed)
+    # If entries are provided, use them directly. Otherwise fetch from RSS feed.
+    if entries_to_process is None:
+        if not settings.rss_url:
+            raise ValueError("RSS URL is not configured")
+        feed = fetch_feed(settings.rss_url)
+        entries = normalize_entries(feed)
+    else:
+        entries = entries_to_process
+        logger.info("Using pre-filtered entries (%s episodes)", len(entries))
+    
     processed = 0
     skipped = 0
 
@@ -44,12 +55,14 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None):
                 skipped += 1
                 continue
 
-            existing = repository.get_episode_by_guid(db, entry["guid"])
-            if existing:
-                logger.info("[%s/%s] Episode already exists: %s", 
-                           idx + 1, len(entries), entry["title"])
-                skipped += 1
-                continue
+            # Only check if episode exists if we're not using pre-filtered entries
+            if entries_to_process is None:
+                existing = repository.get_episode_by_guid(db, entry["guid"])
+                if existing:
+                    logger.info("[%s/%s] Episode already exists: %s", 
+                               idx + 1, len(entries), entry["title"])
+                    skipped += 1
+                    continue
 
             logger.info("[%s/%s] Processing episode: %s", 
                        idx + 1, len(entries), entry["title"])

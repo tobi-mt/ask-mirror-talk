@@ -129,9 +129,9 @@ def main():
         logger.info("\nOpening fresh database connection...")
         db = SessionLocal()()
 
-        # Run the optimized ingestion
+        # Run the optimized ingestion with pre-filtered episodes
         logger.info("Starting ingestion...\n")
-        result = run_ingestion_optimized(db, max_episodes=args.max_episodes)
+        result = run_ingestion_optimized(db, max_episodes=args.max_episodes, entries_to_process=new_episodes)
         
         logger.info("\n" + "=" * 60)
         logger.info("✓ INGESTION COMPLETE")

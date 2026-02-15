@@ -42,6 +42,7 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
     
     processed = 0
     skipped = 0
+    audio_path = None  # Track current audio file for cleanup
 
     try:
         for idx, entry in enumerate(entries):
@@ -68,6 +69,13 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                        idx + 1, len(entries), entry["title"])
             
             try:
+                # Refresh database connection to prevent idle timeout
+                try:
+                    db.execute("SELECT 1")
+                except Exception:
+                    logger.warning("Database connection lost, refreshing...")
+                    db.rollback()
+                
                 # 1. Create episode
                 episode = repository.create_episode(db, **entry)
                 logger.info("  ├─ Created episode (id=%s)", episode.id)
@@ -133,16 +141,39 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 logger.info("  └─ ✓ Episode complete (id=%s)", episode.id)
                 processed += 1
                 
+                # Clean up audio file immediately after processing to save disk space
+                if audio_path and audio_path.exists():
+                    try:
+                        audio_path.unlink()
+                        logger.info("  └─ Cleaned up audio file")
+                        audio_path = None
+                    except Exception as e:
+                        logger.warning("  └─ Failed to cleanup audio file: %s", e)
+                
             except ValueError as e:
                 # Handle known errors (e.g., file too large, compression failed)
                 logger.warning("  └─ ⚠️  Skipping episode: %s", str(e))
                 skipped += 1
+                # Clean up audio file if download succeeded but transcription failed
+                if audio_path and audio_path.exists():
+                    try:
+                        audio_path.unlink()
+                        audio_path = None
+                    except Exception:
+                        pass
                 continue
                 
             except Exception as e:
                 # Log error but continue with next episode
                 logger.error("  └─ ❌ Episode failed: %s", str(e), exc_info=True)
                 skipped += 1
+                # Clean up audio file on any error
+                if audio_path and audio_path.exists():
+                    try:
+                        audio_path.unlink()
+                        audio_path = None
+                    except Exception:
+                        pass
                 continue
             
             finally:

@@ -77,12 +77,13 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
     texts = []
     
     for segment in transcript.segments:
+        # OpenAI returns TranscriptionSegment objects, not dicts - use attribute access
         segments.append({
-            "start": float(segment["start"]),
-            "end": float(segment["end"]),
-            "text": segment["text"].strip(),
+            "start": float(segment.start),
+            "end": float(segment.end),
+            "text": segment.text.strip(),
         })
-        texts.append(segment["text"].strip())
+        texts.append(segment.text.strip())
     
     return {
         "language": transcript.language,

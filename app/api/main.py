@@ -55,14 +55,22 @@ async def _init_db_background():
 # Configure CORS - allows your WordPress site to call the API
 if settings.allowed_origins:
     origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["*"],
-    )
-    logger.info(f"CORS enabled for origins: {origins}")
+    logger.info(f"CORS enabled for specific origins: {origins}")
+else:
+    # Default: Allow all origins in development, or if not configured
+    # This prevents 403 errors when WordPress widget tries to connect
+    origins = ["*"]
+    logger.warning("CORS enabled for ALL origins (*). Set ALLOWED_ORIGINS in production for security.")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+logger.info("✓ CORS middleware configured")
 
 _rate_limit_bucket: dict[str, list[float]] = {}
 _security = HTTPBasic()

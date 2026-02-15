@@ -26,7 +26,11 @@ def answer_question(db: Session, question: str, user_ip: str):
                 "text": chunk.text,
                 "start_time": chunk.start_time,
                 "end_time": chunk.end_time,
-                "episode": {"id": episode.id, "title": episode.title},
+                "episode": {
+                    "id": episode.id,
+                    "title": episode.title,
+                    "audio_url": episode.audio_url or "",  # Include audio URL for citations
+                },
                 "similarity": similarity,
             }
         )

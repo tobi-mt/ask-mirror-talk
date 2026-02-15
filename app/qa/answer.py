@@ -11,11 +11,33 @@ def _format_timestamp(seconds: float) -> str:
 
 
 def _split_sentences(text: str) -> list[str]:
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    """Split text into sentences, handling edge cases."""
+    if not text.strip():
+        return []
+    
+    # Split on sentence boundaries (., !, ?)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    
+    # Filter out very short fragments and ensure complete sentences
+    complete_sentences = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        # Keep sentences that are at least 20 chars and end with punctuation
+        if len(sentence) >= 20:
+            # If doesn't end with punctuation, it might be incomplete - skip it
+            if not sentence[-1] in '.!?':
+                continue
+            complete_sentences.append(sentence)
+    
+    return complete_sentences
 
 
-def _select_sentences(text: str, max_sentences: int = 2) -> list[str]:
+def _select_sentences(text: str, max_sentences: int = 3) -> list[str]:
+    """Select up to max_sentences complete sentences from text."""
     sentences = _split_sentences(text)
+    # If no complete sentences found, return the whole text if it's reasonably long
+    if not sentences and len(text.strip()) > 40:
+        return [text.strip()]
     return sentences[:max_sentences]
 
 
@@ -42,14 +64,20 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
     ranked = sorted(chunks, key=lambda c: c.get("similarity", 0), reverse=True)
 
     # Try OpenAI-powered answer generation first if enabled
+    logger.info(f"Answer generation provider: {settings.answer_generation_provider}")
+    
     if settings.answer_generation_provider == "openai":
         try:
+            logger.info("Attempting intelligent answer generation with OpenAI...")
             answer_text = _generate_intelligent_answer(question, ranked[:5])
+            logger.info("Successfully generated intelligent answer")
         except Exception as e:
-            logger.warning(f"OpenAI answer generation failed, falling back to basic extraction: {e}")
+            logger.error(f"OpenAI answer generation failed: {e}", exc_info=True)
+            logger.warning("Falling back to basic extraction")
             answer_text = _generate_basic_answer(question, ranked[:4])
     else:
         # Use basic extraction if OpenAI is not configured
+        logger.info("Using basic extraction (OpenAI not enabled)")
         answer_text = _generate_basic_answer(question, ranked[:4])
 
     # Build citations

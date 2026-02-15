@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     whisper_model: str = "tiny"  # Only used if transcription_provider="faster_whisper"
     openai_api_key: str | None = None  # OpenAI API key for transcription (optional if using faster_whisper)
 
+    # Answer Generation
+    answer_generation_provider: str = "openai"  # openai | basic
+    answer_generation_model: str = "gpt-3.5-turbo"  # gpt-3.5-turbo | gpt-4 | gpt-4-turbo
+    answer_max_tokens: int = 500  # Maximum tokens for generated answers
+    answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
+
     # API
     rate_limit_per_minute: int = 20
     allowed_origins: str = ""  # comma-separated origins for CORS

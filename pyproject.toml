@@ -25,7 +25,8 @@ dependencies = [
   "python-multipart>=0.0.9",
   "python-dotenv>=1.0.1",
   "faster-whisper>=1.0.0",
-  "sentence-transformers>=2.6.0"
+  "sentence-transformers>=2.6.0",
+  "openai>=1.0.0"
 ]
 
 [project.optional-dependencies]

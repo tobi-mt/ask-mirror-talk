@@ -91,6 +91,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.options("/ask")
+def ask_options():
+    """Handle CORS preflight for /ask endpoint."""
+    return {"status": "ok"}
+
+
 @app.on_event("startup")
 async def on_startup():
     """Initialize database on application startup."""

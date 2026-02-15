@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir \
     alembic==1.13.0 \
     httpx==0.27.0 \
     python-dotenv==1.0.1 \
+    openai==1.12.0 \
     && rm -rf /root/.cache/pip /tmp/* /var/tmp/*
 
 # Copy application code

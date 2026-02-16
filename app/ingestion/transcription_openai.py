@@ -24,6 +24,70 @@ OPENAI_MAX_SIZE = OPENAI_MAX_SIZE_MB * 1024 * 1024
 ENABLE_COMPRESSION = os.getenv('ENABLE_AUDIO_COMPRESSION', 'true').lower() == 'true'
 
 
+def check_ffmpeg_installed():
+    """Check if FFmpeg is installed and raise an error if not."""
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=5)
+    except FileNotFoundError:
+        logger.error("FFmpeg is not installed!")
+        logger.error("Install FFmpeg: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)")
+        logger.error("See FFMPEG_INSTALL_REQUIRED.md for detailed instructions")
+        raise RuntimeError(
+            "FFmpeg is not installed. Install it with: brew install ffmpeg (macOS) "
+            "or apt-get install ffmpeg (Linux). See FFMPEG_INSTALL_REQUIRED.md for details."
+        )
+    except Exception as e:
+        logger.warning(f"Could not verify FFmpeg installation: {e}")
+
+
+def convert_to_mp3(input_path: Path, output_path: Path) -> None:
+    """
+    Convert audio file to MP3 format using FFmpeg.
+    
+    Args:
+        input_path: Path to input audio file (any format)
+        output_path: Path to save converted MP3 file
+        
+    Raises:
+        RuntimeError: If FFmpeg fails or is not installed
+    """
+    logger.info(f"� Converting audio to MP3 format...")
+    check_ffmpeg_installed()
+    
+    # Convert to MP3 with reasonable quality
+    cmd = [
+        "ffmpeg",
+        "-i", str(input_path),
+        "-acodec", "libmp3lame",
+        "-y",  # Overwrite
+        str(output_path)
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            timeout=180,  # 3 minutes max
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        converted_size = output_path.stat().st_size
+        original_size = input_path.stat().st_size
+        logger.info(
+            f"✅ Conversion complete: {original_size / 1024 / 1024:.2f}MB → "
+            f"{converted_size / 1024 / 1024:.2f}MB"
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("FFmpeg conversion timed out after 3 minutes")
+        raise RuntimeError("Audio conversion timed out")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"FFmpeg conversion failed: {e.stderr}")
+        raise RuntimeError(f"Audio conversion failed: {e.stderr}")
+    except Exception as e:
+        logger.error(f"Unexpected error during conversion: {e}")
+        raise
+
+
 def compress_audio_ffmpeg(input_path: Path, output_path: Path, target_bitrate: str = "64k") -> None:
     """
     Compress audio using FFmpeg subprocess (memory-efficient streaming).
@@ -37,20 +101,7 @@ def compress_audio_ffmpeg(input_path: Path, output_path: Path, target_bitrate: s
         RuntimeError: If FFmpeg fails, times out, or is not installed
     """
     logger.info(f"🔧 Compressing audio with FFmpeg (bitrate={target_bitrate})...")
-    
-    # Check if FFmpeg is installed
-    try:
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True, timeout=5)
-    except FileNotFoundError:
-        logger.error("FFmpeg is not installed!")
-        logger.error("Install FFmpeg: brew install ffmpeg (macOS) or apt-get install ffmpeg (Linux)")
-        logger.error("See FFMPEG_INSTALL_REQUIRED.md for detailed instructions")
-        raise RuntimeError(
-            "FFmpeg is not installed. Install it with: brew install ffmpeg (macOS) "
-            "or apt-get install ffmpeg (Linux). See FFMPEG_INSTALL_REQUIRED.md for details."
-        )
-    except Exception as e:
-        logger.warning(f"Could not verify FFmpeg installation: {e}")
+    check_ffmpeg_installed()
     
     # FFmpeg command for efficient compression:
     # -i: input file
@@ -64,6 +115,7 @@ def compress_audio_ffmpeg(input_path: Path, output_path: Path, target_bitrate: s
         "-ac", "1",  # Mono
         "-ar", "16000",  # 16kHz
         "-b:a", target_bitrate,
+        "-acodec", "libmp3lame",  # Ensure MP3 format
         "-y",  # Overwrite
         str(output_path)
     ]
@@ -119,7 +171,29 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
     
     client = OpenAI(api_key=api_key)
     
-    # Check file size and compress if needed
+    # Step 1: Ensure the audio is in a compatible format (convert to MP3 if needed)
+    # This handles cases where the downloaded file has wrong extension or format
+    original_audio_path = audio_path
+    converted_audio = None
+    
+    # Check if file needs format conversion
+    # We'll always convert to ensure compatibility with OpenAI
+    try:
+        converted_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        converted_path = Path(converted_audio.name)
+        converted_audio.close()
+        
+        logger.info("🔄 Converting audio to compatible format...")
+        convert_to_mp3(audio_path, converted_path)
+        audio_path = converted_path
+        logger.info("✅ Audio converted to MP3 format")
+    except Exception as e:
+        logger.error(f"Failed to convert audio format: {e}")
+        if converted_audio and converted_path.exists():
+            converted_path.unlink()
+        raise RuntimeError(f"Audio format conversion failed: {e}")
+    
+    # Step 2: Check file size and compress if needed
     file_size = audio_path.stat().st_size
     file_size_mb = file_size / 1024 / 1024
     
@@ -203,12 +277,20 @@ def transcribe_audio_openai(audio_path: Path) -> dict:
         raise
     finally:
         # Clean up temporary compressed file if it was created
-        if temp_compressed and transcribe_path.exists() and transcribe_path != audio_path:
+        if temp_compressed and transcribe_path.exists() and transcribe_path != original_audio_path:
             try:
                 transcribe_path.unlink()
                 logger.debug("Cleaned up temporary compressed file")
             except Exception as cleanup_error:
                 logger.warning(f"Failed to clean up temp file: {cleanup_error}")
+        
+        # Clean up temporary converted file if it was created
+        if converted_audio and audio_path.exists() and audio_path != original_audio_path:
+            try:
+                audio_path.unlink()
+                logger.debug("Cleaned up temporary converted file")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to clean up converted file: {cleanup_error}")
     
     # Format segments to match faster-whisper format
     segments = []

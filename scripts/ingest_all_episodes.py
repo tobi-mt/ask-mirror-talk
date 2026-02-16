@@ -74,9 +74,16 @@ if __name__ == "__main__":
             print("\n" + "="*60)
             print("✓ INGESTION COMPLETE")
             print("="*60)
-            print(f"Processed: {result['processed']} episodes")
-            print(f"Skipped: {result['skipped']} episodes")
+            print(f"Total episodes in feed: {result['processed'] + result['skipped'] + result['failed']}")
+            print(f"Successfully processed: {result['processed']} episodes")
+            print(f"Already complete (skipped): {result['skipped']} episodes")
+            print(f"Failed: {result['failed']} episodes")
             print("="*60)
+            
+            if result['failed'] > 0:
+                print("\n⚠️  Some episodes failed. Run script again to retry failed episodes.")
+                sys.exit(1)
+            
         finally:
             db.close()
             

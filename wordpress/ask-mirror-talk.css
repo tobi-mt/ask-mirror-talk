@@ -33,6 +33,23 @@
   margin-top: 16px;
 }
 
+.ask-mirror-talk-response p,
+#ask-mirror-talk-output p {
+  margin: 0 0 16px 0;
+}
+
+.ask-mirror-talk-response p:last-child,
+#ask-mirror-talk-output p:last-child {
+  margin-bottom: 0;
+}
+
+/* Better spacing after headings in paragraphs */
+.ask-mirror-talk-response p strong:only-child,
+#ask-mirror-talk-output p strong:only-child {
+  display: block;
+  margin-bottom: 8px;
+}
+
 /* Response Content Formatting */
 .ask-mirror-talk-response strong,
 #ask-mirror-talk-output strong {
@@ -49,8 +66,8 @@
 .ask-mirror-talk-response ul,
 #ask-mirror-talk-output ol,
 #ask-mirror-talk-output ul {
-  margin: 12px 0;
-  padding-left: 24px;
+  margin: 16px 0;
+  padding-left: 28px;
 }
 
 .ask-mirror-talk-response ol,
@@ -65,11 +82,20 @@
 
 .ask-mirror-talk-response li,
 #ask-mirror-talk-output li {
-  margin: 6px 0;
+  margin: 8px 0;
   line-height: 1.7;
+  padding-left: 4px;
 }
 
 .ask-mirror-talk-response li strong,
 #ask-mirror-talk-output li strong {
   color: #1a1815;
+}
+
+/* Add spacing before lists that follow text */
+.ask-mirror-talk-response p + ol,
+.ask-mirror-talk-response p + ul,
+#ask-mirror-talk-output p + ol,
+#ask-mirror-talk-output p + ul {
+  margin-top: 12px;
 }

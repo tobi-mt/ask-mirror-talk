@@ -3,8 +3,10 @@ import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.db import get_session_local
 from app.ingestion.rss import fetch_feed, normalize_entries
 from app.ingestion.audio import download_audio
 from app.ingestion.transcription import transcribe_audio
@@ -15,6 +17,34 @@ from app.storage import repository
 from app.storage import models
 
 logger = logging.getLogger(__name__)
+
+
+def refresh_db_connection(db: Session) -> Session:
+    """Create a fresh database session to prevent idle timeout errors."""
+    try:
+        db.close()
+    except:
+        pass
+    
+    SessionMaker = get_session_local()
+    return SessionMaker()
+
+
+def check_episode_complete(db: Session, guid: str) -> bool:
+    """Check if episode is completely processed (has transcript and chunks)."""
+    try:
+        episode = repository.get_episode_by_guid(db, guid)
+        if not episode:
+            return False
+        
+        # Episode must have chunks to be considered complete
+        # (chunks are only created after successful transcription)
+        chunk_count = db.query(models.Chunk).filter(models.Chunk.episode_id == episode.id).count()
+        
+        return chunk_count > 0
+    except Exception as e:
+        logger.error("Error checking episode completeness: %s", e)
+        return False
 
 
 def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entries_to_process: list | None = None):
@@ -42,6 +72,7 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
     
     processed = 0
     skipped = 0
+    failed = 0
     audio_path = None  # Track current audio file for cleanup
 
     try:
@@ -56,25 +87,34 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 skipped += 1
                 continue
 
-            # Only check if episode exists if we're not using pre-filtered entries
+            # Refresh database connection at start of each episode to prevent idle timeout
+            logger.info("Database connection lost, refreshing...")
+            db = refresh_db_connection(db)
+
+            # Check if episode is COMPLETELY processed (has transcript AND chunks)
+            # Only check if we're not using pre-filtered entries
             if entries_to_process is None:
-                existing = repository.get_episode_by_guid(db, entry["guid"])
-                if existing:
-                    logger.info("[%s/%s] Episode already exists: %s", 
+                if check_episode_complete(db, entry["guid"]):
+                    logger.info("[%s/%s] Episode already complete, skipping: %s", 
                                idx + 1, len(entries), entry["title"])
                     skipped += 1
                     continue
+                
+                # Check if episode exists but is incomplete (needs re-processing)
+                existing = repository.get_episode_by_guid(db, entry["guid"])
+                if existing:
+                    logger.info("[%s/%s] Episode exists but incomplete, re-processing: %s", 
+                               idx + 1, len(entries), entry["title"])
+                    # Delete incomplete episode to start fresh
+                    db.query(models.Chunk).filter(models.Chunk.episode_id == existing.id).delete()
+                    db.delete(existing)
+                    db.commit()
+                    logger.info("  ├─ Deleted incomplete episode data")
 
             logger.info("[%s/%s] Processing episode: %s", 
                        idx + 1, len(entries), entry["title"])
             
             try:
-                # Refresh database connection to prevent idle timeout
-                try:
-                    db.execute("SELECT 1")
-                except Exception:
-                    logger.warning("Database connection lost, refreshing...")
-                    db.rollback()
                 
                 # 1. Create episode
                 episode = repository.create_episode(db, **entry)
@@ -93,6 +133,11 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                     model_name=settings.whisper_model,
                 )
                 logger.info("  ├─ Transcription complete (%s segments)", len(transcript["segments"]))
+
+                # Refresh database connection after long transcription operation
+                # Transcription can take several minutes, causing idle timeout
+                logger.info("Database connection lost after transcription, refreshing...")
+                db = refresh_db_connection(db)
 
                 # 4. Save transcript
                 repository.create_transcript(
@@ -166,7 +211,19 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
             except Exception as e:
                 # Log error but continue with next episode
                 logger.error("  └─ ❌ Episode failed: %s", str(e), exc_info=True)
-                skipped += 1
+                failed += 1
+                
+                # Try to rollback and refresh connection
+                try:
+                    db.rollback()
+                except:
+                    pass
+                
+                try:
+                    db = refresh_db_connection(db)
+                except Exception as refresh_err:
+                    logger.error("  └─ ⚠️  Failed to refresh connection: %s", refresh_err)
+                
                 # Clean up audio file on any error
                 if audio_path and audio_path.exists():
                     try:
@@ -180,10 +237,10 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 # Force garbage collection after each episode to free memory
                 gc.collect()
 
-        message = f"processed={processed}, skipped={skipped}"
+        message = f"processed={processed}, skipped={skipped}, failed={failed}"
         repository.finish_ingest_run(db, run.id, status="success", message=message)
         logger.info("Ingestion complete: %s", message)
-        return {"processed": processed, "skipped": skipped}
+        return {"processed": processed, "skipped": skipped, "failed": failed}
         
     except Exception as exc:
         logger.exception("Ingestion failed: %s", exc)

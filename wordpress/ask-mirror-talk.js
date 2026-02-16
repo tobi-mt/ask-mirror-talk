@@ -23,6 +23,21 @@ function formatMarkdownToHtml(text) {
     const line = lines[i];
     const trimmedLine = line.trim();
     
+    // Skip empty lines
+    if (trimmedLine === '') {
+      // Close any open lists before empty line
+      if (inOrderedList) {
+        formattedLines.push('</ol>');
+        inOrderedList = false;
+      }
+      if (inUnorderedList) {
+        formattedLines.push('</ul>');
+        inUnorderedList = false;
+      }
+      formattedLines.push('');
+      continue;
+    }
+    
     // Check for numbered list items (1. , 2. , etc.)
     const numberedMatch = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
     if (numberedMatch) {
@@ -34,12 +49,16 @@ function formatMarkdownToHtml(text) {
         formattedLines.push('<ol>');
         inOrderedList = true;
       }
-      formattedLines.push(`<li>${numberedMatch[2]}</li>`);
+      // Apply formatting to list item content
+      let itemContent = numberedMatch[2];
+      itemContent = itemContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      itemContent = itemContent.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      formattedLines.push(`<li>${itemContent}</li>`);
       continue;
     }
     
     // Check for bullet list items (- item or * item)
-    const bulletMatch = trimmedLine.match(/^[-*]\s+(.+)$/);
+    const bulletMatch = trimmedLine.match(/^[-]\s+(.+)$/);
     if (bulletMatch) {
       if (!inUnorderedList) {
         if (inOrderedList) {
@@ -49,26 +68,26 @@ function formatMarkdownToHtml(text) {
         formattedLines.push('<ul>');
         inUnorderedList = true;
       }
-      formattedLines.push(`<li>${bulletMatch[1]}</li>`);
+      // Apply formatting to list item content
+      let itemContent = bulletMatch[1];
+      itemContent = itemContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      itemContent = itemContent.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      formattedLines.push(`<li>${itemContent}</li>`);
       continue;
     }
     
-    // Close any open lists if we encounter a non-list line
-    if (inOrderedList && trimmedLine !== '') {
+    // If we're in a list and encounter non-list text, close the list
+    if (inOrderedList) {
       formattedLines.push('</ol>');
       inOrderedList = false;
     }
-    if (inUnorderedList && trimmedLine !== '') {
+    if (inUnorderedList) {
       formattedLines.push('</ul>');
       inUnorderedList = false;
     }
     
-    // Regular line
-    if (trimmedLine === '') {
-      formattedLines.push('');  // Preserve empty lines
-    } else if (!inOrderedList && !inUnorderedList) {
-      formattedLines.push(line);
-    }
+    // Regular line (not in a list)
+    formattedLines.push(line);
   }
   
   // Close any remaining open lists
@@ -106,11 +125,22 @@ form.addEventListener("submit", async (event) => {
 
     const data = await response.json();
     
-    // Convert markdown to HTML and set as innerHTML instead of textContent
-    const formattedAnswer = formatMarkdownToHtml(data.answer)
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br>');
-    output.innerHTML = `<p>${formattedAnswer}</p>`;
+    // Convert markdown to HTML
+    const formattedAnswer = formatMarkdownToHtml(data.answer);
+    
+    // Split into paragraphs and wrap them properly
+    const paragraphs = formattedAnswer.split('\n\n').filter(p => p.trim());
+    const htmlParagraphs = paragraphs.map(p => {
+      const trimmed = p.trim();
+      // Don't wrap lists in <p> tags
+      if (trimmed.startsWith('<ol>') || trimmed.startsWith('<ul>')) {
+        return trimmed;
+      }
+      // Regular paragraphs - replace single newlines with <br>
+      return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
+    });
+    
+    output.innerHTML = htmlParagraphs.join('');
 
     data.citations.forEach((c) => {
       const li = document.createElement("li");

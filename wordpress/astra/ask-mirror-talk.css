@@ -201,6 +201,39 @@
   color: #fff;
 }
 
+/* Response Content Formatting */
+.ask-mirror-talk-response strong {
+  font-weight: 700;
+  color: #1a1815;
+}
+
+.ask-mirror-talk-response em {
+  font-style: italic;
+}
+
+.ask-mirror-talk-response ol,
+.ask-mirror-talk-response ul {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.ask-mirror-talk-response ol {
+  list-style-type: decimal;
+}
+
+.ask-mirror-talk-response ul {
+  list-style-type: disc;
+}
+
+.ask-mirror-talk-response li {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+
+.ask-mirror-talk-response li strong {
+  color: #1a1815;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .ask-mirror-talk {

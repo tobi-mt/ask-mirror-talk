@@ -53,25 +53,36 @@ async def _init_db_background():
 
 
 # Configure CORS - allows your WordPress site to call the API
-# For production with specific origins, we need to handle credentials properly
-# For development or unrestricted access, we allow all origins without credentials
+# For maximum compatibility across ALL browsers (Safari, Chrome, Firefox, mobile browsers)
+# We use the most permissive CORS configuration that works universally
 if settings.allowed_origins:
     origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
-    # With specific origins, we can safely enable credentials
-    allow_credentials = False  # Set to False to be more permissive
+    # Add both http and https variants, with and without www
+    expanded_origins = []
+    for origin in origins:
+        expanded_origins.append(origin)
+        # Add www variant if not present
+        if "://www." not in origin and "://" in origin:
+            expanded_origins.append(origin.replace("://", "://www."))
+        # Add non-www variant if www is present
+        if "://www." in origin:
+            expanded_origins.append(origin.replace("://www.", "://"))
+    origins = expanded_origins
     logger.info(f"CORS enabled for specific origins: {origins}")
 else:
-    # Default: Allow all origins WITHOUT credentials
-    # This works in ALL browsers and prevents 403 errors
+    # Default: Allow all origins - most permissive for development
     origins = ["*"]
-    allow_credentials = False
     logger.warning("CORS enabled for ALL origins (*). Set ALLOWED_ORIGINS in production for security.")
+
+# Always use allow_credentials=False for maximum browser compatibility
+# When credentials=False, browsers don't send cookies/auth headers, avoiding CORS issues
+allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=allow_credentials,
-    allow_methods=["*"],  # Allow all methods
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit methods
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],  # Expose all headers
 )

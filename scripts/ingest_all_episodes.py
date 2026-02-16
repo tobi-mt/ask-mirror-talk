@@ -32,6 +32,10 @@ else:
 # Remove the episode limit
 os.environ['MAX_EPISODES_PER_RUN'] = '999'
 
+# Disable audio file size limit for local ingestion
+# Set to 0 for unlimited (useful when processing large files locally)
+os.environ['MAX_AUDIO_SIZE_MB'] = '0'  # Unlimited
+
 # Validate required environment variables
 required_vars = ['DATABASE_URL', 'RSS_URL']
 missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -46,6 +50,7 @@ print("="*60)
 print(f"RSS URL: {os.getenv('RSS_URL')}")
 print(f"Database: {os.getenv('DATABASE_URL', 'Not set')[:70]}...")
 print(f"Max episodes: UNLIMITED")
+print(f"Max audio size: UNLIMITED (large files enabled)")
 print(f"Transcription: {os.getenv('TRANSCRIPTION_PROVIDER', 'Not set')}")
 print(f"OpenAI API Key: {'Set' if os.getenv('OPENAI_API_KEY') else 'NOT SET'}")
 print("="*60)

@@ -1,3 +1,8 @@
+<!-- Cache control meta tags - prevents browser from caching old JS/CSS -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+
 <div class="ask-mirror-talk">
   <h2>Ask Mirror Talk</h2>
   <form id="ask-mirror-talk-form">
@@ -18,4 +23,5 @@
 <script>
   window.ASK_MIRROR_TALK_API = "https://ask-mirror-talk-production.up.railway.app/ask";
 </script>
-<script src="/wp-content/themes/astra/ask-mirror-talk.js"></script>
+<!-- Versioned asset to prevent browser caching issues -->
+<script src="/wp-content/themes/astra/ask-mirror-talk.js?v=2.0.0"></script>

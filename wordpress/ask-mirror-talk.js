@@ -1,7 +1,16 @@
+// Ask Mirror Talk Widget - Version 2.0.0
+// Includes: UX improvements, better error handling, citation deduplication
+const ASK_MIRROR_TALK_VERSION = '2.0.0';
+
 const form = document.querySelector("#ask-mirror-talk-form");
 const input = document.querySelector("#ask-mirror-talk-input");
 const output = document.querySelector("#ask-mirror-talk-output");
 const citations = document.querySelector("#ask-mirror-talk-citations");
+
+// Log version for debugging
+if (window.console) {
+  console.log('Ask Mirror Talk Widget v' + ASK_MIRROR_TALK_VERSION + ' loaded');
+}
 
 // Helper: Convert markdown-style formatting to HTML
 function formatMarkdownToHtml(text) {
@@ -103,27 +112,46 @@ function formatMarkdownToHtml(text) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  output.textContent = "Thinking...";
-  citations.innerHTML = "";
-
+  
   const question = input.value.trim();
   if (!question) {
-    output.textContent = "Please enter a question.";
+    output.innerHTML = '<p class="error">Please enter a question.</p>';
     return;
   }
+
+  // Disable form during request
+  input.disabled = true;
+  form.querySelector('button').disabled = true;
+  
+  // Show loading state
+  output.innerHTML = '<p class="loading">Searching through Mirror Talk episodes...</p>';
+  citations.innerHTML = "";
 
   try {
     const response = await fetch(window.ASK_MIRROR_TALK_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
       body: JSON.stringify({ question })
     });
 
+    // Check response status before parsing
     if (!response.ok) {
-      throw new Error("Request failed");
+      const errorText = await response.text();
+      console.error('Server error:', response.status, errorText);
+      throw new Error(`Server returned ${response.status}: ${errorText || 'Unknown error'}`);
     }
 
+    // Parse JSON response
     const data = await response.json();
+    
+    // Validate response has required fields
+    if (!data || !data.answer) {
+      console.error('Invalid response:', data);
+      throw new Error('Invalid response from server - missing answer');
+    }
     
     // Convert markdown to HTML
     const formattedAnswer = formatMarkdownToHtml(data.answer);
@@ -142,12 +170,40 @@ form.addEventListener("submit", async (event) => {
     
     output.innerHTML = htmlParagraphs.join('');
 
-    data.citations.forEach((c) => {
-      const li = document.createElement("li");
-      li.textContent = `${c.episode_title} (${c.timestamp_start} - ${c.timestamp_end})`;
-      citations.appendChild(li);
-    });
+    // Display citations with clickable timestamps
+    if (data.citations && data.citations.length > 0) {
+      data.citations.forEach((c) => {
+        const li = document.createElement("li");
+        
+        // Create clickable citation with timestamp
+        const citationHtml = `
+          <strong>${c.episode_title}</strong><br>
+          ${c.text || ''}<br>
+          <a href="${c.episode_url || c.audio_url}" 
+             target="_blank" 
+             rel="noopener" 
+             class="timestamp-link"
+             title="Listen from ${c.timestamp_start}">
+            🎧 Listen at ${c.timestamp_start}
+          </a>
+        `;
+        
+        li.innerHTML = citationHtml;
+        citations.appendChild(li);
+      });
+    }
+    
   } catch (error) {
-    output.textContent = "We couldn't reach the service. Please try again later.";
+    console.error('Error fetching answer:', error);
+    output.innerHTML = `
+      <p class="error">
+        <strong>Sorry, something went wrong.</strong><br>
+        ${error.message || 'Unable to get an answer. Please try again.'}
+      </p>
+    `;
+  } finally {
+    // Re-enable form
+    input.disabled = false;
+    form.querySelector('button').disabled = false;
   }
 });

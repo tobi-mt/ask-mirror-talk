@@ -49,13 +49,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '1.0.1'
+        '2.0.0'  // Updated for UX improvements, deduplication, better AI responses
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array(),
-        '1.0.1',
+        '2.0.0',  // Updated for UX improvements, deduplication, better AI responses
         true
     );
 

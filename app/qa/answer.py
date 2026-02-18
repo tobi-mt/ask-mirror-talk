@@ -80,23 +80,23 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
         logger.info("Using basic extraction (OpenAI not enabled)")
         answer_text = _generate_basic_answer(question, ranked[:4])
 
-    # Build citations
+    # Build citations with proper timestamps for audio playback
     citations = []
     for chunk in ranked:
         episode = chunk["episode"]
-        start_seconds = int(chunk["start_time"])
-        end_seconds = int(chunk["end_time"])
+        # Ensure we have valid timestamps
+        start_seconds = int(chunk["start_time"]) if chunk.get("start_time") else 0
+        end_seconds = int(chunk["end_time"]) if chunk.get("end_time") else start_seconds + 30
+        
         start = _format_timestamp(start_seconds)
         end = _format_timestamp(end_seconds)
         
-        # Get audio URL from episode and add timestamp parameter
+        # Get audio URL from episode
         audio_url = episode.get("audio_url", "")
-        episode_url = audio_url
         
-        # Add timestamp to URL if audio_url exists
-        if audio_url:
-            # For most podcast players, add #t=start_time
-            episode_url = f"{audio_url}#t={start_seconds}"
+        # Create episode URL with timestamp for direct playback
+        # Most podcast players support #t=seconds format
+        episode_url = f"{audio_url}#t={start_seconds}" if audio_url else ""
         
         citations.append(
             {
@@ -108,6 +108,7 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
                 "timestamp_end_seconds": end_seconds,
                 "audio_url": audio_url,
                 "episode_url": episode_url,
+                "text": _make_quote(chunk["text"], max_len=200),  # Include excerpt for context
             }
         )
 
@@ -136,36 +137,52 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
     
     context = "\n\n".join(context_parts)
     
-    # Create a structured prompt for GPT
-    system_prompt = """You are a helpful AI assistant for Mirror Talk podcast, which focuses on personal growth, emotional intelligence, and self-development.
+    # Create a structured prompt for GPT - More human, intelligent, and soulful
+    system_prompt = """You are a warm, empathetic, and deeply insightful AI companion helping people explore the Mirror Talk podcast's wisdom on personal growth, relationships, and emotional intelligence.
 
-Your task is to answer questions based ONLY on the provided podcast excerpts. Follow these guidelines:
+**Your Essence:**
+- Conversational and approachable, like a thoughtful friend sharing insights over coffee
+- Deeply curious about the human experience - psychology, relationships, self-discovery
+- Empathetic and non-judgmental, honoring the complexity of being human
+- Natural and flowing in your language (not robotic or overly formal)
+- Uses vivid analogies and relatable examples when helpful
+- Acknowledges nuance - life rarely has simple black-and-white answers
 
-1. **Be Direct**: Start with a clear, direct answer to the question
-2. **Be Structured**: Use paragraphs, bullet points, or numbered lists for clarity
-3. **Be Specific**: Reference specific insights from the episodes
-4. **Be Grounded**: Only use information from the provided sources
-5. **Be Conversational**: Write in a friendly, accessible tone
-6. **Be Helpful**: If the sources don't fully answer the question, acknowledge what IS covered
+**When Answering:**
+1. **Start human**: Begin with a warm, direct response that shows you understand what they're asking
+2. **Weave in wisdom**: Integrate relevant podcast insights naturally into your narrative (not as mechanical citations)
+3. **Connect dots**: Link ideas across episodes when you notice patterns or complementary perspectives
+4. **Honor emotion**: If the question touches something personal, acknowledge the emotional dimension
+5. **End with depth**: Close with a reflection or insight that adds meaning beyond the facts
+6. **Be yourself**: Use "I" and "you" naturally - this is a conversation, not a lecture
 
-Format your response in a clear, easy-to-read way with proper spacing and structure."""
+**Avoid:**
+- Listing facts robotically or starting every response with "Based on the podcast..."
+- Excessive bullet points (use only when truly clarifying complex ideas)
+- Repetitive phrasing or academic tone
+- Being overly cautious or hedging unnecessarily
+- Treating this like information retrieval - you're helping someone discover something meaningful
+
+**Remember:** You're helping someone understand themselves and their relationships better. Bring intelligence, but also warmth and soul. Make them feel heard, not just informed."""
 
     user_prompt = f"""Question: {question}
 
-Podcast Excerpts:
+Relevant Podcast Wisdom:
 {context}
 
-Please provide a well-structured, intelligent answer based on these excerpts. Use proper formatting with paragraphs, bullet points, or numbered lists to make it easy to read and understand."""
+Please share a thoughtful, conversational response that helps this person understand the topic better. Weave in relevant insights naturally - feel free to connect ideas across different episodes if you notice patterns. Make it feel like a conversation, not a report."""
 
-    # Call OpenAI API with configured settings
+    # Call OpenAI API with settings optimized for natural, human responses
     response = client.chat.completions.create(
         model=settings.answer_generation_model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        temperature=settings.answer_temperature,
-        max_tokens=settings.answer_max_tokens,
+        temperature=0.85,  # Higher for more natural, varied, human responses
+        max_tokens=900,    # Longer to allow thoughtful, complete answers
+        presence_penalty=0.4,   # Reduce repetition
+        frequency_penalty=0.3,  # Encourage varied vocabulary
     )
     
     answer = response.choices[0].message.content.strip()

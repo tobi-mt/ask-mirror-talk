@@ -718,3 +718,18 @@ curl -X POST https://ask-mirror-talk-production.up.railway.app/ask \
 ---
 
 **🎉 You're now set up to monitor and optimize user engagement!**
+
+Daily Run: 
+cd /Users/tobi/PycharmProjects/pythonProject/ask-mirror-talk
+./scripts/analyze_daily_logs.sh
+
+Weekly Run:
+source .venv/bin/activate
+python scripts/weekly_engagement_report.py > reports/week_$(date +%Y%m%d).txt 
+
+Monthly Run:
+source .venv/bin/activate
+python scripts/analyze_episode_engagement.py
+
+Note: The episode engagement script requires DATABASE_URL to be set to your production database.
+If you don't have production database access locally, use Railway logs for monitoring instead.

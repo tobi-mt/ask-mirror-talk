@@ -33,7 +33,25 @@ def analyze_engagement():
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
     
-    db: Session = SessionLocal()
+    print("Connecting to database...")
+    
+    try:
+        # Get session factory and create a session
+        session_factory = SessionLocal()
+        db: Session = session_factory()
+        print("✅ Database connection established")
+        print()
+    except Exception as e:
+        print(f"❌ Failed to connect to database: {e}")
+        print()
+        print("💡 This script requires access to the production database.")
+        print("   It won't work locally unless you have DATABASE_URL set to production.")
+        print()
+        print("   To analyze production data:")
+        print("   1. Set DATABASE_URL to your Railway/Neon database")
+        print("   2. Or use Railway logs for monitoring instead")
+        print()
+        return
     
     try:
         # Total episodes in database

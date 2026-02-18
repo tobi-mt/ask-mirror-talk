@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # Retrieval
     top_k: int = 6
     min_similarity: float = 0.15
+    diversity_lambda: float = 0.7  # MMR: 0.0=max diversity, 1.0=max relevance
 
     # Embeddings
     embedding_provider: str = "local"  # local | sentence_transformers

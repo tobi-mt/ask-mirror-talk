@@ -105,8 +105,15 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 if existing:
                     logger.info("[%s/%s] Episode exists but incomplete, re-processing: %s", 
                                idx + 1, len(entries), entry["title"])
-                    # Delete incomplete episode to start fresh
+                    # Delete incomplete episode data to start fresh
+                    # Must delete in correct order due to foreign key constraints
                     db.query(models.Chunk).filter(models.Chunk.episode_id == existing.id).delete()
+                    db.query(models.TranscriptSegment).filter(
+                        models.TranscriptSegment.transcript_id.in_(
+                            db.query(models.Transcript.id).filter(models.Transcript.episode_id == existing.id)
+                        )
+                    ).delete(synchronize_session=False)
+                    db.query(models.Transcript).filter(models.Transcript.episode_id == existing.id).delete()
                     db.delete(existing)
                     db.commit()
                     logger.info("  ├─ Deleted incomplete episode data")
@@ -127,6 +134,10 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
 
                 # 3. Transcribe
                 logger.info("  ├─ Transcribing (model=%s)...", settings.whisper_model)
+                # Store episode ID before transcription (will need it after connection refresh)
+                episode_id = episode.id
+                episode_guid = entry["guid"]
+                
                 transcript = transcribe_audio(
                     audio_path,
                     provider=settings.transcription_provider,
@@ -138,6 +149,11 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 # Transcription can take several minutes, causing idle timeout
                 logger.info("Database connection lost after transcription, refreshing...")
                 db = refresh_db_connection(db)
+                
+                # Re-fetch episode from new session
+                episode = repository.get_episode_by_guid(db, episode_guid)
+                if not episode:
+                    raise Exception(f"Episode lost after connection refresh (guid={episode_guid})")
 
                 # 4. Save transcript
                 repository.create_transcript(
@@ -244,7 +260,16 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
         
     except Exception as exc:
         logger.exception("Ingestion failed: %s", exc)
-        repository.finish_ingest_run(db, run.id, status="failed", message=str(exc))
+        # Refresh connection before trying to update the run status
+        try:
+            db.rollback()
+        except:
+            pass
+        try:
+            db = refresh_db_connection(db)
+            repository.finish_ingest_run(db, run.id, status="failed", message=str(exc))
+        except Exception as finish_err:
+            logger.error("Failed to update ingest run status: %s", finish_err)
         raise
 
 

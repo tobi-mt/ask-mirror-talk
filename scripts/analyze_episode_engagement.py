@@ -108,14 +108,19 @@ def analyze_engagement():
             print(f"  {episode_id:3d}. {title_short:<60} ({chunk_count} chunks)")
         print()
         
-        # Average chunks per episode
-        avg_chunks = db.execute(
-            select(func.avg(func.count(Chunk.id)))
-            .select_from(Chunk)
-            .group_by(Chunk.episode_id)
+        # Average chunks per episode (using subquery to avoid nested aggregates)
+        avg_chunks_result = db.execute(
+            text("""
+                SELECT AVG(chunk_count) as avg_chunks
+                FROM (
+                    SELECT episode_id, COUNT(*) as chunk_count
+                    FROM chunks
+                    GROUP BY episode_id
+                ) as counts
+            """)
         ).scalar()
-        if avg_chunks:
-            print(f"Average Chunks per Episode: {avg_chunks:.1f}")
+        if avg_chunks_result:
+            print(f"Average Chunks per Episode: {avg_chunks_result:.1f}")
         print()
         
         # Chunk distribution
@@ -137,15 +142,22 @@ def analyze_engagement():
                     FROM chunks
                     GROUP BY episode_id
                 ) as counts
-                GROUP BY bucket
-                ORDER BY 
+                GROUP BY 
                     CASE 
-                        WHEN bucket = '1-4 chunks' THEN 1
-                        WHEN bucket = '5-9 chunks' THEN 2
-                        WHEN bucket = '10-19 chunks' THEN 3
-                        WHEN bucket = '20-49 chunks' THEN 4
-                        ELSE 5
+                        WHEN chunk_count < 5 THEN '1-4 chunks'
+                        WHEN chunk_count < 10 THEN '5-9 chunks'
+                        WHEN chunk_count < 20 THEN '10-19 chunks'
+                        WHEN chunk_count < 50 THEN '20-49 chunks'
+                        ELSE '50+ chunks'
                     END
+                ORDER BY 
+                    MIN(CASE 
+                        WHEN chunk_count < 5 THEN 1
+                        WHEN chunk_count < 10 THEN 2
+                        WHEN chunk_count < 20 THEN 3
+                        WHEN chunk_count < 50 THEN 4
+                        ELSE 5
+                    END)
             """)
         ).all()
         

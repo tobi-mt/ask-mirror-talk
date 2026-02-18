@@ -1,6 +1,6 @@
-// Ask Mirror Talk Widget - Version 2.0.0
-// Includes: UX improvements, better error handling, citation deduplication
-const ASK_MIRROR_TALK_VERSION = '2.0.0';
+// Ask Mirror Talk Widget - Version 2.1.0
+// Includes: UX improvements, beautiful loading animation, enhanced citations
+const ASK_MIRROR_TALK_VERSION = '2.1.0';
 
 const form = document.querySelector("#ask-mirror-talk-form");
 const input = document.querySelector("#ask-mirror-talk-input");
@@ -128,7 +128,19 @@ form.addEventListener("submit", async (event) => {
   citations.innerHTML = "";
 
   try {
-    const response = await fetch(window.ASK_MIRROR_TALK_API, {
+    // Get API URL from WordPress config or fallback to window variable
+    const apiUrl = (window.AskMirrorTalkConfig && window.AskMirrorTalkConfig.apiUrl) 
+        || window.ASK_MIRROR_TALK_API 
+        || 'https://ask-mirror-talk-production.up.railway.app/ask';
+    
+    console.log('=== DEBUG INFO ===');
+    console.log('API URL:', apiUrl);
+    console.log('WordPress Config:', window.AskMirrorTalkConfig);
+    console.log('Window API:', window.ASK_MIRROR_TALK_API);
+    console.log('Question:', question);
+    console.log('==================');
+    
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
@@ -137,6 +149,9 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ question })
     });
 
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+    
     // Check response status before parsing
     if (!response.ok) {
       const errorText = await response.text();
@@ -145,7 +160,11 @@ form.addEventListener("submit", async (event) => {
     }
 
     // Parse JSON response
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('Raw response:', responseText.substring(0, 500));
+    
+    const data = JSON.parse(responseText);
+    console.log('Parsed data:', data);
     
     // Validate response has required fields
     if (!data || !data.answer) {
@@ -172,25 +191,33 @@ form.addEventListener("submit", async (event) => {
 
     // Display citations with clickable timestamps
     if (data.citations && data.citations.length > 0) {
-      data.citations.forEach((c) => {
+      console.log('Rendering citations:', data.citations.length);
+      
+      data.citations.forEach((c, index) => {
+        console.log(`Citation ${index + 1}:`, c);
+        
         const li = document.createElement("li");
         
-        // Create clickable citation with timestamp
+        // Create beautiful citation with excerpt and timestamp
         const citationHtml = `
-          <strong>${c.episode_title}</strong><br>
-          ${c.text || ''}<br>
+          <strong>${c.episode_title || 'Untitled Episode'}</strong>
+          ${c.text ? `<div class="citation-excerpt">"${c.text.substring(0, 150)}${c.text.length > 150 ? '...' : ''}"</div>` : ''}
           <a href="${c.episode_url || c.audio_url}" 
              target="_blank" 
-             rel="noopener" 
+             rel="noopener noreferrer" 
              class="timestamp-link"
-             title="Listen from ${c.timestamp_start}">
-            🎧 Listen at ${c.timestamp_start}
+             title="Listen from ${c.timestamp_start || '0:00:00'}">
+            Listen at ${c.timestamp_start || '0:00:00'}
           </a>
         `;
         
         li.innerHTML = citationHtml;
         citations.appendChild(li);
       });
+      
+      console.log('Citations rendered successfully');
+    } else {
+      console.log('No citations in response');
     }
     
   } catch (error) {

@@ -73,7 +73,9 @@ def reembed_all_chunks(batch_size: int = 500, dry_run: bool = False):
         logger.error("   Example: export EMBEDDING_PROVIDER=openai")
         sys.exit(1)
     
-    db = SessionLocal()
+    # SessionLocal is a function that returns a sessionmaker
+    # Need to call it twice: once to get the factory, once to get a session
+    db = SessionLocal()()
     
     try:
         # Count total chunks

@@ -1,105 +1,193 @@
-/* Ask Mirror Talk Widget Styles */
+/* ========================================
+   Ask Mirror Talk Widget — Premium UX
+   ======================================== */
+
+/* Container */
 .ask-mirror-talk {
   max-width: 720px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 36px 28px;
   border: 1px solid #e6e2dc;
-  background: #faf8f4;
+  background: linear-gradient(180deg, #faf8f4 0%, #f5f2ed 100%);
   font-family: "Source Serif 4", Georgia, serif;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
 }
 
+/* Subtle top accent bar */
+.ask-mirror-talk::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2e2a24, #8b7355, #2e2a24);
+}
+
+/* Title */
 .ask-mirror-talk h2 {
   margin-top: 0;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: #2e2a24;
   font-size: 28px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .ask-mirror-talk h3 {
   margin-top: 24px;
   margin-bottom: 12px;
   color: #2e2a24;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
 }
 
-/* Form Input */
+/* Label */
+.ask-mirror-talk label {
+  display: block;
+  font-size: 15px;
+  color: #6b665d;
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
+/* ========================================
+   Form Input
+   ======================================== */
 #ask-mirror-talk-input {
   width: 100%;
   padding: 14px 16px;
   font-size: 16px;
-  line-height: 1.5;
-  margin: 12px 0;
-  border: 2px solid #cfc7be;
-  border-radius: 8px;
+  line-height: 1.6;
+  margin: 8px 0 12px;
+  border: 2px solid #d4cec6;
+  border-radius: 10px;
   font-family: inherit;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: #fff;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
   box-sizing: border-box;
+  resize: vertical;
 }
 
 #ask-mirror-talk-input:focus {
   outline: none;
   border-color: #2e2a24;
-  box-shadow: 0 0 0 3px rgba(46, 42, 36, 0.1);
+  box-shadow: 0 0 0 4px rgba(46, 42, 36, 0.08), 0 2px 8px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+#ask-mirror-talk-input::placeholder {
+  color: #b5afa5;
+  font-style: italic;
 }
 
 #ask-mirror-talk-input:disabled {
   background: #f0ede8;
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
 }
 
-/* Submit Button */
-.ask-mirror-talk button {
-  background: #2e2a24;
+/* ========================================
+   Submit Button
+   ======================================== */
+.ask-mirror-talk button[type="submit"] {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
   color: #fff;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 13px 32px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  transition: background 0.2s ease, transform 0.1s ease;
+  letter-spacing: 0.3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: inherit;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(46, 42, 36, 0.2);
 }
 
-.ask-mirror-talk button:hover:not(:disabled) {
-  background: #3d3731;
-  transform: translateY(-1px);
+.ask-mirror-talk button[type="submit"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.1));
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-.ask-mirror-talk button:active:not(:disabled) {
+.ask-mirror-talk button[type="submit"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3d3731, #524b42);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(46, 42, 36, 0.3);
+}
+
+.ask-mirror-talk button[type="submit"]:hover:not(:disabled)::after {
+  opacity: 1;
+}
+
+.ask-mirror-talk button[type="submit"]:active:not(:disabled) {
   transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(46, 42, 36, 0.2);
 }
 
-.ask-mirror-talk button:disabled {
+.ask-mirror-talk button[type="submit"]:disabled {
   background: #8b8378;
   cursor: not-allowed;
   opacity: 0.7;
+  box-shadow: none;
+  transform: none;
 }
 
-/* Response Section */
+/* ========================================
+   Response Section
+   ======================================== */
 .ask-mirror-talk-response {
   margin-top: 24px;
-  padding: 20px;
+  padding: 24px;
   background: #fff;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid #e6e2dc;
-  min-height: 60px;
-  line-height: 1.7;
+  min-height: 0;
+  line-height: 1.8;
   color: #2e2a24;
+  font-size: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: all 0.4s ease;
 }
 
-.ask-mirror-talk-response p {
+/* Hide response section when empty */
+.ask-mirror-talk-response:has(#ask-mirror-talk-output:empty) {
+  display: none;
+}
+
+/* Response content animations */
+#ask-mirror-talk-output {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+#ask-mirror-talk-output p {
   margin: 0 0 16px 0;
+  animation: fadeInUp 0.4s ease-out both;
 }
 
-.ask-mirror-talk-response p:last-child {
+#ask-mirror-talk-output p:last-child {
   margin-bottom: 0;
 }
+
+/* Stagger paragraph animations */
+#ask-mirror-talk-output p:nth-child(1) { animation-delay: 0.05s; }
+#ask-mirror-talk-output p:nth-child(2) { animation-delay: 0.1s; }
+#ask-mirror-talk-output p:nth-child(3) { animation-delay: 0.15s; }
+#ask-mirror-talk-output p:nth-child(4) { animation-delay: 0.2s; }
+#ask-mirror-talk-output p:nth-child(5) { animation-delay: 0.25s; }
+#ask-mirror-talk-output p:nth-child(6) { animation-delay: 0.3s; }
+#ask-mirror-talk-output p:nth-child(7) { animation-delay: 0.35s; }
+#ask-mirror-talk-output p:nth-child(8) { animation-delay: 0.4s; }
 
 /* Better spacing after headings in paragraphs */
 .ask-mirror-talk-response p strong:only-child {
@@ -107,43 +195,98 @@
   margin-bottom: 8px;
 }
 
+/* Error state */
 .ask-mirror-talk-response.error {
-  background: #fff3f3;
-  border-color: #ffcccc;
-  color: #c53030;
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+  animation: shake 0.4s ease-out;
 }
 
-/* Loading Spinner */
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #e6e2dc;
-  border-top-color: #2e2a24;
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* ========================================
+   Loading Animation — Elegant Pulse
+   ======================================== */
+.amt-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.amt-loading-dots {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.amt-loading-dots span {
+  width: 10px;
+  height: 10px;
+  background: #2e2a24;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 16px;
+  animation: bounce 1.4s ease-in-out infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.amt-loading-dots span:nth-child(2) {
+  animation-delay: 0.16s;
 }
 
-.ask-mirror-talk-response .loading-spinner + p {
-  text-align: center;
-  color: #6b665d;
+.amt-loading-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.amt-loading-text {
+  font-size: 15px;
+  color: #8b8378;
   font-style: italic;
+  text-align: center;
+  animation: pulse 2s ease-in-out infinite;
 }
 
-/* Citations Section */
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ========================================
+   Citations Section
+   ======================================== */
 .ask-mirror-talk-citations {
-  margin-top: 24px;
+  margin-top: 28px;
   display: none;
+  animation: fadeInUp 0.5s ease-out;
 }
 
 .ask-mirror-talk-citations h3 {
   margin-top: 0;
-  margin-bottom: 12px;
-  font-size: 18px;
+  margin-bottom: 14px;
+  color: #6b665d;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
 }
 
 #ask-mirror-talk-citations {
@@ -152,18 +295,29 @@
   margin: 0;
 }
 
+/* Citation Items */
 .citation-item {
   background: #fff;
   border: 1px solid #e6e2dc;
-  border-radius: 6px;
+  border-radius: 10px;
   margin-bottom: 8px;
-  padding: 12px 16px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  padding: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideInRight 0.4s ease-out both;
+  overflow: hidden;
 }
+
+/* Stagger citation animations */
+.citation-item:nth-child(1) { animation-delay: 0.05s; }
+.citation-item:nth-child(2) { animation-delay: 0.12s; }
+.citation-item:nth-child(3) { animation-delay: 0.19s; }
+.citation-item:nth-child(4) { animation-delay: 0.26s; }
+.citation-item:nth-child(5) { animation-delay: 0.33s; }
 
 .citation-item:hover {
   border-color: #2e2a24;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .citation-link {
@@ -174,40 +328,49 @@
   color: inherit;
   gap: 12px;
   cursor: pointer;
+  padding: 14px 18px;
+  transition: background 0.2s ease;
 }
 
 .citation-link:hover {
   text-decoration: none;
+  background: #faf8f4;
 }
 
 .citation-title {
   font-weight: 600;
   color: #2e2a24;
   flex: 1;
+  font-size: 15px;
+  line-height: 1.4;
+  transition: color 0.2s ease;
 }
 
 .citation-time {
-  font-size: 14px;
+  font-size: 13px;
   color: #6b665d;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   white-space: nowrap;
   background: #f5f2ed;
-  padding: 4px 10px;
-  border-radius: 4px;
-  transition: background 0.2s ease, color 0.2s ease;
+  padding: 5px 12px;
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
 }
 
 .citation-link:hover .citation-title {
   color: #1a1815;
-  text-decoration: underline;
 }
 
 .citation-link:hover .citation-time {
   background: #2e2a24;
   color: #fff;
+  transform: scale(1.05);
 }
 
-/* Response Content Formatting */
+/* ========================================
+   Response Content Formatting
+   ======================================== */
 .ask-mirror-talk-response strong {
   font-weight: 700;
   color: #1a1815;
@@ -215,6 +378,7 @@
 
 .ask-mirror-talk-response em {
   font-style: italic;
+  color: #4a453d;
 }
 
 .ask-mirror-talk-response ol,
@@ -241,13 +405,303 @@
   color: #1a1815;
 }
 
-/* Add spacing before lists that follow text */
 .ask-mirror-talk-response p + ol,
 .ask-mirror-talk-response p + ul {
   margin-top: 12px;
 }
 
-/* Responsive Design */
+/* ========================================
+   Feedback Section (from analytics addon)
+   ======================================== */
+.amt-feedback-section {
+  margin-top: 24px !important;
+  padding: 20px !important;
+  background: linear-gradient(135deg, #faf8f4, #f5f2ed) !important;
+  border-radius: 10px !important;
+  border: 1px solid #e6e2dc !important;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.amt-feedback-question {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  color: #2e2a24 !important;
+  margin-bottom: 14px !important;
+  text-align: center;
+}
+
+.amt-feedback-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.amt-feedback-btn {
+  flex: 1;
+  padding: 12px 20px !important;
+  border: 2px solid transparent !important;
+  border-radius: 8px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-feedback-positive {
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.amt-feedback-positive:hover {
+  background: #10b981 !important;
+  color: #fff !important;
+  border-color: #10b981 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.amt-feedback-negative {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border-color: #fecaca !important;
+}
+
+.amt-feedback-negative:hover {
+  background: #ef4444 !important;
+  color: #fff !important;
+  border-color: #ef4444 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.amt-feedback-thanks {
+  display: none;
+  padding: 14px !important;
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: white !important;
+  border-radius: 8px !important;
+  text-align: center !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@keyframes scaleIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ========================================
+   Inline Audio Player
+   ======================================== */
+
+/* Citation active state */
+.citation-item.citation-playing {
+  border-color: #2e2a24;
+  box-shadow: 0 4px 20px rgba(46, 42, 36, 0.12);
+}
+
+.citation-item.citation-playing .citation-link {
+  background: #faf8f4;
+}
+
+.citation-item.citation-playing .citation-time {
+  background: #2e2a24;
+  color: #fff;
+}
+
+/* Player container */
+.amt-inline-player {
+  padding: 16px 18px;
+  border-top: 1px solid #e6e2dc;
+  background: linear-gradient(180deg, #faf8f4 0%, #f5f2ed 100%);
+  animation: playerSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.amt-inline-player.amt-player-closing {
+  animation: playerSlideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes playerSlideIn {
+  from {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    max-height: 300px;
+    opacity: 1;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+}
+
+@keyframes playerSlideOut {
+  from {
+    max-height: 300px;
+    opacity: 1;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* Player header */
+.amt-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.amt-player-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #8b7355;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-player-close {
+  background: none;
+  border: 1px solid #d4cec6;
+  color: #6b665d;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.amt-player-close:hover {
+  background: #2e2a24;
+  border-color: #2e2a24;
+  color: #fff;
+  transform: scale(1.1);
+}
+
+/* Episode title in player */
+.amt-player-episode {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e2a24;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+/* Audio element */
+.amt-inline-player .amt-audio {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  outline: none;
+  margin-bottom: 10px;
+}
+
+/* Custom audio styling for webkit browsers */
+.amt-inline-player .amt-audio::-webkit-media-controls-panel {
+  background: #fff;
+  border-radius: 8px;
+}
+
+/* Player action buttons */
+.amt-player-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.amt-player-skip-back,
+.amt-player-skip-fwd {
+  background: #fff;
+  border: 1px solid #d4cec6;
+  color: #2e2a24;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-player-skip-back:hover,
+.amt-player-skip-fwd:hover {
+  background: #2e2a24;
+  color: #fff;
+  border-color: #2e2a24;
+  transform: translateY(-1px);
+}
+
+.amt-player-external {
+  margin-left: auto;
+  font-size: 12px;
+  color: #8b7355;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px solid #d4cec6;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-player-external:hover {
+  background: #f5f2ed;
+  color: #2e2a24;
+  border-color: #2e2a24;
+  text-decoration: none;
+}
+
+/* ========================================
+   Keyframe Animations
+   ======================================== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
 @media (max-width: 768px) {
   .ask-mirror-talk {
     padding: 24px 16px;
@@ -263,26 +717,60 @@
   .citation-link {
     flex-direction: column;
     align-items: flex-start;
-    gap: 6px;
+    gap: 8px;
   }
 
   .citation-time {
     align-self: flex-start;
   }
+
+  .amt-feedback-buttons {
+    flex-direction: column;
+  }
+
+  .amt-player-actions {
+    flex-wrap: wrap;
+  }
+
+  .amt-player-external {
+    margin-left: 0;
+    flex: 1;
+    text-align: center;
+  }
 }
 
-/* Accessibility */
-.ask-mirror-talk button:focus,
-#ask-mirror-talk-input:focus {
+/* ========================================
+   Accessibility
+   ======================================== */
+.ask-mirror-talk button:focus-visible,
+#ask-mirror-talk-input:focus-visible {
   outline: 2px solid #2e2a24;
   outline-offset: 2px;
 }
 
-/* Print Styles */
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
 @media print {
   .ask-mirror-talk button,
   #ask-mirror-talk-input,
-  .ask-mirror-talk form {
+  .ask-mirror-talk form,
+  .amt-feedback-section,
+  .amt-inline-player {
     display: none;
+  }
+
+  .ask-mirror-talk {
+    box-shadow: none;
+    border: none;
   }
 }

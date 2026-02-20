@@ -1,21 +1,6 @@
 <?php
 /**
- * Ask     <div class="ask-mirror-talk">
-        <h2>Ask Mirror Talk</h2>
-        <form id="ask-mirror-talk-form">
-            <label for="ask-mirror-talk-input">What's on your heart?</label>
-            <textarea id="ask-mirror-talk-input" rows="4" placeholder="Ask a question..."></textarea>
-            <button type="submit" id="ask-mirror-talk-submit">Ask</button>
-        </form>
-        <div class="ask-mirror-talk-response">
-            <h3>Response</h3>
-            <div id="ask-mirror-talk-output"></div>
-        </div>
-        <div class="ask-mirror-talk-citations">
-            <h3>Referenced Episodes</h3>
-            <ul id="ask-mirror-talk-citations"></ul>
-        </div>
-    </div>tcode + AJAX handler for Astra theme.
+ * Ask Mirror Talk Shortcode + AJAX handler for Astra theme.
  *
  * Usage: [ask_mirror_talk]
  * Requires WPGetAPI to be configured with:
@@ -35,11 +20,11 @@ function ask_mirror_talk_shortcode() {
         <form id="ask-mirror-talk-form">
             <label for="ask-mirror-talk-input">What’s on your heart?</label>
             <textarea id="ask-mirror-talk-input" rows="4" placeholder="Ask a question..."></textarea>
-            <button type="submit">Ask</button>
+            <button type="submit" id="ask-mirror-talk-submit">Ask</button>
         </form>
         <div class="ask-mirror-talk-response">
             <h3>Response</h3>
-            <p id="ask-mirror-talk-output"></p>
+            <div id="ask-mirror-talk-output"></div>
         </div>
         <div class="ask-mirror-talk-citations">
             <h3>Referenced Episodes</h3>
@@ -52,12 +37,8 @@ function ask_mirror_talk_shortcode() {
 add_shortcode('ask_mirror_talk', 'ask_mirror_talk_shortcode');
 
 function ask_mirror_talk_enqueue_assets() {
+    // Always enqueue on singular pages to handle page builders and dynamic content
     if (!is_singular()) {
-        return;
-    }
-
-    global $post;
-    if (!$post || !has_shortcode($post->post_content, 'ask_mirror_talk')) {
         return;
     }
 
@@ -66,13 +47,22 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '1.0.0'
+        '2.6.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
-        array(),
-        '1.0.0',
+        array('jquery'),
+        '2.6.0',
+        true
+    );
+
+    // Analytics add-on: citation click tracking + feedback buttons
+    wp_enqueue_script(
+        'ask-mirror-talk-analytics',
+        $theme_uri . '/analytics-addon.js',
+        array('ask-mirror-talk'),
+        '2.6.0',
         true
     );
 
@@ -91,19 +81,51 @@ function ask_mirror_talk_ajax_handler() {
         wp_send_json_error(array('message' => 'Question cannot be empty.'), 400);
     }
 
-    // Call WPGetAPI endpoint
-    $response = wpgetapi_endpoint('mirror_talk_ask', 'mirror_talk_ask', array(
-        'debug' => false,
-        'body' => array(
+    // Direct API call to Railway (no WPGetAPI dependency)
+    $api_url = 'https://ask-mirror-talk-production.up.railway.app/ask';
+
+    $response = wp_remote_post($api_url, array(
+        'timeout' => 30,
+        'headers' => array(
+            'Content-Type' => 'application/json',
+        ),
+        'body' => json_encode(array(
             'question' => $question
-        )
+        ))
     ));
 
+    // Check for WordPress HTTP errors
     if (is_wp_error($response)) {
-        wp_send_json_error(array('message' => $response->get_error_message()), 500);
+        error_log('Ask Mirror Talk API Error: ' . $response->get_error_message());
+        wp_send_json_error(array(
+            'message' => 'Could not connect to API server. Please try again later.'
+        ), 500);
     }
 
-    wp_send_json_success($response);
+    // Get response details
+    $response_code = wp_remote_retrieve_response_code($response);
+    $response_body = wp_remote_retrieve_body($response);
+
+    // Check for HTTP errors
+    if ($response_code !== 200) {
+        error_log("Ask Mirror Talk API returned {$response_code}: {$response_body}");
+        wp_send_json_error(array(
+            'message' => 'API returned an error. Please try again later.'
+        ), $response_code);
+    }
+
+    // Parse JSON response
+    $data = json_decode($response_body, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log('Ask Mirror Talk JSON decode error: ' . json_last_error_msg());
+        wp_send_json_error(array(
+            'message' => 'Invalid response from API server.'
+        ), 500);
+    }
+
+    // Return successful response
+    wp_send_json_success($data);
 }
 add_action('wp_ajax_ask_mirror_talk', 'ask_mirror_talk_ajax_handler');
 add_action('wp_ajax_nopriv_ask_mirror_talk', 'ask_mirror_talk_ajax_handler');

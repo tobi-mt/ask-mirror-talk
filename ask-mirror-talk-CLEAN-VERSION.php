@@ -1,9 +1,11 @@
 <?php
 /**
- * Ask Mirror Talk shortcode + AJAX handler for Astra theme.
- * Updated version - Uses direct wp_remote_post() instead of WPGetAPI
+ * Ask Mirror Talk Shortcode + AJAX handler for Astra theme.
  *
  * Usage: [ask_mirror_talk]
+ * Requires WPGetAPI to be configured with:
+ *   api_id = mirror_talk_ask
+ *   endpoint_id = mirror_talk_ask
  */
 
 if (!defined('ABSPATH')) {
@@ -35,12 +37,8 @@ function ask_mirror_talk_shortcode() {
 add_shortcode('ask_mirror_talk', 'ask_mirror_talk_shortcode');
 
 function ask_mirror_talk_enqueue_assets() {
+    // Always enqueue on singular pages to handle page builders and dynamic content
     if (!is_singular()) {
-        return;
-    }
-
-    global $post;
-    if (!$post || !has_shortcode($post->post_content, 'ask_mirror_talk')) {
         return;
     }
 
@@ -49,13 +47,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '2.0.0'  // Updated for UX improvements, deduplication, better AI responses
+        '2.4.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
-        array(),
-        '2.0.0',  // Updated for UX improvements, deduplication, better AI responses
+        array('jquery'),
+        '2.4.0',
         true
     );
 
@@ -76,7 +74,7 @@ function ask_mirror_talk_ajax_handler() {
 
     // Direct API call to Railway (no WPGetAPI dependency)
     $api_url = 'https://ask-mirror-talk-production.up.railway.app/ask';
-    
+
     $response = wp_remote_post($api_url, array(
         'timeout' => 30,
         'headers' => array(
@@ -109,7 +107,7 @@ function ask_mirror_talk_ajax_handler() {
 
     // Parse JSON response
     $data = json_decode($response_body, true);
-    
+
     if (json_last_error() !== JSON_ERROR_NONE) {
         error_log('Ask Mirror Talk JSON decode error: ' . json_last_error_msg());
         wp_send_json_error(array(

@@ -47,10 +47,16 @@ def _make_quote(text: str, max_len: int = 160) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
-def compose_answer(question: str, chunks: list[dict]) -> dict:
+def compose_answer(question: str, chunks: list[dict], citation_override: list[dict] = None) -> dict:
     """
     Generate an intelligent answer using OpenAI GPT based on relevant chunks.
     Falls back to basic extraction if OpenAI is not available.
+    
+    Args:
+        question: The user's question
+        chunks: List of chunk dictionaries for answer generation
+        citation_override: Optional list of specific chunks to use for citations
+                          (if None, uses all chunks for citations)
     """
     from app.core.config import settings
     
@@ -62,6 +68,9 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
 
     # Sort by similarity if present
     ranked = sorted(chunks, key=lambda c: c.get("similarity", 0), reverse=True)
+    
+    # Use citation override if provided (for smart episode selection)
+    citation_chunks = citation_override if citation_override is not None else ranked
 
     # Try OpenAI-powered answer generation first if enabled
     logger.info(f"Answer generation provider: {settings.answer_generation_provider}")
@@ -81,8 +90,9 @@ def compose_answer(question: str, chunks: list[dict]) -> dict:
         answer_text = _generate_basic_answer(question, ranked[:4])
 
     # Build citations with proper timestamps for audio playback
+    # Use citation_chunks (which may be overridden for smart episode selection)
     citations = []
-    for chunk in ranked:
+    for chunk in citation_chunks:
         episode = chunk["episode"]
         # Ensure we have valid timestamps
         start_seconds = int(chunk["start_time"]) if chunk.get("start_time") else 0

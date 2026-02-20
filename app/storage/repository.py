@@ -57,16 +57,44 @@ def create_chunks(db: Session, episode_id: int, chunks: list[dict]):
 
 
 def log_qa(db: Session, question: str, answer: str, episode_ids: list[int], latency_ms: int, user_ip: str):
-    db.add(
-        models.QALog(
-            question=question,
-            answer=answer,
-            episode_ids=",".join(str(eid) for eid in episode_ids),
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-        )
+    log = models.QALog(
+        question=question,
+        answer=answer,
+        episode_ids=",".join(str(eid) for eid in episode_ids),
+        latency_ms=latency_ms,
+        user_ip=user_ip,
     )
+    db.add(log)
     db.commit()
+    db.refresh(log)
+    return log
+
+
+def log_citation_click(db: Session, qa_log_id: int, episode_id: int, user_ip: str, timestamp: float = None):
+    """Log when a user clicks on a cited episode"""
+    click = models.CitationClick(
+        qa_log_id=qa_log_id,
+        episode_id=episode_id,
+        user_ip=user_ip,
+        timestamp=timestamp,
+    )
+    db.add(click)
+    db.commit()
+    return click
+
+
+def log_user_feedback(db: Session, qa_log_id: int, feedback_type: str, user_ip: str, rating: int = None, comment: str = None):
+    """Log user feedback on an answer"""
+    feedback = models.UserFeedback(
+        qa_log_id=qa_log_id,
+        feedback_type=feedback_type,
+        rating=rating,
+        comment=comment,
+        user_ip=user_ip,
+    )
+    db.add(feedback)
+    db.commit()
+    return feedback
 
 
 def create_ingest_run(db: Session, status: str, message: str = "") -> models.IngestRun:

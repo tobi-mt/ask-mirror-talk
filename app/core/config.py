@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     top_k: int = 6
     min_similarity: float = 0.15
     diversity_lambda: float = 0.7  # MMR: 0.0=max diversity, 1.0=max relevance
+    max_cited_episodes: int = 5  # Maximum number of episodes to cite in response
 
     # Embeddings
     embedding_provider: str = "local"  # local | sentence_transformers

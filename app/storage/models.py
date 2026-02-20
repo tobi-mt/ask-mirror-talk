@@ -82,3 +82,28 @@ class QALog(Base):
     episode_ids: Mapped[str] = mapped_column(String(500))
     latency_ms: Mapped[int] = mapped_column(Integer)
     user_ip: Mapped[str] = mapped_column(String(100))
+
+
+class CitationClick(Base):
+    """Track when users click on episode citations"""
+    __tablename__ = "citation_clicks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    qa_log_id: Mapped[int] = mapped_column(ForeignKey("qa_logs.id"))
+    episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id"))
+    clicked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_ip: Mapped[str] = mapped_column(String(100))
+    timestamp: Mapped[float | None] = mapped_column(Float, nullable=True)  # Specific timestamp in episode if clicked
+
+
+class UserFeedback(Base):
+    """Track user feedback on answers (thumbs up/down, ratings, comments)"""
+    __tablename__ = "user_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    qa_log_id: Mapped[int] = mapped_column(ForeignKey("qa_logs.id"))
+    feedback_type: Mapped[str] = mapped_column(String(20))  # 'positive', 'negative', 'neutral'
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars (optional)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)  # Optional user comment
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_ip: Mapped[str] = mapped_column(String(100))

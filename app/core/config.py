@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     max_cited_episodes: int = 5  # Maximum number of episodes to cite in response
 
     # Embeddings
-    embedding_provider: str = "local"  # local | sentence_transformers
+    embedding_provider: str = "local"  # local | sentence_transformers | openai
     embedding_dim: int = 384
 
     # Transcription

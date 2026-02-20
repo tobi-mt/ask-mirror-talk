@@ -431,6 +431,8 @@ def get_episode_analytics(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error getting episode analytics: {e}")
         # If citation_clicks table doesn't exist yet, return simplified version
+        # Rollback the failed transaction first
+        db.rollback()
         try:
             results = db.execute(
                 text("""

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v2.5.0 loaded');
+  console.log('Ask Mirror Talk Widget v2.7.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -14,6 +14,35 @@
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
     return;
+  }
+
+  // ─── Nonce management ───────────────────────────────────────
+  // WordPress nonces expire after 12-24 hours. If the user leaves the
+  // page open (or the page is served from cache with a stale nonce),
+  // admin-ajax.php returns 403. We detect that, fetch a fresh nonce,
+  // and retry the request transparently.
+  let currentNonce = AskMirrorTalk.nonce;
+
+  async function refreshNonce() {
+    try {
+      const body = new URLSearchParams();
+      body.set('action', 'ask_mirror_talk_refresh_nonce');
+      const res = await fetch(AskMirrorTalk.ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
+      if (!res.ok) throw new Error('Nonce refresh failed');
+      const json = await res.json();
+      if (json.success && json.data && json.data.nonce) {
+        currentNonce = json.data.nonce;
+        console.log('✓ Nonce refreshed');
+        return true;
+      }
+    } catch (e) {
+      console.warn('Nonce refresh error:', e);
+    }
+    return false;
   }
 
   // Hide response and citations on initial load if empty
@@ -424,26 +453,7 @@
     setLoading(true);
 
     try {
-      const body = new URLSearchParams();
-      body.set("action", "ask_mirror_talk");
-      body.set("nonce", AskMirrorTalk.nonce);
-      body.set("question", question);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-      const response = await fetch(AskMirrorTalk.ajaxUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) throw new Error(`Server returned ${response.status}`);
-
-      const result = await response.json();
+      const result = await askWithRetry(question);
       
       if (!result.success) {
         throw new Error(result.data?.message || "The service couldn't process your question.");
@@ -468,6 +478,77 @@
       setLoading(false);
     }
   });
+
+  /**
+   * Send the question to the WordPress AJAX endpoint.
+   * If a 403 (expired nonce) is returned, refresh the nonce and retry once.
+   * If WordPress AJAX is completely unavailable, fall back to a direct API call.
+   */
+  async function askWithRetry(question, retried = false) {
+    const body = new URLSearchParams();
+    body.set("action", "ask_mirror_talk");
+    body.set("nonce", currentNonce);
+    body.set("question", question);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const response = await fetch(AskMirrorTalk.ajaxUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    // Handle expired nonce: refresh and retry once
+    if (response.status === 403 && !retried) {
+      console.warn('403 received — refreshing nonce and retrying…');
+      const refreshed = await refreshNonce();
+      if (refreshed) {
+        return askWithRetry(question, true);
+      }
+      // Nonce refresh also failed — fall through to direct API call
+    }
+
+    // If WordPress AJAX is still failing, try direct API call as fallback
+    if (!response.ok) {
+      console.warn(`WordPress AJAX failed (${response.status}), falling back to direct API…`);
+      return await askDirectAPI(question);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Fallback: call the Railway API directly (bypasses WordPress AJAX).
+   * This ensures the widget works even if WP nonces or admin-ajax.php
+   * are broken (aggressive caching, security plugins, etc.).
+   */
+  async function askDirectAPI(question) {
+    const apiUrl = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app') + '/ask';
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: question }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+
+    // Direct API returns the data directly (not wrapped in WP's {success, data})
+    const data = await response.json();
+    return { success: true, data: data };
+  }
 
   // Subtle input interaction: show placeholder hint
   input.addEventListener('focus', function() {

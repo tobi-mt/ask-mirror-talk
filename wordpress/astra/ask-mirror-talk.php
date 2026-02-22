@@ -47,13 +47,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '2.6.0'
+        '2.7.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '2.6.0',
+        '2.7.0',
         true
     );
 
@@ -62,19 +62,38 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '2.6.0',
+        '2.7.0',
         true
     );
 
     wp_localize_script('ask-mirror-talk', 'AskMirrorTalk', array(
         'ajaxUrl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('ask_mirror_talk_nonce')
+        'nonce' => wp_create_nonce('ask_mirror_talk_nonce'),
+        'apiUrl' => 'https://ask-mirror-talk-production.up.railway.app'
     ));
 }
 add_action('wp_enqueue_scripts', 'ask_mirror_talk_enqueue_assets');
 
+/**
+ * AJAX endpoint to refresh expired nonces without a full page reload.
+ * Called by the JS widget when it detects a 403 (stale nonce).
+ */
+function ask_mirror_talk_refresh_nonce() {
+    wp_send_json_success(array(
+        'nonce' => wp_create_nonce('ask_mirror_talk_nonce')
+    ));
+}
+add_action('wp_ajax_ask_mirror_talk_refresh_nonce', 'ask_mirror_talk_refresh_nonce');
+add_action('wp_ajax_nopriv_ask_mirror_talk_refresh_nonce', 'ask_mirror_talk_refresh_nonce');
+
 function ask_mirror_talk_ajax_handler() {
-    check_ajax_referer('ask_mirror_talk_nonce', 'nonce');
+    // Verify nonce — but return a clear error so the JS can auto-refresh
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'ask_mirror_talk_nonce')) {
+        wp_send_json_error(array(
+            'message' => 'Session expired. Retrying…',
+            'code'    => 'nonce_expired'
+        ), 403);
+    }
 
     $question = isset($_POST['question']) ? sanitize_textarea_field($_POST['question']) : '';
     if (!$question) {

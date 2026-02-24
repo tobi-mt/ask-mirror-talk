@@ -1,7 +1,9 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 import ipaddress
 import secrets
 import logging
@@ -13,10 +15,6 @@ import time
 from app.core.config import settings
 from app.core.db import get_db, get_session_local
 from app.core.logging import setup_logging
-# Lazy imports to speed up startup:
-# - app.qa.service (loads ML models)
-# - app.ingestion.pipeline (heavy dependencies)
-# - init_db (creates DB connection)
 
 # Setup logging BEFORE any other operations
 setup_logging()
@@ -26,10 +24,6 @@ logger = logging.getLogger(__name__)
 logger.info("="*60)
 logger.info("STARTING ASK MIRROR TALK API")
 logger.info("="*60)
-
-app = FastAPI(title=settings.app_name)
-
-logger.info("✓ FastAPI app created")
 
 # Track if DB is initialized
 _db_initialized = False
@@ -42,7 +36,6 @@ async def _init_db_background():
     await asyncio.sleep(2)  # Give app time to start and pass healthcheck
     
     try:
-        # Lazy import to avoid loading at startup
         from app.core.db import init_db
         init_db()
         _db_initialized = True
@@ -50,6 +43,25 @@ async def _init_db_background():
     except Exception as e:
         logger.error(f"✗ Background database initialization failed: {e}", exc_info=True)
         logger.warning("⚠️  Some endpoints may not work until database is accessible")
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Application lifespan: initialize DB on startup."""
+    import asyncio
+    logger.info("="*60)
+    logger.info("STARTUP EVENT TRIGGERED")
+    logger.info(f"Environment: {settings.environment}")
+    logger.info(f"App name: {settings.app_name}")
+    logger.info("="*60)
+    logger.info("✓ Application startup complete (DB init deferred)")
+    logger.info("Starting background DB initialization task...")
+    asyncio.create_task(_init_db_background())
+    yield
+    logger.info("Application shutting down")
+
+
+app = FastAPI(title=settings.app_name, lifespan=_lifespan)
 
 
 # Configure CORS - allows your WordPress site to call the API
@@ -109,24 +121,6 @@ def ask_options():
     return {"status": "ok"}
 
 
-@app.on_event("startup")
-async def on_startup():
-    """Initialize database on application startup."""
-    logger.info("="*60)
-    logger.info("STARTUP EVENT TRIGGERED")
-    logger.info(f"Environment: {settings.environment}")
-    logger.info(f"App name: {settings.app_name}")
-    logger.info("="*60)
-    
-    # Skip DB initialization during healthcheck to start faster
-    # DB will be initialized on first request if needed
-    logger.info("✓ Application startup complete (DB init deferred)")
-    
-    # Initialize DB in background to not block startup
-    import asyncio
-    logger.info("Starting background DB initialization task...")
-    asyncio.create_task(_init_db_background())
-
 
 @app.post("/ask")
 def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
@@ -140,6 +134,96 @@ def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
     
     response = answer_question(db, payload.question.strip(), user_ip=request.client.host)
     return response
+
+
+@app.post("/ask/stream")
+def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Stream an answer using Server-Sent Events (SSE).
+    
+    Events:
+      - {"type": "chunk", "text": "..."} — incremental answer text
+      - {"type": "citations", "citations": [...]} — episode citations
+      - {"type": "follow_up", "questions": [...]} — suggested follow-up questions
+      - {"type": "done", "qa_log_id": ..., "latency_ms": ...} — completion signal
+    """
+    _enforce_rate_limit(request.client.host)
+
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    from app.qa.service import answer_question_stream
+
+    return StreamingResponse(
+        answer_question_stream(db, payload.question.strip(), user_ip=request.client.host),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+@app.get("/api/suggested-questions")
+def get_suggested_questions(db: Session = Depends(get_db)):
+    """
+    Return suggested starter questions for the widget.
+    
+    Uses a mix of popular past questions and curated defaults.
+    """
+    try:
+        # Get popular real questions from the last 30 days (excluding junk)
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        
+        popular = db.execute(
+            text("""
+                SELECT question, COUNT(*) as cnt
+                FROM qa_logs
+                WHERE created_at >= :cutoff
+                  AND LENGTH(question) > 15
+                  AND question NOT LIKE '{{%'
+                  AND LOWER(question) NOT IN ('test', 'test me', 'hello', 'hi')
+                GROUP BY question
+                ORDER BY cnt DESC
+                LIMIT 6
+            """),
+            {"cutoff": cutoff}
+        ).fetchall()
+        
+        popular_questions = [row[0] for row in popular]
+    except Exception as e:
+        logger.warning("Could not fetch popular questions: %s", e)
+        popular_questions = []
+    
+    # Curated defaults (always available)
+    curated = [
+        "How do I deal with grief and loss?",
+        "What does Mirror Talk say about finding your purpose?",
+        "How can I overcome fear and self-doubt?",
+        "What's the key to building healthy relationships?",
+        "How do I break free from addiction?",
+        "What does alignment really mean?",
+    ]
+    
+    # Merge: popular first, then fill with curated (deduplicate)
+    seen = set()
+    result = []
+    for q in popular_questions + curated:
+        q_lower = q.strip().lower()
+        if q_lower not in seen and len(result) < 6:
+            seen.add(q_lower)
+            result.append(q.strip())
+    
+    return {"questions": result}
+
+
+@app.get("/api/cache/stats")
+def get_cache_stats():
+    """Return answer cache statistics."""
+    from app.qa.cache import get_answer_cache
+    return get_answer_cache().stats()
 
 
 def _run_ingestion_bg() -> None:
@@ -191,8 +275,8 @@ def track_citation_click(
         )
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error logging citation click: {e}")
-        raise HTTPException(status_code=500, detail="Failed to log click")
+        logger.error("Error logging citation click: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to log click") from e
 
 
 @app.post("/api/feedback")
@@ -223,8 +307,8 @@ def submit_feedback(
         )
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error logging user feedback: {e}")
-        raise HTTPException(status_code=500, detail="Failed to log feedback")
+        logger.error("Error logging user feedback: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to log feedback") from e
 
 
 @app.get("/status")
@@ -240,8 +324,7 @@ def status(db: Session = Depends(get_db)):
         }
     
     try:
-        from sqlalchemy import text, func
-        from app.storage.models import Episode, Chunk, IngestRun
+        from app.storage.models import IngestRun
         
         # Get counts
         episode_count = db.scalar(text("SELECT COUNT(*) FROM episodes"))
@@ -278,10 +361,10 @@ def get_analytics_summary(
     db: Session = Depends(get_db)
 ):
     """Get analytics summary for the last N days"""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     
     try:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         
         # Total questions
         total_questions = db.execute(
@@ -350,7 +433,7 @@ def get_analytics_summary(
             ).scalar()
             
             ctr = (total_clicks / total_citations * 100) if total_citations > 0 else 0
-        except:
+        except Exception:
             ctr = None  # Table might not exist yet
         
         return {
@@ -523,8 +606,8 @@ def admin_dashboard(
     _admin_auth(credentials, request)
 
     # Get analytics summary (7 days)
-    from datetime import datetime, timedelta
-    cutoff = datetime.utcnow() - timedelta(days=7)
+    from datetime import datetime, timedelta, timezone
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     
     # Summary stats
     total_questions = db.execute(

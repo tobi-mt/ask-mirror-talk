@@ -1,7 +1,7 @@
 import logging
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from app.core.db import SessionLocal
+from app.core.db import get_session_local
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.ingestion.pipeline import run_ingestion
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_job():
-    db = SessionLocal()
+    db = get_session_local()()
     try:
         result = run_ingestion(db)
         logger.info("Ingestion run complete: %s", result)

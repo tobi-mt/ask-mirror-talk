@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v2.7.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.0.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -10,17 +10,20 @@
   const citations = document.querySelector("#ask-mirror-talk-citations");
   const citationsContainer = document.querySelector(".ask-mirror-talk-citations");
   const responseContainer = document.querySelector(".ask-mirror-talk-response");
+  const suggestionsContainer = document.querySelector("#ask-mirror-talk-suggestions");
+  const suggestionsList = suggestionsContainer ? suggestionsContainer.querySelector(".amt-suggestions-list") : null;
+  const followupsContainer = document.querySelector("#ask-mirror-talk-followups");
+  const followupsList = followupsContainer ? followupsContainer.querySelector(".amt-followups-list") : null;
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
     return;
   }
 
+  // ─── API URL ────────────────────────────────────────────────
+  const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
+
   // ─── Nonce management ───────────────────────────────────────
-  // WordPress nonces expire after 12-24 hours. If the user leaves the
-  // page open (or the page is served from cache with a stale nonce),
-  // admin-ajax.php returns 403. We detect that, fetch a fresh nonce,
-  // and retry the request transparently.
   let currentNonce = AskMirrorTalk.nonce;
 
   async function refreshNonce() {
@@ -53,6 +56,69 @@
     citationsContainer.style.display = 'none';
   }
 
+  // ─── Suggested Questions ────────────────────────────────────
+  function loadSuggestedQuestions() {
+    if (!suggestionsContainer || !suggestionsList) return;
+
+    fetch(`${API_BASE}/api/suggested-questions`)
+      .then(res => res.json())
+      .then(data => {
+        const questions = data.questions || [];
+        if (questions.length === 0) {
+          suggestionsContainer.style.display = 'none';
+          return;
+        }
+        suggestionsList.innerHTML = '';
+        questions.forEach(q => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'amt-suggestion-btn';
+          btn.textContent = q;
+          btn.addEventListener('click', () => {
+            input.value = q;
+            input.focus();
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
+          });
+          suggestionsList.appendChild(btn);
+        });
+        suggestionsContainer.style.display = '';
+      })
+      .catch(err => {
+        console.warn('Could not load suggested questions:', err);
+        suggestionsContainer.style.display = 'none';
+      });
+  }
+
+  // Load on init
+  loadSuggestedQuestions();
+
+  // ─── Follow-up Questions ────────────────────────────────────
+  function showFollowUpQuestions(questions) {
+    if (!followupsContainer || !followupsList || !questions || questions.length === 0) {
+      if (followupsContainer) followupsContainer.style.display = 'none';
+      return;
+    }
+
+    followupsList.innerHTML = '';
+    questions.forEach(q => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'amt-followup-btn';
+      btn.textContent = q;
+      btn.addEventListener('click', () => {
+        input.value = q;
+        input.focus();
+        followupsContainer.style.display = 'none';
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      });
+      followupsList.appendChild(btn);
+    });
+    followupsContainer.style.display = '';
+    setTimeout(() => {
+      followupsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 300);
+  }
+
   // Rotating loading messages for engagement
   const loadingMessages = [
     'Searching through podcast episodes…',
@@ -63,7 +129,7 @@
   ];
 
   let loadingInterval = null;
-  let activePlayer = null; // Track the currently active inline audio player
+  let activePlayer = null;
 
   // Helper: Format timestamp for display (HH:MM:SS)
   function formatTimestamp(seconds) {
@@ -148,18 +214,20 @@
     return formattedLines.join('\n');
   }
 
-  // Show loading state with animated dots and rotating messages
+  // Show loading state
   function setLoading(isLoading) {
     if (isLoading) {
       submitBtn.disabled = true;
       submitBtn.textContent = 'Thinking…';
       input.disabled = true;
 
-      // Remove old feedback section
+      // Hide suggestions while loading
+      if (suggestionsContainer) suggestionsContainer.style.display = 'none';
+      if (followupsContainer) followupsContainer.style.display = 'none';
+
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
 
-      // Show response container
       responseContainer.style.display = '';
       responseContainer.querySelector('h3').textContent = 'Response';
 
@@ -172,7 +240,6 @@
         </div>
       `;
 
-      // Rotate loading messages
       let msgIndex = 0;
       loadingInterval = setInterval(() => {
         msgIndex = (msgIndex + 1) % loadingMessages.length;
@@ -204,6 +271,7 @@
     output.innerHTML = `<p><strong>⚠️ ${message}</strong></p>`;
     citations.innerHTML = "";
     citationsContainer.style.display = "none";
+    if (followupsContainer) followupsContainer.style.display = 'none';
   }
 
   // ========================================
@@ -330,28 +398,15 @@
     }
   }
 
-  // Show answer with smooth reveal
-  function showAnswer(answer, citationsList) {
-    output.classList.remove('error');
-    
-    let formattedAnswer = formatMarkdownToHtml(answer);
-    
-    const paragraphs = formattedAnswer.split('\n\n').filter(p => p.trim());
-    const htmlParagraphs = paragraphs.map(p => {
-      const trimmed = p.trim();
-      if (trimmed.startsWith('<ol>') || trimmed.startsWith('<ul>')) return trimmed;
-      return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
-    });
-    
-    // Set content (CSS handles staggered fadeInUp animations)
-    output.innerHTML = htmlParagraphs.join('');
+  // ========================================
+  // Show Citations (extracted for reuse)
+  // ========================================
 
-    // Close any active player from previous answer
+  function showCitations(citationsList) {
     if (activePlayer) {
       closeInlinePlayer(activePlayer);
     }
 
-    // Show citations if available
     if (citationsList && citationsList.length > 0) {
       citations.innerHTML = "";
       
@@ -360,7 +415,6 @@
         li.className = "citation-item";
         
         const episodeTitle = citation.episode_title || "Unknown Episode";
-        
         const startSeconds = citation.timestamp_start_seconds !== undefined 
           ? citation.timestamp_start_seconds 
           : parseTimestampToSeconds(citation.timestamp_start);
@@ -370,7 +424,6 @@
         
         const timestampStart = formatTimestamp(startSeconds);
         const timestampEnd = formatTimestamp(endSeconds);
-        
         const audioUrl = citation.audio_url || '';
         const podcastUrl = citation.episode_url || (audioUrl && startSeconds ? `${audioUrl}#t=${startSeconds}` : audioUrl);
         
@@ -414,7 +467,6 @@
           const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
             ? `${timestampStart} – ${timestampEnd}` 
             : timestampStart;
-          
           li.innerHTML = `
             <span class="citation-title">${episodeTitle}</span>
             <span class="citation-time">${timeDisplay}</span>
@@ -424,18 +476,120 @@
         citations.appendChild(li);
       });
 
-      // Reveal citations container with animation
       citationsContainer.style.display = "block";
     } else {
       citations.innerHTML = "";
       citationsContainer.style.display = "none";
     }
+  }
 
-    // Smooth scroll to the answer
+  // ========================================
+  // SSE Streaming Answer
+  // ========================================
+
+  /**
+   * Stream an answer via SSE (Server-Sent Events).
+   * Falls back to the non-streaming /ask endpoint on error.
+   */
+  async function askStreaming(question) {
+    const response = await fetch(`${API_BASE}/ask/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Stream request failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let answerText = '';
+    let buffer = '';
+
+    // Clear loading and prepare output for streaming text
+    output.innerHTML = '';
+    output.classList.remove('error');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === 'chunk') {
+            answerText += event.text;
+            // Render incrementally — format the accumulated text
+            const formatted = formatMarkdownToHtml(answerText);
+            const paragraphs = formatted.split('\n\n').filter(p => p.trim());
+            const htmlParagraphs = paragraphs.map(p => {
+              const trimmed = p.trim();
+              if (trimmed.startsWith('<ol>') || trimmed.startsWith('<ul>')) return trimmed;
+              return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
+            });
+            output.innerHTML = htmlParagraphs.join('');
+          }
+
+          if (event.type === 'citations') {
+            showCitations(event.citations);
+          }
+
+          if (event.type === 'follow_up') {
+            showFollowUpQuestions(event.questions);
+          }
+
+          if (event.type === 'done') {
+            // Expose qa_log_id for analytics addon
+            window._amtLastQALogId = event.qa_log_id;
+            console.log('✅ Stream complete', {
+              qa_log_id: event.qa_log_id,
+              latency_ms: event.latency_ms,
+              cached: event.cached || false
+            });
+          }
+        } catch (parseErr) {
+          console.warn('SSE parse error:', parseErr, jsonStr);
+        }
+      }
+    }
+
+    return answerText;
+  }
+
+  // Show answer (used for non-streaming fallback)
+  function showAnswer(answer, citationsList, followUpQuestions) {
+    output.classList.remove('error');
+    
+    let formattedAnswer = formatMarkdownToHtml(answer);
+    const paragraphs = formattedAnswer.split('\n\n').filter(p => p.trim());
+    const htmlParagraphs = paragraphs.map(p => {
+      const trimmed = p.trim();
+      if (trimmed.startsWith('<ol>') || trimmed.startsWith('<ul>')) return trimmed;
+      return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
+    });
+    output.innerHTML = htmlParagraphs.join('');
+
+    showCitations(citationsList);
+    showFollowUpQuestions(followUpQuestions);
+
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  // Main form submission handler
+  // ========================================
+  // Form Submission — try SSE, fallback to /ask
+  // ========================================
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
@@ -444,7 +598,6 @@
       showError("Please enter a question.");
       return;
     }
-
     if (question.length < 3) {
       showError("Please enter a more detailed question.");
       return;
@@ -453,37 +606,39 @@
     setLoading(true);
 
     try {
-      const result = await askWithRetry(question);
-      
-      if (!result.success) {
-        throw new Error(result.data?.message || "The service couldn't process your question.");
-      }
+      // Try SSE streaming first
+      await askStreaming(question);
+    } catch (streamError) {
+      console.warn('SSE streaming failed, falling back to /ask:', streamError);
 
-      const data = result.data;
-      if (!data.answer) throw new Error("No answer received from the service.");
-
-      showAnswer(data.answer, data.citations || []);
-      
-    } catch (error) {
-      console.error("Ask Mirror Talk Error:", error);
-      
-      if (error.name === 'AbortError') {
-        showError("The request took too long. Please try again.");
-      } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        showError("Unable to reach the service. Please check your connection and try again.");
-      } else {
-        showError(error.message || "Something went wrong. Please try again later.");
+      // Fallback: non-streaming via WordPress AJAX or direct API
+      try {
+        const result = await askWithRetry(question);
+        if (!result.success) {
+          throw new Error(result.data?.message || "The service couldn't process your question.");
+        }
+        const data = result.data;
+        if (!data.answer) throw new Error("No answer received from the service.");
+        showAnswer(data.answer, data.citations || [], data.follow_up_questions || []);
+      } catch (fallbackError) {
+        console.error("Ask Mirror Talk Error:", fallbackError);
+        if (fallbackError.name === 'AbortError') {
+          showError("The request took too long. Please try again.");
+        } else if (fallbackError.message.includes('Failed to fetch') || fallbackError.message.includes('NetworkError')) {
+          showError("Unable to reach the service. Please check your connection and try again.");
+        } else {
+          showError(fallbackError.message || "Something went wrong. Please try again later.");
+        }
       }
     } finally {
       setLoading(false);
     }
   });
 
-  /**
-   * Send the question to the WordPress AJAX endpoint.
-   * If a 403 (expired nonce) is returned, refresh the nonce and retry once.
-   * If WordPress AJAX is completely unavailable, fall back to a direct API call.
-   */
+  // ========================================
+  // Fallback: Non-streaming requests
+  // ========================================
+
   async function askWithRetry(question, retried = false) {
     const body = new URLSearchParams();
     body.set("action", "ask_mirror_talk");
@@ -502,17 +657,14 @@
 
     clearTimeout(timeoutId);
 
-    // Handle expired nonce: refresh and retry once
     if (response.status === 403 && !retried) {
       console.warn('403 received — refreshing nonce and retrying…');
       const refreshed = await refreshNonce();
       if (refreshed) {
         return askWithRetry(question, true);
       }
-      // Nonce refresh also failed — fall through to direct API call
     }
 
-    // If WordPress AJAX is still failing, try direct API call as fallback
     if (!response.ok) {
       console.warn(`WordPress AJAX failed (${response.status}), falling back to direct API…`);
       return await askDirectAPI(question);
@@ -521,13 +673,8 @@
     return await response.json();
   }
 
-  /**
-   * Fallback: call the Railway API directly (bypasses WordPress AJAX).
-   * This ensures the widget works even if WP nonces or admin-ajax.php
-   * are broken (aggressive caching, security plugins, etc.).
-   */
   async function askDirectAPI(question) {
-    const apiUrl = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app') + '/ask';
+    const apiUrl = API_BASE + '/ask';
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);
@@ -545,12 +692,14 @@
       throw new Error(`Server returned ${response.status}`);
     }
 
-    // Direct API returns the data directly (not wrapped in WP's {success, data})
     const data = await response.json();
     return { success: true, data: data };
   }
 
-  // Subtle input interaction: show placeholder hint
+  // ========================================
+  // Input interactions
+  // ========================================
+
   input.addEventListener('focus', function() {
     if (!this.value) {
       this.setAttribute('placeholder', 'e.g. How do I deal with grief? What does the Bible say about forgiveness?');
@@ -561,13 +710,14 @@
     this.setAttribute('placeholder', 'Ask a question...');
   });
 
-  // Clear output when user clears input
   input.addEventListener('input', function() {
     if (this.value.trim() === '') {
       output.innerHTML = '';
       citations.innerHTML = '';
       citationsContainer.style.display = 'none';
       responseContainer.style.display = 'none';
+      if (followupsContainer) followupsContainer.style.display = 'none';
+      if (suggestionsContainer) suggestionsContainer.style.display = '';
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
     }

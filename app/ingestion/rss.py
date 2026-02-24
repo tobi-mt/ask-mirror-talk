@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import feedparser
 
 
@@ -17,7 +17,7 @@ def normalize_entries(feed):
         if published:
             published_at = datetime(*published[:6])
         else:
-            published_at = datetime.utcnow()
+            published_at = datetime.now(timezone.utc)
 
         audio_url = None
         for link in entry.get("links", []):

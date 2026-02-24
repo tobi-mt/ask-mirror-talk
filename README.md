@@ -2,78 +2,73 @@
 
 A production-ready MVP for a content-grounded Q&A experience on Mirror Talk podcast episodes. The system ingests the podcast RSS feed, transcribes episodes, chunks and indexes content, and serves answers with episode/timestamp references.
 
-## 🚀 Quick Links
+## Features
 
-### Deployment
-- **[Railway Quickstart](RAILWAY_QUICKSTART.md)** - ⚡ Fastest way to deploy (5 minutes)
-- **[Railway Setup Guide](RAILWAY_SETUP_GUIDE.md)** - Complete deployment walkthrough
-- **[Ingestion Guide](INGESTION_COMPLETE_GUIDE.md)** - How to ingest all podcast episodes
-- **[Environment Variables](railway.env.example)** - All required configuration
-
-### Status & Reference
-- **[Deployment Success](DEPLOYMENT_SUCCESS.md)** - Latest deployment status
-- **[Final Setup Summary](FINAL_SETUP_SUMMARY.md)** - Quick checklist
-- **[Local Setup](LOCAL_SETUP.md)** - Run locally with Docker
-
-## What’s Included
 - RSS ingestion with auto-detection of new episodes
-- Long-form transcription (faster-whisper)
+- Transcription via OpenAI Whisper API or faster-whisper (local)
 - Chunking + tagging (topic, emotional tone, growth domain)
-- Vector search over chunks (pgvector)
-- Grounded Q&A API (no outside content)
-- WordPress integration snippet
+- Vector search over chunks (pgvector + MMR diversity)
+- OpenAI GPT-powered answer generation with basic fallback
+- Smart episode citations with audio timestamps
+- WordPress widget with inline audio player
+- Admin dashboard with analytics
+- Citation click tracking & user feedback
 
 ## Quick Start
 
-### 1) Start Postgres + pgvector
+### 1. Start Postgres + pgvector
 ```bash
 docker compose up -d
 ```
 
-### 2) Create the vector extension
+### 2. Create the vector extension
 ```bash
 psql "postgresql://mirror:mirror@localhost:5432/mirror_talk" -f scripts/init_db.sql
 ```
 
-### 3) Install dependencies
+### 3. Install dependencies
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-Optional (for transcription and embeddings):
-```bash
-pip install -e .[transcription,embeddings]
-```
-
-### 4) Configure `.env`
+### 4. Configure environment
 ```bash
 cp .env.example .env
+# Edit .env — set RSS_URL, OPENAI_API_KEY, DATABASE_URL, etc.
 ```
 
-Set your RSS feed URL and other settings.
-
-### 5) Run the API
+### 5. Run the API
 ```bash
 uvicorn app.api.main:app --reload
 ```
 
-### 6) Run the ingestion scheduler (separate terminal)
+### 6. Run the ingestion scheduler (separate terminal)
 ```bash
 python -m app.ingestion.scheduler
 ```
 
-## API
+## API Endpoints
 
-### `POST /ask`
-Request:
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/ask` | Ask a question — returns answer + citations |
+| `POST` | `/ingest` | Trigger a background ingestion run |
+| `GET` | `/health` | Health check |
+| `GET` | `/status` | System status (episodes, chunks, latest run) |
+| `GET` | `/admin` | Admin dashboard (HTTP Basic auth) |
+| `GET` | `/api/analytics/summary` | Analytics summary (last N days) |
+| `GET` | `/api/analytics/episodes` | Episode-level analytics |
+| `POST` | `/api/citation/click` | Track citation click |
+| `POST` | `/api/feedback` | Submit user feedback |
+
+### Example: `POST /ask`
 ```json
+// Request
 {"question": "How do I find peace when I'm anxious?"}
-```
 
-Response:
-```json
+// Response
 {
   "question": "How do I find peace when I'm anxious?",
   "answer": "...",
@@ -82,82 +77,82 @@ Response:
       "episode_id": 12,
       "episode_title": "Learning to Sit With Fear",
       "timestamp_start": "0:14:22",
-      "timestamp_end": "0:17:45"
+      "timestamp_end": "0:17:45",
+      "audio_url": "https://...",
+      "text": "..."
     }
   ],
-  "latency_ms": 182
+  "latency_ms": 182,
+  "qa_log_id": 42
 }
 ```
 
-### `POST /ingest`
-Manually triggers an ingestion run (useful for testing).
+## Project Structure
 
-### `GET /admin`
-Basic admin dashboard for recent ingestion runs and Q&A logs. Protected by HTTP Basic auth.
+```
+app/
+├── api/            # FastAPI application & endpoints
+│   └── main.py
+├── core/           # Config, database, logging
+│   ├── config.py
+│   ├── db.py
+│   └── logging.py
+├── indexing/       # Chunking, tagging, embeddings
+│   ├── chunking.py
+│   ├── embeddings.py
+│   └── tagging.py
+├── ingestion/      # RSS feed, audio download, transcription
+│   ├── audio.py
+│   ├── pipeline.py
+│   ├── pipeline_optimized.py
+│   ├── rss.py
+│   ├── scheduler.py
+│   ├── transcription.py
+│   └── transcription_openai.py
+├── qa/             # Question answering & citations
+│   ├── answer.py
+│   ├── retrieval.py
+│   ├── service.py
+│   └── smart_citations.py
+└── storage/        # SQLAlchemy models & repository
+    ├── models.py
+    └── repository.py
 
-## WordPress Integration
-Use the assets in `wordpress/` for the Ask Mirror Talk page.
+wordpress/astra/    # WordPress theme integration
+├── ask-mirror-talk.php
+├── ask-mirror-talk.js
+├── ask-mirror-talk.css
+└── INSTALL.md
 
-## Guardrails
-- Responses are composed only from retrieved Mirror Talk episode chunks.
-- No outside knowledge is used.
-- Questions that cannot be answered from the content return a respectful fallback.
-
-## Notes
-- The default embedding provider is a local deterministic fallback. For higher-quality retrieval, enable `sentence-transformers`.
-- This MVP is structured for easy upgrade to hosted LLMs and higher-grade tagging.
-
-## File Layout
-- `app/api/` FastAPI app
-- `app/ingestion/` RSS + transcription pipeline
-- `app/indexing/` chunking + tagging + embeddings
-- `app/qa/` retrieval + answer builder
-- `wordpress/` front-end assets
-
-## 🚀 Quick Start - Deploy to Railway + Neon
-
-**NEW**: Complete deployment setup for Railway and Neon is ready! ✅
-
-### What You Get
-- **Database**: Neon Serverless Postgres with pgvector
-- **Hosting**: Railway container platform
-- **Cost**: $0/month (free tiers)
-- **Setup Time**: ~30 minutes
-
-### 📖 Documentation
-
-| File | Purpose | Start Here |
-|------|---------|------------|
-| `RAILWAY_NEON_SETUP.md` | Complete deployment guide (5 parts) | ⭐ **NEW USERS** |
-| `DEPLOYMENT_CHECKLIST.md` | Interactive step-by-step checklist | Use alongside guide |
-| `README_QUICK_START.md` | Quick reference & commands | For quick lookup |
-| `SETUP_COMPLETE.md` | Overview & summary | Read first for context |
-
-### ⚡ Quick Deploy
-
-```bash
-# 1. Set up Neon database
-# Go to: https://neon.tech
-# Create project → Enable pgvector extension
-# Copy connection string
-
-# 2. Initialize database
-export DATABASE_URL="postgresql+psycopg://your-neon-connection-string"
-python scripts/setup_neon.py
-
-# 3. Deploy to Railway
-# Go to: https://railway.app
-# New Project → Deploy from GitHub
-# Add environment variables from .env.railway
-# Generate domain → Done!
+scripts/            # Utility & deployment scripts
+docs/archive/       # Historical notes & fix documentation
 ```
 
-### 📁 Files Created
+## Deployment
 
-**Configuration**: `railway.toml`, `.env.railway`, `railway-build.sh`  
-**Scripts**: `scripts/setup_neon.py`, `scripts/quick_deploy.sh`  
-**Docs**: Complete guides in root directory
+### Railway (recommended)
+See [`docs/archive/RAILWAY_QUICKSTART.md`](docs/archive/RAILWAY_QUICKSTART.md) for a step-by-step guide.
 
-See `RAILWAY_NEON_FILES.txt` for complete file listing.
+- **API service**: Uses `Dockerfile` (lightweight, no ML dependencies)
+- **Ingestion worker**: Uses `Dockerfile.worker` (includes ffmpeg, OpenAI SDK)
 
----
+### Docker Compose (local production)
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+## WordPress Integration
+
+Upload the files from `wordpress/astra/` to your Astra child theme directory. See [`wordpress/astra/INSTALL.md`](wordpress/astra/INSTALL.md) for details.
+
+## Environment Variables
+
+See [`.env.example`](.env.example) for all available configuration options.
+
+Key settings:
+- `DATABASE_URL` — PostgreSQL connection string
+- `RSS_URL` — Podcast RSS feed URL
+- `OPENAI_API_KEY` — For transcription & answer generation
+- `TRANSCRIPTION_PROVIDER` — `openai` or `faster_whisper`
+- `EMBEDDING_PROVIDER` — `openai`, `sentence_transformers`, or `local`
+- `ANSWER_GENERATION_PROVIDER` — `openai` or `basic`

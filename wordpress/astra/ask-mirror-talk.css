@@ -758,6 +758,66 @@
 }
 
 /* ========================================
+   Suggested Questions
+   ======================================== */
+.amt-suggestions {
+  margin-bottom: 16px;
+}
+
+.amt-suggestions-label,
+.amt-followups-label {
+  font-size: 14px;
+  color: #6b665d;
+  margin: 0 0 8px 0;
+  font-style: italic;
+}
+
+.amt-suggestions-list,
+.amt-followups-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-suggestion-btn,
+.amt-followup-btn {
+  background: #fff;
+  border: 1.5px solid #d4cec6;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+
+.amt-suggestion-btn:hover,
+.amt-followup-btn:hover {
+  background: #2e2a24;
+  color: #fff;
+  border-color: #2e2a24;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(46, 42, 36, 0.15);
+}
+
+.amt-suggestion-btn:active,
+.amt-followup-btn:active {
+  transform: translateY(0);
+}
+
+/* ========================================
+   Follow-up Questions
+   ======================================== */
+.amt-followups {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e6e2dc;
+  animation: fadeInUp 0.4s ease;
+}
+
+/* ========================================
    Print Styles
    ======================================== */
 @media print {
@@ -765,7 +825,9 @@
   #ask-mirror-talk-input,
   .ask-mirror-talk form,
   .amt-feedback-section,
-  .amt-inline-player {
+  .amt-inline-player,
+  .amt-suggestions,
+  .amt-followups {
     display: none;
   }
 

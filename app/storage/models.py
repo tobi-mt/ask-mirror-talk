@@ -1,9 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, Integer, DateTime, Text, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
 from app.core.db import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
 
 
 class Episode(Base):
@@ -27,7 +32,7 @@ class Transcript(Base):
     episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id"))
     provider: Mapped[str] = mapped_column(String(50))
     language: Mapped[str] = mapped_column(String(20), default="en")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     raw_text: Mapped[str] = mapped_column(Text)
 
     episode: Mapped[Episode] = relationship(back_populates="transcripts")
@@ -66,7 +71,7 @@ class IngestRun(Base):
     __tablename__ = "ingest_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(50))
     message: Mapped[str] = mapped_column(Text, default="")
@@ -76,7 +81,7 @@ class QALog(Base):
     __tablename__ = "qa_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     episode_ids: Mapped[str] = mapped_column(String(500))
@@ -91,7 +96,7 @@ class CitationClick(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     qa_log_id: Mapped[int] = mapped_column(ForeignKey("qa_logs.id"))
     episode_id: Mapped[int] = mapped_column(ForeignKey("episodes.id"))
-    clicked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    clicked_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     user_ip: Mapped[str] = mapped_column(String(100))
     timestamp: Mapped[float | None] = mapped_column(Float, nullable=True)  # Specific timestamp in episode if clicked
 
@@ -105,5 +110,5 @@ class UserFeedback(Base):
     feedback_type: Mapped[str] = mapped_column(String(20))  # 'positive', 'negative', 'neutral'
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars (optional)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)  # Optional user comment
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     user_ip: Mapped[str] = mapped_column(String(100))

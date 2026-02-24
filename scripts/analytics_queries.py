@@ -15,7 +15,7 @@ Usage:
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add project root to path
@@ -42,22 +42,29 @@ def run_query(db, query, params=None, description=""):
         # Print column headers
         if result.keys():
             headers = list(result.keys())
-            print(" | ".join(str(h).ljust(20) for h in headers))
-            print("-" * (len(headers) * 23))
+            # Calculate column widths based on content
+            col_widths = [len(str(h)) for h in headers]
+            for row in rows:
+                for i, val in enumerate(row):
+                    col_widths[i] = max(col_widths[i], len(str(val)))
+            
+            print(" | ".join(str(h).ljust(col_widths[i]) for i, h in enumerate(headers)))
+            print("-+-".join("-" * w for w in col_widths))
         
         # Print rows
         for row in rows:
-            print(" | ".join(str(val)[:20].ljust(20) for val in row))
+            print(" | ".join(str(val).ljust(col_widths[i]) for i, val in enumerate(row)))
         
         print(f"\n{len(rows)} rows returned.\n")
         
     except Exception as e:
         print(f"❌ Error: {e}\n")
+        db.rollback()
 
 
 def analyze_common_questions(db, days=7):
     """Find most frequently asked questions"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -81,7 +88,7 @@ def analyze_common_questions(db, days=7):
 
 def analyze_cited_episodes(db, days=7):
     """Find most frequently cited episodes"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -107,7 +114,7 @@ def analyze_cited_episodes(db, days=7):
 
 def analyze_usage_trends(db, days=30):
     """Analyze usage trends over time"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -131,7 +138,7 @@ def analyze_usage_trends(db, days=30):
 
 def analyze_user_behavior(db, days=7):
     """Analyze user behavior patterns"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -157,7 +164,7 @@ def analyze_user_behavior(db, days=7):
 
 def analyze_episode_diversity(db, days=7):
     """Analyze episode diversity in citations"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         WITH question_episode_counts AS (
@@ -185,7 +192,7 @@ def analyze_episode_diversity(db, days=7):
 
 def analyze_latency_breakdown(db, days=7):
     """Analyze response time distribution"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -200,15 +207,16 @@ def analyze_latency_breakdown(db, days=7):
             ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage
         FROM qa_logs
         WHERE created_at >= :cutoff
-        GROUP BY latency_bucket
-        ORDER BY 
-            CASE latency_bucket
-                WHEN '< 1s' THEN 1
-                WHEN '1-2s' THEN 2
-                WHEN '2-3s' THEN 3
-                WHEN '3-5s' THEN 4
-                ELSE 5
+        GROUP BY 
+            CASE 
+                WHEN latency_ms < 1000 THEN '< 1s'
+                WHEN latency_ms < 2000 THEN '1-2s'
+                WHEN latency_ms < 3000 THEN '2-3s'
+                WHEN latency_ms < 5000 THEN '3-5s'
+                ELSE '> 5s'
             END
+        ORDER BY 
+            MIN(latency_ms)
     """
     
     run_query(
@@ -219,7 +227,7 @@ def analyze_latency_breakdown(db, days=7):
 
 def analyze_hourly_patterns(db, days=7):
     """Analyze usage patterns by hour of day"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = """
         SELECT 
@@ -241,11 +249,11 @@ def analyze_hourly_patterns(db, days=7):
 
 def generate_summary_report(db, days=7):
     """Generate a comprehensive summary report"""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     print("\n" + "="*80)
     print(f"📊 ANALYTICS SUMMARY REPORT - Last {days} Days")
-    print(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print("="*80)
     
     # Overall metrics

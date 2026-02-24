@@ -122,7 +122,86 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
             }
         )
 
-    return {"answer": answer_text, "citations": citations}
+    # Generate follow-up questions
+    follow_up_questions = _generate_follow_up_questions(question, answer_text, citation_chunks)
+
+    return {"answer": answer_text, "citations": citations, "follow_up_questions": follow_up_questions}
+
+
+def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]) -> list[str]:
+    """
+    Generate 2-3 contextual follow-up questions based on the answer and cited episodes.
+    Uses OpenAI if available, otherwise returns topic-based suggestions.
+    """
+    from app.core.config import settings
+
+    if settings.answer_generation_provider == "openai":
+        try:
+            api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+            if not api_key:
+                raise ValueError("No API key")
+
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+
+            # Build brief context from episode titles
+            episode_titles = list(dict.fromkeys(
+                c["episode"]["title"] for c in chunks if c.get("episode")
+            ))[:5]
+            episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
+
+            response = client.chat.completions.create(
+                model=settings.answer_generation_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You generate exactly 3 short, natural follow-up questions a user might ask "
+                            "after receiving an answer from the Mirror Talk podcast Q&A. "
+                            "Questions should be curious, personal-growth oriented, and feel conversational. "
+                            "Return ONLY a JSON array of 3 strings, nothing else."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Original question: {question}\n\n"
+                            f"Answer summary (first 200 chars): {answer[:200]}\n\n"
+                            f"Episodes referenced: {episodes_str}\n\n"
+                            "Generate 3 follow-up questions:"
+                        ),
+                    },
+                ],
+                temperature=0.9,
+                max_tokens=200,
+            )
+
+            import json
+            raw = response.choices[0].message.content.strip()
+            # Parse JSON array
+            questions = json.loads(raw)
+            if isinstance(questions, list) and all(isinstance(q, str) for q in questions):
+                return questions[:3]
+        except Exception as e:
+            logger.warning("Follow-up generation failed: %s", e)
+
+    # Fallback: topic-based suggestions from chunk metadata
+    fallback = []
+    seen = set()
+    for chunk in chunks[:5]:
+        episode = chunk.get("episode", {})
+        title = episode.get("title", "")
+        if title and title not in seen:
+            seen.add(title)
+            fallback.append(f"Tell me more about \"{title[:60]}\"")
+        if len(fallback) >= 3:
+            break
+
+    return fallback or [
+        "How can I apply this in my daily life?",
+        "What other episodes cover this topic?",
+        "Can you go deeper on this?",
+    ]
 
 
 def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
@@ -199,6 +278,82 @@ Please share a thoughtful, conversational response that helps this person unders
     logger.info(f"Generated intelligent answer using {settings.answer_generation_model} (length: {len(answer)} chars)")
     
     return answer
+
+
+def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
+    """
+    Stream an intelligent answer using OpenAI GPT with server-sent events.
+    Yields chunks of text as they arrive from the API.
+    """
+    from openai import OpenAI
+    from app.core.config import settings
+
+    api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not set")
+
+    client = OpenAI(api_key=api_key)
+
+    # Build context from chunks
+    context_parts = []
+    for idx, chunk in enumerate(chunks, 1):
+        episode_title = chunk["episode"]["title"]
+        text = chunk["text"].strip()
+        context_parts.append(f"[Source {idx} - {episode_title}]\n{text}")
+
+    context = "\n\n".join(context_parts)
+
+    system_prompt = """You are a warm, empathetic, and deeply insightful AI companion helping people explore the Mirror Talk podcast's wisdom on personal growth, relationships, and emotional intelligence.
+
+**Your Essence:**
+- Conversational and approachable, like a thoughtful friend sharing insights over coffee
+- Deeply curious about the human experience - psychology, relationships, self-discovery
+- Empathetic and non-judgmental, honoring the complexity of being human
+- Natural and flowing in your language (not robotic or overly formal)
+- Uses vivid analogies and relatable examples when helpful
+- Acknowledges nuance - life rarely has simple black-and-white answers
+
+**When Answering:**
+1. **Start human**: Begin with a warm, direct response that shows you understand what they're asking
+2. **Weave in wisdom**: Integrate relevant podcast insights naturally into your narrative (not as mechanical citations)
+3. **Connect dots**: Link ideas across episodes when you notice patterns or complementary perspectives
+4. **Honor emotion**: If the question touches something personal, acknowledge the emotional dimension
+5. **End with depth**: Close with a reflection or insight that adds meaning beyond the facts
+6. **Be yourself**: Use "I" and "you" naturally - this is a conversation, not a lecture
+
+**Avoid:**
+- Listing facts robotically or starting every response with "Based on the podcast..."
+- Excessive bullet points (use only when truly clarifying complex ideas)
+- Repetitive phrasing or academic tone
+- Being overly cautious or hedging unnecessarily
+- Treating this like information retrieval - you're helping someone discover something meaningful
+
+**Remember:** You're helping someone understand themselves and their relationships better. Bring intelligence, but also warmth and soul. Make them feel heard, not just informed."""
+
+    user_prompt = f"""Question: {question}
+
+Relevant Podcast Wisdom:
+{context}
+
+Please share a thoughtful, conversational response that helps this person understand the topic better. Weave in relevant insights naturally - feel free to connect ideas across different episodes if you notice patterns. Make it feel like a conversation, not a report."""
+
+    stream = client.chat.completions.create(
+        model=settings.answer_generation_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.85,
+        max_tokens=900,
+        presence_penalty=0.4,
+        frequency_penalty=0.3,
+        stream=True,
+    )
+
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            yield delta.content
 
 
 def _generate_basic_answer(question: str, chunks: list[dict]) -> str:

@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 
 
 # Singleton for caching the Whisper model

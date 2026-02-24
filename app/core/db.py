@@ -54,25 +54,17 @@ def get_session_local():
     return _SessionLocal
 
 
-# Module-level references for backwards compatibility
-# Note: These are function references, not calls - engine/SessionLocal are created on first use
-engine = get_engine
-SessionLocal = get_session_local
-
-
 def get_db():
-    db = SessionLocal()()
+    """FastAPI dependency that yields a database session."""
+    session = get_session_local()()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()
 
 
 def init_db():
     """Initialize database with pgvector extension and create tables."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
         # Get the actual engine instance
         db_engine = get_engine()
@@ -91,3 +83,10 @@ def init_db():
     except Exception as e:
         logger.error(f"✗ Database initialization failed: {e}")
         raise
+
+
+# Backward-compatible aliases used by scripts/
+# Scripts use `SessionLocal()()` (call the function, then call the sessionmaker),
+# so aliasing directly to the factory functions is the correct approach.
+SessionLocal = get_session_local
+engine = get_engine

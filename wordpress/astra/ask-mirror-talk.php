@@ -17,6 +17,10 @@ function ask_mirror_talk_shortcode() {
     ?>
     <div class="ask-mirror-talk">
         <h2>Ask Mirror Talk</h2>
+        <div id="ask-mirror-talk-suggestions" class="amt-suggestions">
+            <p class="amt-suggestions-label">Try asking about:</p>
+            <div class="amt-suggestions-list"></div>
+        </div>
         <form id="ask-mirror-talk-form">
             <label for="ask-mirror-talk-input">What’s on your heart?</label>
             <textarea id="ask-mirror-talk-input" rows="4" placeholder="Ask a question..."></textarea>
@@ -29,6 +33,10 @@ function ask_mirror_talk_shortcode() {
         <div class="ask-mirror-talk-citations">
             <h3>Referenced Episodes</h3>
             <ul id="ask-mirror-talk-citations"></ul>
+        </div>
+        <div id="ask-mirror-talk-followups" class="amt-followups" style="display:none;">
+            <p class="amt-followups-label">You might also want to ask:</p>
+            <div class="amt-followups-list"></div>
         </div>
     </div>
     <?php
@@ -47,13 +55,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '2.7.0'
+        '3.0.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '2.7.0',
+        '3.0.0',
         true
     );
 
@@ -62,7 +70,7 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '2.7.0',
+        '3.0.0',
         true
     );
 

@@ -23,7 +23,7 @@ def refresh_db_connection(db: Session) -> Session:
     """Create a fresh database session to prevent idle timeout errors."""
     try:
         db.close()
-    except:
+    except Exception:
         pass
     
     SessionMaker = get_session_local()
@@ -232,7 +232,7 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 # Try to rollback and refresh connection
                 try:
                     db.rollback()
-                except:
+                except Exception:
                     pass
                 
                 try:
@@ -263,7 +263,7 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
         # Refresh connection before trying to update the run status
         try:
             db.rollback()
-        except:
+        except Exception:
             pass
         try:
             db = refresh_db_connection(db)

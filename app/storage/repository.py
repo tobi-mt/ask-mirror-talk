@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -111,5 +113,5 @@ def finish_ingest_run(db: Session, run_id: int, status: str, message: str = ""):
         return
     run.status = status
     run.message = message
-    run.finished_at = __import__("datetime").datetime.utcnow()
+    run.finished_at = datetime.now(timezone.utc)
     db.commit()

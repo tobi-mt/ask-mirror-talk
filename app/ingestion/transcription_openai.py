@@ -20,7 +20,6 @@ OPENAI_MAX_SIZE_MB = 25
 OPENAI_MAX_SIZE = OPENAI_MAX_SIZE_MB * 1024 * 1024
 
 # Enable compression for local ingestion (safer memory usage with subprocess)
-# Enable compression for local ingestion (safer memory usage with subprocess)
 ENABLE_COMPRESSION = os.getenv('ENABLE_AUDIO_COMPRESSION', 'true').lower() == 'true'
 
 

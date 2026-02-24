@@ -28,7 +28,7 @@ function ask_mirror_talk_shortcode() {
         </div>
         <form id="ask-mirror-talk-form">
             <label for="ask-mirror-talk-input">What’s on your heart?</label>
-            <textarea id="ask-mirror-talk-input" rows="4" placeholder="Ask a question..."></textarea>
+            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask a question..." autocomplete="off" autocapitalize="sentences"></textarea>
             <button type="submit" id="ask-mirror-talk-submit">Ask</button>
         </form>
         <div class="ask-mirror-talk-response">

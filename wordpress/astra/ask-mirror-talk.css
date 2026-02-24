@@ -14,6 +14,8 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
   position: relative;
   overflow: hidden;
+  -webkit-text-size-adjust: 100%;     /* prevent iOS text inflation */
+  text-size-adjust: 100%;
 }
 
 /* Subtle top accent bar */
@@ -755,7 +757,7 @@
 }
 
 /* ========================================
-   Responsive Design
+   Responsive Design — Tablet
    ======================================== */
 @media (max-width: 768px) {
   .ask-mirror-talk {
@@ -804,6 +806,412 @@
     margin-left: 0;
     flex: 1;
     text-align: center;
+  }
+
+  .amt-qotd-text {
+    font-size: 16px;
+  }
+
+  .amt-qotd-inner {
+    padding: 16px 18px;
+  }
+}
+
+/* ========================================
+   Responsive Design — Mobile (≤ 480px)
+   ======================================== */
+@media (max-width: 480px) {
+
+  /* ── Container ──────────────────────── */
+  .ask-mirror-talk {
+    padding: 16px 12px;
+    margin: 0 -12px;            /* bleed to screen edges inside WP padding */
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+  }
+
+  .ask-mirror-talk::before {
+    height: 2px;
+  }
+
+  /* ── Typography ─────────────────────── */
+  .ask-mirror-talk h2 {
+    font-size: 22px;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+
+  .ask-mirror-talk h3 {
+    font-size: 16px;
+    margin-top: 18px;
+    margin-bottom: 8px;
+  }
+
+  .ask-mirror-talk label {
+    font-size: 14px;
+    text-align: center;
+  }
+
+  /* ── Form Input ─────────────────────── */
+  #ask-mirror-talk-input {
+    font-size: 16px;            /* prevents iOS zoom on focus */
+    padding: 12px 14px;
+    margin: 6px 0 10px;
+    border-radius: 10px;
+    min-height: 72px;           /* compact on mobile */
+  }
+
+  /* ── Submit Button — full-width tap target ── */
+  .ask-mirror-talk button[type="submit"] {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 16px;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ask-mirror-talk button[type="submit"]:hover:not(:disabled) {
+    transform: none;            /* no hover lift on touch */
+  }
+
+  .ask-mirror-talk button[type="submit"]:active:not(:disabled) {
+    transform: scale(0.97);
+    box-shadow: 0 1px 3px rgba(46, 42, 36, 0.15);
+  }
+
+  /* ── Question of the Day ────────────── */
+  .amt-qotd-inner {
+    padding: 14px 14px 16px;
+    border-radius: 12px;
+  }
+
+  .amt-qotd-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .amt-qotd-badge {
+    font-size: 11px;
+  }
+
+  .amt-qotd-theme {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  .amt-qotd-text {
+    font-size: 16px;
+    line-height: 1.45;
+    margin-bottom: 12px;
+  }
+
+  .amt-qotd-ask {
+    width: 100%;
+    text-align: center;
+    padding: 12px 20px;
+    font-size: 15px;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-qotd-ask:hover {
+    transform: none;
+  }
+
+  .amt-qotd-ask:active {
+    transform: scale(0.97);
+  }
+
+  /* ── Browse by Topic ────────────────── */
+  .amt-topics {
+    margin-bottom: 14px;
+  }
+
+  .amt-topics-label {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  .amt-topics-list {
+    gap: 6px;
+    /* Horizontally scrollable on narrow screens */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    padding-bottom: 4px;
+    margin: 0 -12px;           /* bleed to screen edges */
+    padding-left: 12px;
+    padding-right: 12px;
+    scrollbar-width: none;     /* Firefox */
+  }
+
+  .amt-topics-list::-webkit-scrollbar {
+    display: none;             /* Chrome, Safari */
+  }
+
+  .amt-topic-btn {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: 20px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-topic-btn:hover {
+    transform: none;
+  }
+
+  .amt-topic-btn:active {
+    transform: scale(0.95);
+    box-shadow: none;
+  }
+
+  .amt-topic-icon {
+    font-size: 14px;
+  }
+
+  /* ── Suggested Questions ────────────── */
+  .amt-suggestions {
+    margin-bottom: 12px;
+  }
+
+  .amt-suggestions-label,
+  .amt-followups-label {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  .amt-suggestions-list,
+  .amt-followups-list {
+    gap: 6px;
+  }
+
+  .amt-suggestion-btn,
+  .amt-followup-btn {
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 18px;
+    -webkit-tap-highlight-color: transparent;
+    /* full-width on very narrow screens for easy tapping */
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    text-align: center;
+  }
+
+  .amt-suggestion-btn:hover,
+  .amt-followup-btn:hover {
+    transform: none;
+  }
+
+  .amt-suggestion-btn:active,
+  .amt-followup-btn:active {
+    transform: scale(0.96);
+  }
+
+  /* ── Response Section ───────────────── */
+  .ask-mirror-talk-response {
+    margin-top: 16px;
+    padding: 16px 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  #ask-mirror-talk-output p {
+    margin: 0 0 12px 0;
+  }
+
+  .ask-mirror-talk-response ol,
+  .ask-mirror-talk-response ul {
+    padding-left: 20px;
+    margin: 12px 0;
+  }
+
+  .ask-mirror-talk-response li {
+    margin: 6px 0;
+    line-height: 1.65;
+  }
+
+  /* ── Loading ────────────────────────── */
+  .amt-loading {
+    padding: 28px 12px;
+  }
+
+  .amt-loading-text {
+    font-size: 14px;
+  }
+
+  /* ── Citations ──────────────────────── */
+  .ask-mirror-talk-citations {
+    margin-top: 18px;
+  }
+
+  .ask-mirror-talk-citations h3 {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .citation-item {
+    margin-bottom: 6px;
+    border-radius: 10px;
+  }
+
+  /* Remove hover lift on touch */
+  .citation-item:hover {
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .citation-link {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 14px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .citation-title {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .citation-quote {
+    font-size: 12.5px;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    padding: 3px 0 3px 8px;
+  }
+
+  .citation-time {
+    font-size: 12px;
+    padding: 4px 10px;
+    align-self: flex-start;
+  }
+
+  .citation-link:hover .citation-time {
+    transform: none;            /* no hover scale on touch */
+  }
+
+  /* Explore button — full-width CTA on mobile */
+  .citation-explore {
+    text-align: center;
+    padding: 10px 14px;
+    font-size: 13px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .citation-explore:hover {
+    background: transparent;
+  }
+
+  .citation-explore:active {
+    background: #faf8f4;
+  }
+
+  /* ── Inline Audio Player ────────────── */
+  .amt-inline-player {
+    padding: 12px 14px;
+  }
+
+  .amt-player-episode {
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  .amt-inline-player .amt-audio {
+    height: 36px;
+    margin-bottom: 8px;
+  }
+
+  .amt-player-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .amt-player-skip-back,
+  .amt-player-skip-fwd {
+    flex: 1;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-player-skip-back:hover,
+  .amt-player-skip-fwd:hover {
+    transform: none;
+  }
+
+  .amt-player-external {
+    margin-left: 0;
+    flex: 1 1 100%;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 12px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-player-external:hover {
+    transform: none;
+  }
+
+  /* ── Feedback Section ───────────────── */
+  .amt-feedback-section {
+    margin-top: 16px !important;
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .amt-feedback-question {
+    font-size: 14px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .amt-feedback-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .amt-feedback-btn {
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-feedback-positive:hover,
+  .amt-feedback-negative:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .amt-feedback-positive:active {
+    background: #10b981 !important;
+    color: #fff !important;
+    transform: scale(0.97);
+  }
+
+  .amt-feedback-negative:active {
+    background: #ef4444 !important;
+    color: #fff !important;
+    transform: scale(0.97);
+  }
+
+  .amt-feedback-thanks {
+    font-size: 14px !important;
+    padding: 12px !important;
+  }
+
+  /* ── Follow-ups ─────────────────────── */
+  .amt-followups {
+    margin-top: 14px;
+    padding-top: 12px;
   }
 }
 
@@ -915,14 +1323,7 @@
   transform: translateY(0);
 }
 
-@media (max-width: 768px) {
-  .amt-qotd-text {
-    font-size: 16px;
-  }
-  .amt-qotd-inner {
-    padding: 16px 18px;
-  }
-}
+/* QOTD tablet adjustments handled in responsive section above */
 
 /* ========================================
    Browse by Topic

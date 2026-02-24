@@ -323,7 +323,7 @@
 .citation-link {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   text-decoration: none;
   color: inherit;
   gap: 12px;
@@ -337,13 +337,44 @@
   background: #faf8f4;
 }
 
+/* Citation info column (title + quote) */
+.citation-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .citation-title {
   font-weight: 600;
   color: #2e2a24;
-  flex: 1;
   font-size: 15px;
   line-height: 1.4;
   transition: color 0.2s ease;
+}
+
+/* Quote snippet under each citation */
+.citation-quote {
+  display: block;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #6b665d;
+  font-style: italic;
+  border-left: 3px solid #d4cec6;
+  padding: 4px 0 4px 10px;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  transition: color 0.2s ease;
+}
+
+.citation-link:hover .citation-quote {
+  color: #4a453d;
+  border-left-color: #8b7355;
 }
 
 .citation-time {
@@ -356,6 +387,9 @@
   border-radius: 20px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .citation-link:hover .citation-title {
@@ -366,6 +400,27 @@
   background: #2e2a24;
   color: #fff;
   transform: scale(1.05);
+}
+
+/* "Explore this episode" button */
+.citation-explore {
+  display: block;
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b7355;
+  text-decoration: none;
+  text-align: right;
+  border-top: 1px solid #f0ede8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+}
+
+.citation-explore:hover {
+  color: #2e2a24;
+  background: #faf8f4;
+  text-decoration: none;
 }
 
 /* ========================================
@@ -724,6 +779,19 @@
     align-self: flex-start;
   }
 
+  .citation-explore {
+    text-align: center;
+  }
+
+  .amt-topics-list {
+    gap: 6px;
+  }
+
+  .amt-topic-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
   .amt-feedback-buttons {
     flex-direction: column;
   }
@@ -755,6 +823,66 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ========================================
+   Browse by Topic
+   ======================================== */
+.amt-topics {
+  margin-bottom: 20px;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.amt-topics-label {
+  font-size: 14px;
+  color: #6b665d;
+  margin: 0 0 10px 0;
+  font-style: italic;
+}
+
+.amt-topics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-topic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #fff, #faf8f4);
+  border: 1.5px solid #e6e2dc;
+  border-radius: 24px;
+  padding: 8px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  line-height: 1.4;
+}
+
+.amt-topic-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.amt-topic-name {
+  font-size: 13px;
+}
+
+.amt-topic-btn:hover {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border-color: #2e2a24;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(46, 42, 36, 0.2);
+}
+
+.amt-topic-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(46, 42, 36, 0.15);
 }
 
 /* ========================================

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.0.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.1.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -14,6 +14,8 @@
   const suggestionsList = suggestionsContainer ? suggestionsContainer.querySelector(".amt-suggestions-list") : null;
   const followupsContainer = document.querySelector("#ask-mirror-talk-followups");
   const followupsList = followupsContainer ? followupsContainer.querySelector(".amt-followups-list") : null;
+  const topicsContainer = document.querySelector("#ask-mirror-talk-topics");
+  const topicsList = topicsContainer ? topicsContainer.querySelector(".amt-topics-list") : null;
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -91,6 +93,43 @@
 
   // Load on init
   loadSuggestedQuestions();
+
+  // ─── Browse by Topic ───────────────────────────────────────
+  function loadTopics() {
+    if (!topicsContainer || !topicsList) return;
+
+    fetch(`${API_BASE}/api/topics`)
+      .then(res => res.json())
+      .then(data => {
+        const topics = data.topics || [];
+        if (topics.length === 0) {
+          topicsContainer.style.display = 'none';
+          return;
+        }
+        topicsList.innerHTML = '';
+        topics.forEach(t => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'amt-topic-btn';
+          btn.title = `Explore ${t.label}` + (t.episode_count ? ` (${t.episode_count} episodes)` : '');
+          btn.innerHTML = `<span class="amt-topic-icon">${t.icon}</span><span class="amt-topic-name">${t.label}</span>`;
+          btn.addEventListener('click', () => {
+            input.value = t.query;
+            input.focus();
+            topicsContainer.style.display = 'none';
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
+          });
+          topicsList.appendChild(btn);
+        });
+        topicsContainer.style.display = '';
+      })
+      .catch(err => {
+        console.warn('Could not load topics:', err);
+        topicsContainer.style.display = 'none';
+      });
+  }
+
+  loadTopics();
 
   // ─── Follow-up Questions ────────────────────────────────────
   function showFollowUpQuestions(questions) {
@@ -221,8 +260,9 @@
       submitBtn.textContent = 'Thinking…';
       input.disabled = true;
 
-      // Hide suggestions while loading
+      // Hide suggestions and topics while loading
       if (suggestionsContainer) suggestionsContainer.style.display = 'none';
+      if (topicsContainer) topicsContainer.style.display = 'none';
       if (followupsContainer) followupsContainer.style.display = 'none';
 
       const oldFeedback = document.getElementById('amt-feedback-section');
@@ -441,9 +481,18 @@
           const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
             ? `${timestampStart} – ${timestampEnd}` 
             : timestampStart;
+
+          // Build the quote snippet (truncated text already returned by API)
+          const quoteText = citation.text || '';
+          const quoteHtml = quoteText
+            ? `<span class="citation-quote">"${quoteText}"</span>`
+            : '';
           
           link.innerHTML = `
-            <span class="citation-title">${episodeTitle}</span>
+            <div class="citation-info">
+              <span class="citation-title">${episodeTitle}</span>
+              ${quoteHtml}
+            </div>
             <span class="citation-time">🎧 ${timeDisplay}</span>
           `;
 
@@ -463,12 +512,32 @@
           });
 
           li.appendChild(link);
+
+          // "Explore this episode" button — links to full episode page
+          if (audioUrl) {
+            const exploreBtn = document.createElement("a");
+            exploreBtn.href = audioUrl;
+            exploreBtn.target = "_blank";
+            exploreBtn.rel = "noopener noreferrer";
+            exploreBtn.className = "citation-explore";
+            exploreBtn.textContent = "Explore this episode ↗";
+            li.appendChild(exploreBtn);
+          }
         } else {
           const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
             ? `${timestampStart} – ${timestampEnd}` 
             : timestampStart;
+
+          const quoteText = citation.text || '';
+          const quoteHtml = quoteText
+            ? `<p class="citation-quote">"${quoteText}"</p>`
+            : '';
+
           li.innerHTML = `
-            <span class="citation-title">${episodeTitle}</span>
+            <div class="citation-info">
+              <span class="citation-title">${episodeTitle}</span>
+              ${quoteHtml}
+            </div>
             <span class="citation-time">${timeDisplay}</span>
           `;
         }
@@ -718,6 +787,7 @@
       responseContainer.style.display = 'none';
       if (followupsContainer) followupsContainer.style.display = 'none';
       if (suggestionsContainer) suggestionsContainer.style.display = '';
+      if (topicsContainer) topicsContainer.style.display = '';
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
     }

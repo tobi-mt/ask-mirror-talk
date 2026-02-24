@@ -219,6 +219,68 @@ def get_suggested_questions(db: Session = Depends(get_db)):
     return {"questions": result}
 
 
+# ── Browse-by-Topic ────────────────────────────────────────────
+# Curated topic definitions: display label, icon, and the pre-built question
+# the widget fires when a user clicks the tag.
+_TOPIC_CATALOG = [
+    {"slug": "grief",         "label": "Grief & Loss",      "icon": "💔", "query": "How do I deal with grief and loss?"},
+    {"slug": "addiction",     "label": "Addiction",          "icon": "🔗", "query": "How do I break free from addiction?"},
+    {"slug": "purpose",       "label": "Purpose",           "icon": "🧭", "query": "How do I find my purpose in life?"},
+    {"slug": "relationships", "label": "Relationships",     "icon": "❤️", "query": "What's the key to building healthy relationships?"},
+    {"slug": "fear",          "label": "Fear & Doubt",      "icon": "🌊", "query": "How can I overcome fear and self-doubt?"},
+    {"slug": "faith",         "label": "Faith",             "icon": "🙏", "query": "What role does faith play in personal growth?"},
+    {"slug": "leadership",    "label": "Leadership",        "icon": "🏆", "query": "What makes a great leader?"},
+    {"slug": "identity",      "label": "Identity",          "icon": "🪞", "query": "How do I discover my true identity?"},
+    {"slug": "healing",       "label": "Healing",           "icon": "🌱", "query": "How do I start the healing process?"},
+    {"slug": "forgiveness",   "label": "Forgiveness",       "icon": "🕊️", "query": "What does Mirror Talk say about forgiveness?"},
+]
+
+
+@app.get("/api/topics")
+def get_topics(db: Session = Depends(get_db)):
+    """
+    Return browseable topics with episode counts.
+
+    Each topic carries a pre-built query so the widget can fire it
+    directly when the user clicks a tag.
+    """
+    # Map topic/growth_domain values in DB → catalog slugs
+    _DB_TOPIC_TO_SLUGS: dict[str, list[str]] = {
+        "faith":         ["faith"],
+        "relationships": ["relationships"],
+        "leadership":    ["leadership", "purpose"],
+        "inner life":    ["fear", "identity", "healing", "grief"],
+        "general":       [],
+    }
+
+    try:
+        rows = db.execute(
+            text("""
+                SELECT topic, COUNT(DISTINCT episode_id) AS ep_count
+                FROM chunks
+                WHERE topic IS NOT NULL AND topic != ''
+                GROUP BY topic
+            """)
+        ).fetchall()
+
+        db_counts: dict[str, int] = {}  # slug → episode count
+        for topic_value, ep_count in rows:
+            for slug in _DB_TOPIC_TO_SLUGS.get(topic_value, []):
+                db_counts[slug] = db_counts.get(slug, 0) + ep_count
+    except Exception as e:
+        logger.warning("Could not query topic counts: %s", e)
+        db_counts = {}
+
+    result = []
+    for t in _TOPIC_CATALOG:
+        result.append({
+            **t,
+            "episode_count": db_counts.get(t["slug"], 0),
+        })
+
+    return {"topics": result}
+
+
 @app.get("/api/cache/stats")
 def get_cache_stats():
     """Return answer cache statistics."""

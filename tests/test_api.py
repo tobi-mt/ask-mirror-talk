@@ -5,7 +5,7 @@ import requests
 import json
 import sys
 
-BASE_URL = "https://ask-mirror-talk-api.onrender.com"
+BASE_URL = "https://ask-mirror-talk-production.up.railway.app"
 
 def test_endpoint(method, endpoint, data=None, description=""):
     """Test a single endpoint."""

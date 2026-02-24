@@ -1,6 +1,6 @@
 # Ask Mirror Talk — WordPress Deployment Guide
 
-> **Version 3.2.0** — Widget + Analytics + Inline Audio Player + Quote Snippets + Browse by Topic + Question of the Day
+> **Version 3.3.0** — Widget + Analytics + Inline Audio Player + Quote Snippets + Browse by Topic + Question of the Day + Cache Pre-warming
 
 ---
 
@@ -77,7 +77,7 @@ After uploading, clear caches in this order:
 ### Browser Console checks:
 Open Developer Tools → Console and look for:
 ```
-Ask Mirror Talk Widget v3.2.0 loaded
+Ask Mirror Talk Widget v3.3.0 loaded
 ✅ Ask Mirror Talk Analytics Add-on loaded
 ✅ QA Session ID captured: <uuid>
 ✅ Citation tracking added to N links
@@ -152,10 +152,10 @@ The current setup calls the Railway API **directly** from PHP (`wp_remote_post`)
 
 ## 10. File Versions
 
-All files are versioned at `3.2.0`. To force a cache bust after updating, increment the version string in `ask-mirror-talk.php`:
+All files are versioned at `3.3.0`. To force a cache bust after updating, increment the version string in `ask-mirror-talk.php`:
 
 ```php
-wp_enqueue_style('ask-mirror-talk', ..., '3.2.1');
-wp_enqueue_script('ask-mirror-talk', ..., '3.2.1');
-wp_enqueue_script('ask-mirror-talk-analytics', ..., '3.2.1');
+wp_enqueue_style('ask-mirror-talk', ..., '3.3.1');
+wp_enqueue_script('ask-mirror-talk', ..., '3.3.1');
+wp_enqueue_script('ask-mirror-talk-analytics', ..., '3.3.1');
 ```

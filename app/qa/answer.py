@@ -268,8 +268,8 @@ Please share a thoughtful, conversational response that helps this person unders
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        temperature=0.85,  # Higher for more natural, varied, human responses
-        max_tokens=900,    # Longer to allow thoughtful, complete answers
+        temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
         presence_penalty=0.4,   # Reduce repetition
         frequency_penalty=0.3,  # Encourage varied vocabulary
     )
@@ -343,8 +343,8 @@ Please share a thoughtful, conversational response that helps this person unders
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.85,
-        max_tokens=900,
+        temperature=settings.answer_temperature,
+        max_tokens=settings.answer_max_tokens,
         presence_penalty=0.4,
         frequency_penalty=0.3,
         stream=True,

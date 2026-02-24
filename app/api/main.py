@@ -45,6 +45,55 @@ async def _init_db_background():
         logger.warning("⚠️  Some endpoints may not work until database is accessible")
 
 
+async def _prewarm_cache():
+    """Pre-warm the answer cache with QOTD and topic queries after DB is ready."""
+    import asyncio
+
+    # Wait for DB to be ready (poll every 2s, up to 60s)
+    for _ in range(30):
+        if _db_initialized:
+            break
+        await asyncio.sleep(2)
+
+    if not _db_initialized:
+        logger.warning("⚠️  Cache pre-warm skipped: DB not ready after 60s")
+        return
+
+    logger.info("🔥 Starting cache pre-warm...")
+
+    # Collect unique questions: all QOTD + all topic queries
+    questions: list[str] = []
+    for entry in _QOTD_POOL:
+        questions.append(entry["question"])
+    for topic in _TOPIC_CATALOG:
+        q = topic["query"]
+        if q not in questions:
+            questions.append(q)
+
+    from app.qa.service import answer_question
+
+    SessionLocal = get_session_local()
+    warmed = 0
+    failed = 0
+
+    for question in questions:
+        try:
+            db = SessionLocal()
+            try:
+                answer_question(db, question, user_ip="cache-prewarm")
+                warmed += 1
+                logger.info("  ✓ Pre-warmed (%d/%d): %.50s…", warmed, len(questions), question)
+            finally:
+                db.close()
+            # Small delay to avoid hammering the OpenAI API
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            failed += 1
+            logger.warning("  ✗ Pre-warm failed for '%.50s…': %s", question, e)
+
+    logger.info("🔥 Cache pre-warm complete: %d warmed, %d failed, %d total", warmed, failed, len(questions))
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     """Application lifespan: initialize DB on startup."""
@@ -57,6 +106,7 @@ async def _lifespan(_app: FastAPI):
     logger.info("✓ Application startup complete (DB init deferred)")
     logger.info("Starting background DB initialization task...")
     asyncio.create_task(_init_db_background())
+    asyncio.create_task(_prewarm_cache())
     yield
     logger.info("Application shutting down")
 

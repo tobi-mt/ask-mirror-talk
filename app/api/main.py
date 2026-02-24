@@ -509,6 +509,9 @@ def status(db: Session = Depends(get_db)):
             "episodes": episode_count or 0,
             "chunks": chunk_count or 0,
             "ready": (chunk_count or 0) > 0,
+            "model": settings.answer_generation_model,
+            "max_tokens": settings.answer_max_tokens,
+            "temperature": settings.answer_temperature,
             "latest_ingest_run": {
                 "status": latest_run.status if latest_run else None,
                 "started_at": latest_run.started_at.isoformat() if latest_run and latest_run.started_at else None,

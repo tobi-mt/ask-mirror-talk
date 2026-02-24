@@ -826,6 +826,105 @@
 }
 
 /* ========================================
+   Question of the Day
+   ======================================== */
+.amt-qotd {
+  margin-bottom: 20px;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.amt-qotd-inner {
+  background: linear-gradient(135deg, #fdfbf6 0%, #f5f0e6 100%);
+  border: 1.5px solid #e0d5c3;
+  border-radius: 14px;
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Warm shimmer accent along the top */
+.amt-qotd-inner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #d4a857, #8b7355, #d4a857);
+}
+
+.amt-qotd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.amt-qotd-badge {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #8b7355;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-qotd-theme {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a09380;
+  background: rgba(139, 115, 85, 0.1);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.3px;
+}
+
+.amt-qotd-text {
+  font-size: 18px;
+  line-height: 1.5;
+  color: #2e2a24;
+  font-style: italic;
+  font-weight: 500;
+  margin: 0 0 14px 0;
+}
+
+.amt-qotd-ask {
+  display: inline-block;
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border: none;
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.3px;
+}
+
+.amt-qotd-ask:hover {
+  background: linear-gradient(135deg, #3d3731, #524b42);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(46, 42, 36, 0.25);
+}
+
+.amt-qotd-ask:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .amt-qotd-text {
+    font-size: 16px;
+  }
+  .amt-qotd-inner {
+    padding: 16px 18px;
+  }
+}
+
+/* ========================================
    Browse by Topic
    ======================================== */
 .amt-topics {

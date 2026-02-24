@@ -165,6 +165,64 @@ def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_
     )
 
 
+# ── Question of the Day ───────────────────────────────────────
+_QOTD_POOL = [
+    {"question": "How do I stop comparing myself to others?",               "theme": "Self-worth"},
+    {"question": "What does it mean to truly forgive someone?",             "theme": "Forgiveness"},
+    {"question": "How do I find peace when everything feels uncertain?",    "theme": "Inner peace"},
+    {"question": "What's the difference between being busy and being productive?", "theme": "Purpose"},
+    {"question": "How do I let go of things I can't control?",              "theme": "Surrender"},
+    {"question": "What does it look like to lead with vulnerability?",      "theme": "Leadership"},
+    {"question": "How can I rebuild trust after it's been broken?",         "theme": "Relationships"},
+    {"question": "What role does gratitude play in overcoming hardship?",   "theme": "Gratitude"},
+    {"question": "How do I know when it's time to walk away?",              "theme": "Boundaries"},
+    {"question": "What does Mirror Talk say about healing from trauma?",    "theme": "Healing"},
+    {"question": "How do I stay hopeful when grief feels overwhelming?",    "theme": "Grief"},
+    {"question": "What can I do when fear is holding me back?",             "theme": "Fear"},
+    {"question": "How do I raise kids who are emotionally resilient?",      "theme": "Parenting"},
+    {"question": "What's the first step to breaking a bad habit?",          "theme": "Addiction"},
+    {"question": "How do I have hard conversations without damaging the relationship?", "theme": "Communication"},
+    {"question": "What does alignment between faith and action look like?", "theme": "Faith"},
+    {"question": "How do I deal with loneliness even when I'm surrounded by people?", "theme": "Identity"},
+    {"question": "What can I learn from failure?",                          "theme": "Growth"},
+    {"question": "How do I set boundaries without feeling guilty?",         "theme": "Boundaries"},
+    {"question": "What does it mean to live authentically?",                "theme": "Identity"},
+    {"question": "How do I support someone who is grieving?",               "theme": "Grief"},
+    {"question": "What does healthy ambition look like?",                   "theme": "Purpose"},
+    {"question": "How do I find my voice when I've been silenced?",         "theme": "Empowerment"},
+    {"question": "What's the connection between physical health and emotional healing?", "theme": "Healing"},
+    {"question": "How do I move forward after a major life change?",        "theme": "Transition"},
+    {"question": "What does Mirror Talk teach about the power of community?", "theme": "Community"},
+    {"question": "How do I parent through my own unresolved pain?",         "theme": "Parenting"},
+    {"question": "What does rest really look like in a culture of hustle?", "theme": "Inner peace"},
+    {"question": "How do I love someone without losing myself?",            "theme": "Relationships"},
+    {"question": "What does courage look like in everyday life?",           "theme": "Fear"},
+    {"question": "How do I stop running from my emotions?",                 "theme": "Healing"},
+]
+
+
+@app.get("/api/question-of-the-day")
+def get_question_of_the_day():
+    """
+    Return a deterministic Question of the Day.
+
+    Rotates daily based on the UTC date, cycling through the curated pool.
+    The same question is returned for all users on the same calendar day.
+    """
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).date()
+    # Deterministic index: ordinal day number mod pool size
+    index = today.toordinal() % len(_QOTD_POOL)
+    entry = _QOTD_POOL[index]
+
+    return {
+        "question": entry["question"],
+        "theme": entry["theme"],
+        "date": today.isoformat(),
+    }
+
+
 @app.get("/api/suggested-questions")
 def get_suggested_questions(db: Session = Depends(get_db)):
     """

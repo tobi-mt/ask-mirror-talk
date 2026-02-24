@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.1.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.2.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -16,6 +16,7 @@
   const followupsList = followupsContainer ? followupsContainer.querySelector(".amt-followups-list") : null;
   const topicsContainer = document.querySelector("#ask-mirror-talk-topics");
   const topicsList = topicsContainer ? topicsContainer.querySelector(".amt-topics-list") : null;
+  const qotdContainer = document.querySelector("#ask-mirror-talk-qotd");
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -57,6 +58,46 @@
   if (citationsContainer) {
     citationsContainer.style.display = 'none';
   }
+
+  // ─── Question of the Day ─────────────────────────────────────
+  function loadQuestionOfTheDay() {
+    if (!qotdContainer) return;
+
+    fetch(`${API_BASE}/api/question-of-the-day`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.question) {
+          qotdContainer.style.display = 'none';
+          return;
+        }
+
+        qotdContainer.innerHTML = `
+          <div class="amt-qotd-inner">
+            <div class="amt-qotd-header">
+              <span class="amt-qotd-badge">✨ Question of the Day</span>
+              <span class="amt-qotd-theme">${data.theme || ''}</span>
+            </div>
+            <p class="amt-qotd-text">"${data.question}"</p>
+            <button type="button" class="amt-qotd-ask">Ask this →</button>
+          </div>
+        `;
+
+        qotdContainer.querySelector('.amt-qotd-ask').addEventListener('click', () => {
+          input.value = data.question;
+          input.focus();
+          qotdContainer.style.display = 'none';
+          form.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+
+        qotdContainer.style.display = '';
+      })
+      .catch(err => {
+        console.warn('Could not load Question of the Day:', err);
+        qotdContainer.style.display = 'none';
+      });
+  }
+
+  loadQuestionOfTheDay();
 
   // ─── Suggested Questions ────────────────────────────────────
   function loadSuggestedQuestions() {
@@ -261,6 +302,7 @@
       input.disabled = true;
 
       // Hide suggestions and topics while loading
+      if (qotdContainer) qotdContainer.style.display = 'none';
       if (suggestionsContainer) suggestionsContainer.style.display = 'none';
       if (topicsContainer) topicsContainer.style.display = 'none';
       if (followupsContainer) followupsContainer.style.display = 'none';
@@ -788,6 +830,7 @@
       if (followupsContainer) followupsContainer.style.display = 'none';
       if (suggestionsContainer) suggestionsContainer.style.display = '';
       if (topicsContainer) topicsContainer.style.display = '';
+      if (qotdContainer) qotdContainer.style.display = '';
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
     }

@@ -1,6 +1,6 @@
 # Ask Mirror Talk — WordPress Deployment Guide
 
-> **Version 3.0.0** — Widget + Analytics + Inline Audio Player
+> **Version 3.2.0** — Widget + Analytics + Inline Audio Player + Quote Snippets + Browse by Topic + Question of the Day
 
 ---
 
@@ -63,9 +63,12 @@ After uploading, clear caches in this order:
 | Check | How to verify |
 |-------|--------------|
 | Widget loads | Visit the page → you see the "Ask Mirror Talk" form |
+| Question of the Day | A highlighted card appears with today's question and an "Ask this →" button |
+| Browse by Topic tags | Clickable topic pills (Grief, Faith, Purpose, etc.) render below QOTD |
 | Suggested questions appear | Pill-shaped buttons render above the input |
 | Ask a question | Type a question → click **Ask** → answer streams in |
-| Citations appear | Episode cards with 🎧 timestamps show below the answer |
+| Citations appear | Episode cards with 🎧 timestamps and quote snippets show below the answer |
+| Explore this episode | "Explore this episode ↗" link appears under each citation |
 | Inline audio player | Click a citation → player opens with skip/close buttons |
 | Feedback buttons | "Was this answer helpful?" appears after citations |
 | Click tracking | Open browser Console → look for `✅ Citation click tracked` |
@@ -74,7 +77,7 @@ After uploading, clear caches in this order:
 ### Browser Console checks:
 Open Developer Tools → Console and look for:
 ```
-Ask Mirror Talk Widget v3.0.0 loaded
+Ask Mirror Talk Widget v3.2.0 loaded
 ✅ Ask Mirror Talk Analytics Add-on loaded
 ✅ QA Session ID captured: <uuid>
 ✅ Citation tracking added to N links
@@ -94,6 +97,8 @@ The widget connects to: `https://ask-mirror-talk-production.up.railway.app`
 | `/ask` | POST | Ask a question (non-streaming) |
 | `/ask/stream` | POST | Ask a question (SSE streaming) |
 | `/api/suggested-questions` | GET | Get suggested questions |
+| `/api/question-of-the-day` | GET | Daily rotating question |
+| `/api/topics` | GET | Browseable topic tags with episode counts |
 | `/api/citation/click` | POST | Track citation clicks |
 | `/api/feedback` | POST | Submit user feedback |
 | `/api/analytics/summary` | GET | Analytics dashboard summary |
@@ -141,16 +146,16 @@ Railway API (Python / FastAPI)
 
 ## 9. WPGetAPI (Optional — Not Required)
 
-The current setup calls the Railway API **directly** from PHP (`wp_remote_post`). WPGetAPI is **not required**. If you previously configured WPGetAPI, it won't conflict but is unused by v3.0.0.
+The current setup calls the Railway API **directly** from PHP (`wp_remote_post`). WPGetAPI is **not required**. If you previously configured WPGetAPI, it won't conflict but is unused.
 
 ---
 
 ## 10. File Versions
 
-All files are versioned at `3.0.0`. To force a cache bust after updating, increment the version string in `ask-mirror-talk.php`:
+All files are versioned at `3.2.0`. To force a cache bust after updating, increment the version string in `ask-mirror-talk.php`:
 
 ```php
-wp_enqueue_style('ask-mirror-talk', ..., '3.0.1');
-wp_enqueue_script('ask-mirror-talk', ..., '3.0.1');
-wp_enqueue_script('ask-mirror-talk-analytics', ..., '3.0.1');
+wp_enqueue_style('ask-mirror-talk', ..., '3.2.1');
+wp_enqueue_script('ask-mirror-talk', ..., '3.2.1');
+wp_enqueue_script('ask-mirror-talk-analytics', ..., '3.2.1');
 ```

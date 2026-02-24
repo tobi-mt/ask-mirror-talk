@@ -17,6 +17,7 @@ function ask_mirror_talk_shortcode() {
     ?>
     <div class="ask-mirror-talk">
         <h2>Ask Mirror Talk</h2>
+        <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
         <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
             <p class="amt-topics-label">Browse by topic:</p>
             <div class="amt-topics-list"></div>
@@ -59,13 +60,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '3.1.0'
+        '3.2.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '3.1.0',
+        '3.2.0',
         true
     );
 
@@ -74,7 +75,7 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '3.1.0',
+        '3.2.0',
         true
     );
 

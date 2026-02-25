@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import logging
+import socket
 
 from app.core.config import settings
 
@@ -17,32 +18,72 @@ _engine = None
 _SessionLocal = None
 
 
+def _resolve_to_ipv4(hostname: str, port: int = 5432) -> str | None:
+    """
+    Resolve a hostname to its first IPv4 address.
+    Returns the IP string or None if resolution fails.
+    """
+    try:
+        results = socket.getaddrinfo(hostname, port, socket.AF_INET, socket.SOCK_STREAM)
+        if results:
+            ipv4 = results[0][4][0]
+            logger.info("Resolved DB host %s → %s (forced IPv4)", hostname, ipv4)
+            return ipv4
+    except Exception as exc:
+        logger.warning("IPv4 resolution failed for %s: %s", hostname, exc)
+    return None
+
+
 def get_engine():
     """Get or create the database engine lazily."""
     global _engine
     if _engine is None:
+        db_url = settings.database_url
+
         # Log the database URL (redacted) for debugging
-        url_parts = settings.database_url.split('@')
+        url_parts = db_url.split('@')
         if len(url_parts) > 1:
-            logger.info("Database URL format: %s://***@%s", settings.database_url.split(':')[0], url_parts[1])
+            logger.info("Database URL format: %s://***@%s", db_url.split(':')[0], url_parts[1])
         else:
-            logger.info("Database URL format: %s://...", settings.database_url.split(':')[0])
-        
-        # Ensure we're using psycopg3, not psycopg2
-        # Add connection pool settings to prevent idle timeouts
-        # Force IPv4 for Neon compatibility on Railway
+            logger.info("Database URL format: %s://...", db_url.split(':')[0])
+
+        # ── Force IPv4 for Neon on Railway ──
+        # Neon uses SNI-based routing, so we MUST keep the hostname in the
+        # connection string for TLS to work. But we also pass `hostaddr`
+        # (the resolved IPv4 IP) so libpq connects to the IPv4 address
+        # while still sending the correct SNI hostname during the TLS
+        # handshake. This is the official libpq approach.
+        connect_args = {
+            "connect_timeout": 10,
+            "options": "-c client_encoding=utf8 -c idle_in_transaction_session_timeout=15000",
+        }
+
+        # Extract hostname from the URL and pre-resolve to IPv4
+        from urllib.parse import urlparse
+        parsed = urlparse(db_url)
+        hostname = parsed.hostname
+        if hostname and hostname != "localhost" and hostname != "127.0.0.1":
+            ipv4 = _resolve_to_ipv4(hostname, parsed.port or 5432)
+            if ipv4:
+                # hostaddr tells libpq to connect to this IP, while the
+                # 'host' (from the URL) is still used for SNI / cert check
+                connect_args["hostaddr"] = ipv4
+
+        # Connection pool settings tuned for Neon serverless:
+        # - pool_pre_ping: verify connection liveness before handing it out
+        # - pool_recycle: recreate connections every 2 min (Neon kills idle ones)
+        # - pool_size / max_overflow: minimal footprint for serverless limits
+        # - idle_in_transaction_session_timeout: Neon hard-kills idle txns;
+        #   set our own timeout lower so SQLAlchemy sees the error cleanly
         _engine = create_engine(
-            settings.database_url,
-            pool_pre_ping=True,  # Verify connections before using them
-            pool_recycle=120,    # Recycle connections every 2 min (Neon kills idle connections)
-            pool_size=2,         # Minimal pool — Neon serverless has tight limits
-            max_overflow=3,      # Max additional connections
-            pool_timeout=30,     # Wait up to 30s for a connection from the pool
-            echo=False,          # Set to True for SQL query logging
-            connect_args={
-                "connect_timeout": 10,  # 10 second timeout
-                "options": "-c client_encoding=utf8 -c idle_in_transaction_session_timeout=15000",
-            }
+            db_url,
+            pool_pre_ping=True,
+            pool_recycle=120,
+            pool_size=2,
+            max_overflow=3,
+            pool_timeout=30,
+            echo=False,
+            connect_args=connect_args,
         )
     return _engine
 

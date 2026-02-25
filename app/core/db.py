@@ -53,9 +53,13 @@ def get_engine():
         # (the resolved IPv4 IP) so libpq connects to the IPv4 address
         # while still sending the correct SNI hostname during the TLS
         # handshake. This is the official libpq approach.
+        # Note: do NOT pass idle_in_transaction_session_timeout in options —
+        # Neon's pooled endpoints (PgBouncer) reject it as an unsupported
+        # startup parameter. We mitigate idle-in-transaction issues by
+        # closing DB sessions before long-running operations (see service.py).
         connect_args = {
             "connect_timeout": 10,
-            "options": "-c client_encoding=utf8 -c idle_in_transaction_session_timeout=15000",
+            "options": "-c client_encoding=utf8",
         }
 
         # Extract hostname from the URL and pre-resolve to IPv4

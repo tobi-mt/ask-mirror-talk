@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     # Answer Generation
     answer_generation_provider: str = "openai"  # openai | basic
     answer_generation_model: str = "gpt-4o-mini"  # gpt-4o-mini | gpt-4o | gpt-4-turbo
-    answer_max_tokens: int = 500  # Maximum tokens for generated answers
+    answer_max_tokens: int = 700  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
 
     # API

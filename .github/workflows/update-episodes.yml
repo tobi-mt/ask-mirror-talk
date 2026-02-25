@@ -30,11 +30,12 @@ jobs:
       - name: Update latest episodes
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           RSS_URL: ${{ secrets.RSS_URL }}
           MAX_EPISODES_PER_RUN: 10
           EMBEDDING_PROVIDER: local
           WHISPER_MODEL: base
-          TRANSCRIPTION_PROVIDER: faster_whisper
+          TRANSCRIPTION_PROVIDER: openai
           PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "Starting episode update..."

@@ -17,10 +17,23 @@ print("=" * 60)
 print("UPDATING WITH LATEST EPISODES")
 print("=" * 60)
 print(f"Time: {datetime.now().isoformat()}")
-print(f"RSS URL: {os.getenv('RSS_URL', 'Not set')}")
-print(f"Database: {'...' if os.getenv('DATABASE_URL') else 'Not set'}")
+print(f"RSS URL: {'set' if os.getenv('RSS_URL') else 'NOT SET'}")
+print(f"Database: {'set' if os.getenv('DATABASE_URL') else 'NOT SET'}")
+print(f"OpenAI key: {'set' if os.getenv('OPENAI_API_KEY') else 'NOT SET'}")
 print(f"Max new episodes per run: {os.getenv('MAX_EPISODES_PER_RUN', '10')}")
 print("=" * 60)
+
+# Fail early with clear message if required env vars are missing
+missing = []
+if not os.getenv("DATABASE_URL"):
+    missing.append("DATABASE_URL")
+if not os.getenv("RSS_URL"):
+    missing.append("RSS_URL")
+if missing:
+    print(f"\n✗ FATAL: Missing required environment variables: {', '.join(missing)}")
+    print("  → Add them as GitHub repository secrets:")
+    print("    https://github.com/<owner>/<repo>/settings/secrets/actions")
+    sys.exit(1)
 
 from app.ingestion.pipeline_optimized import run_ingestion_optimized
 from app.core.db import get_session_local

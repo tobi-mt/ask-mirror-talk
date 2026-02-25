@@ -660,9 +660,11 @@
           }
 
           if (event.type === 'chunk') {
-            // First chunk received — clear the loading indicator
+            // First chunk received — clear the loading indicator and stop rotation
             if (!answerText) {
               output.innerHTML = '';
+              clearInterval(loadingInterval);
+              loadingInterval = null;
             }
             answerText += event.text;
             // Render incrementally — format the accumulated text

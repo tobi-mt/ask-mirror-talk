@@ -177,6 +177,7 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
     """
     Generate 2-3 contextual follow-up questions based on the answer and cited episodes.
     Uses OpenAI if available, otherwise returns topic-based suggestions.
+    Optimized for speed — uses a tight prompt with minimal tokens.
     """
     from app.core.config import settings
 
@@ -189,36 +190,28 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
 
-            # Build brief context from episode titles
+            # Minimal context — just enough for relevant follow-ups
             episode_titles = list(dict.fromkeys(
                 c["episode"]["title"] for c in chunks if c.get("episode")
-            ))[:5]
-            episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
+            ))[:3]
 
             response = client.chat.completions.create(
                 model=settings.answer_generation_model,
                 messages=[
                     {
                         "role": "system",
-                        "content": (
-                            "You generate exactly 3 short, natural follow-up questions a user might ask "
-                            "after receiving an answer from the Mirror Talk podcast Q&A. "
-                            "Questions should be curious, personal-growth oriented, and feel conversational. "
-                            "Return ONLY a JSON array of 3 strings, nothing else."
-                        ),
+                        "content": "Return a JSON array of 3 short follow-up questions. No other text.",
                     },
                     {
                         "role": "user",
                         "content": (
-                            f"Original question: {question}\n\n"
-                            f"Answer summary (first 200 chars): {answer[:200]}\n\n"
-                            f"Episodes referenced: {episodes_str}\n\n"
-                            "Generate 3 follow-up questions:"
+                            f"Q: {question}\nA (excerpt): {answer[:150]}\n"
+                            f"Episodes: {', '.join(episode_titles)}"
                         ),
                     },
                 ],
                 temperature=0.9,
-                max_tokens=200,
+                max_tokens=120,
             )
 
             import json
@@ -333,6 +326,7 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
         presence_penalty=0.4,
         frequency_penalty=0.3,
         stream=True,
+        stream_options={"include_usage": False},
     )
 
     for chunk in stream:

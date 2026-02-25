@@ -176,6 +176,10 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     from app.core.db import get_session_local
 
     start_time = time.time()
+
+    # ── Immediately tell the client we're working ──
+    yield f"data: {json.dumps({'type': 'status', 'message': 'Searching episodes…'})}\n\n"
+
     query_embedding = embed_text(question)
 
     # Check cache first (normalize for better matching)
@@ -200,9 +204,6 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
-    # Send a status event so the client knows retrieval has started
-    yield f"data: {json.dumps({'type': 'status', 'message': 'Searching episodes…'})}\n\n"
-
     retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
     answer_chunks = retrieval_result['answer_chunks']
     citation_episodes = retrieval_result['citation_episodes']
@@ -249,33 +250,40 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     from app.core.config import settings
 
     full_answer = ""
+    ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
     if settings.answer_generation_provider == "openai":
         try:
-            ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
             for text_chunk in generate_intelligent_answer_stream(question, ranked[:5]):
                 full_answer += text_chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:
             logger.error("Streaming failed: %s", e)
-            full_answer = _generate_basic_answer(question, sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)[:4])
+            full_answer = _generate_basic_answer(question, ranked[:4])
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:
-        full_answer = _generate_basic_answer(question, sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)[:4])
+        full_answer = _generate_basic_answer(question, ranked[:4])
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
 
-    # Build citations directly — avoid calling compose_answer which would
-    # regenerate the answer via OpenAI (wasteful, since we already streamed it).
+    # ── Send citations immediately — no extra latency ──
     from app.qa.answer import _build_citations, _generate_follow_up_questions
     citations = _build_citations(citation_payloads if citation_payloads else chunk_payloads)
-    follow_ups = _generate_follow_up_questions(question, full_answer, citation_payloads or chunk_payloads)
-
     yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
+
+    # ── Generate follow-ups (fast, async-safe) ──
+    # This is a lightweight OpenAI call; we send it as its own event so
+    # the client can render citations while follow-ups load.
+    try:
+        follow_ups = _generate_follow_up_questions(question, full_answer, citation_payloads or chunk_payloads)
+    except Exception as e:
+        logger.warning("Follow-up generation failed in stream: %s", e)
+        follow_ups = []
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
 
     # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
     SessionLocal = get_session_local()
     log_db = SessionLocal()
+    qa_log_id = None
     try:
         qa_log = log_qa(
             log_db,
@@ -288,9 +296,10 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         qa_log_id = qa_log.id
     except Exception as e:
         logger.error("Failed to log QA: %s", e)
-        qa_log_id = None
     finally:
         log_db.close()
+
+    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
 
     # Cache for next time (normalized question for better hit rate)
     cache.put(norm_q, query_embedding, {
@@ -301,7 +310,5 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         "latency_ms": latency_ms,
         "qa_log_id": qa_log_id,
     })
-
-    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
 
     gc.collect()

@@ -35,6 +35,7 @@ jobs:
           EMBEDDING_PROVIDER: local
           WHISPER_MODEL: base
           TRANSCRIPTION_PROVIDER: faster_whisper
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "Starting episode update..."
           python scripts/update_latest_episodes.py

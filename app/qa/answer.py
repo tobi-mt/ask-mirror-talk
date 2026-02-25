@@ -90,6 +90,37 @@ def _make_quote(text: str, max_len: int = 160) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+def _build_citations(chunks: list[dict]) -> list[dict]:
+    """
+    Build citation dicts from chunk payloads.
+    Extracted so the streaming path can reuse it without calling compose_answer.
+    """
+    citations = []
+    for chunk in chunks:
+        episode = chunk["episode"]
+        start_seconds = int(chunk["start_time"]) if chunk.get("start_time") else 0
+        end_seconds = int(chunk["end_time"]) if chunk.get("end_time") else start_seconds + 30
+
+        start = _format_timestamp(start_seconds)
+        end = _format_timestamp(end_seconds)
+
+        audio_url = episode.get("audio_url", "")
+        episode_url = f"{audio_url}#t={start_seconds}" if audio_url else ""
+
+        citations.append({
+            "episode_id": episode["id"],
+            "episode_title": episode["title"],
+            "timestamp_start": start,
+            "timestamp_end": end,
+            "timestamp_start_seconds": start_seconds,
+            "timestamp_end_seconds": end_seconds,
+            "audio_url": audio_url,
+            "episode_url": episode_url,
+            "text": _make_quote(chunk["text"], max_len=200),
+        })
+    return citations
+
+
 def compose_answer(question: str, chunks: list[dict], citation_override: list[dict] = None) -> dict:
     """
     Generate an intelligent answer using OpenAI GPT based on relevant chunks.
@@ -134,36 +165,7 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
 
     # Build citations with proper timestamps for audio playback
     # Use citation_chunks (which may be overridden for smart episode selection)
-    citations = []
-    for chunk in citation_chunks:
-        episode = chunk["episode"]
-        # Ensure we have valid timestamps
-        start_seconds = int(chunk["start_time"]) if chunk.get("start_time") else 0
-        end_seconds = int(chunk["end_time"]) if chunk.get("end_time") else start_seconds + 30
-        
-        start = _format_timestamp(start_seconds)
-        end = _format_timestamp(end_seconds)
-        
-        # Get audio URL from episode
-        audio_url = episode.get("audio_url", "")
-        
-        # Create episode URL with timestamp for direct playback
-        # Most podcast players support #t=seconds format
-        episode_url = f"{audio_url}#t={start_seconds}" if audio_url else ""
-        
-        citations.append(
-            {
-                "episode_id": episode["id"],
-                "episode_title": episode["title"],
-                "timestamp_start": start,
-                "timestamp_end": end,
-                "timestamp_start_seconds": start_seconds,
-                "timestamp_end_seconds": end_seconds,
-                "audio_url": audio_url,
-                "episode_url": episode_url,
-                "text": _make_quote(chunk["text"], max_len=200),  # Include excerpt for context
-            }
-        )
+    citations = _build_citations(citation_chunks)
 
     # Generate follow-up questions
     follow_up_questions = _generate_follow_up_questions(question, answer_text, citation_chunks)

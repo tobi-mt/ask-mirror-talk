@@ -159,7 +159,14 @@
   color: #2e2a24;
   font-size: 16px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-  transition: all 0.4s ease;
+  transition: opacity 0.3s ease, border-color 0.3s ease;
+  contain: layout style; /* CSS containment — prevents child reflows from pushing page layout */
+  overflow-anchor: auto;
+}
+
+/* While streaming, lock to a min-height so the container doesn't collapse/expand wildly */
+.ask-mirror-talk-response.amt-streaming {
+  min-height: 180px;
 }
 
 /* Hide response section when empty */
@@ -167,29 +174,48 @@
   display: none;
 }
 
-/* Response content animations */
+/* Response content — no animation during streaming to prevent layout bounce */
 #ask-mirror-talk-output {
-  animation: fadeInUp 0.5s ease-out;
+  overflow-anchor: none; /* prevent scroll anchoring thrash */
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 #ask-mirror-talk-output p {
   margin: 0 0 16px 0;
-  animation: fadeInUp 0.4s ease-out both;
 }
 
 #ask-mirror-talk-output p:last-child {
   margin-bottom: 0;
 }
 
-/* Stagger paragraph animations */
-#ask-mirror-talk-output p:nth-child(1) { animation-delay: 0.05s; }
-#ask-mirror-talk-output p:nth-child(2) { animation-delay: 0.1s; }
-#ask-mirror-talk-output p:nth-child(3) { animation-delay: 0.15s; }
-#ask-mirror-talk-output p:nth-child(4) { animation-delay: 0.2s; }
-#ask-mirror-talk-output p:nth-child(5) { animation-delay: 0.25s; }
-#ask-mirror-talk-output p:nth-child(6) { animation-delay: 0.3s; }
-#ask-mirror-talk-output p:nth-child(7) { animation-delay: 0.35s; }
-#ask-mirror-talk-output p:nth-child(8) { animation-delay: 0.4s; }
+/* Streaming cursor — visible while streaming text */
+.ask-mirror-talk-response.amt-streaming #ask-mirror-talk-output::after {
+  content: '▍';
+  display: inline;
+  animation: blink 0.7s step-end infinite;
+  color: #8b7355;
+  font-weight: 300;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* Only animate paragraphs AFTER streaming is complete (class added by JS) */
+#ask-mirror-talk-output.amt-complete p {
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+/* Stagger paragraph animations — only when complete */
+#ask-mirror-talk-output.amt-complete p:nth-child(1) { animation-delay: 0.05s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(2) { animation-delay: 0.1s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(3) { animation-delay: 0.15s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(4) { animation-delay: 0.2s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(5) { animation-delay: 0.25s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(6) { animation-delay: 0.3s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(7) { animation-delay: 0.35s; }
+#ask-mirror-talk-output.amt-complete p:nth-child(8) { animation-delay: 0.4s; }
 
 /* Better spacing after headings in paragraphs */
 .ask-mirror-talk-response p strong:only-child {

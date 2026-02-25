@@ -34,13 +34,14 @@ def get_engine():
         _engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,  # Verify connections before using them
-            pool_recycle=3600,   # Recycle connections after 1 hour
-            pool_size=5,         # Number of connections to maintain
-            max_overflow=10,     # Max additional connections
+            pool_recycle=120,    # Recycle connections every 2 min (Neon kills idle connections)
+            pool_size=2,         # Minimal pool — Neon serverless has tight limits
+            max_overflow=3,      # Max additional connections
+            pool_timeout=30,     # Wait up to 30s for a connection from the pool
             echo=False,          # Set to True for SQL query logging
             connect_args={
                 "connect_timeout": 10,  # 10 second timeout
-                "options": "-c client_encoding=utf8",  # Ensure UTF-8 encoding
+                "options": "-c client_encoding=utf8 -c idle_in_transaction_session_timeout=15000",
             }
         )
     return _engine

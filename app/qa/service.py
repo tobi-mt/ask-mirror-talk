@@ -1,5 +1,6 @@
 import gc
 import time
+import logging
 from sqlalchemy.orm import Session
 
 from app.indexing.embeddings import embed_text
@@ -9,18 +10,20 @@ from app.qa.answer import compose_answer
 from app.qa.cache import get_answer_cache, normalize_question
 from app.storage.repository import log_qa
 
+logger = logging.getLogger(__name__)
+
 
 def answer_question(db: Session, question: str, user_ip: str, use_smart_citations: bool = True):
     """
     Answer a user's question with intelligent episode selection.
     
-    Args:
-        db: Database session
-        question: User's question
-        user_ip: User's IP for logging
-        use_smart_citations: If True, uses smart episode selection (top 5 most relevant episodes)
-                            If False, uses legacy behavior (all chunks as citations)
+    DB session lifecycle:
+      Phase 1 — Retrieval (DB-heavy): session open
+      Phase 2 — Answer generation (OpenAI): session CLOSED to avoid idle-in-transaction timeout
+      Phase 3 — Logging: fresh session
     """
+    from app.core.db import get_session_local
+
     start_time = time.time()
     query_embedding = embed_text(question)
     
@@ -44,17 +47,15 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
         cached_response["question"] = question
         return cached_response
 
+    # ── Phase 1: DB-heavy retrieval — keep session open ──
     if use_smart_citations:
-        # New: Two-tier retrieval for smart episode citations
         retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
         answer_chunks = retrieval_result['answer_chunks']
         citation_episodes = retrieval_result['citation_episodes']
         
-        # Load episode metadata for answer generation (all chunks)
         all_episode_ids = list({chunk.episode_id for chunk, _ in answer_chunks})
         episode_map = load_episode_map(db, all_episode_ids)
         
-        # Prepare chunks for answer generation
         chunk_payloads = []
         for chunk, similarity in answer_chunks:
             episode = episode_map.get(chunk.episode_id)
@@ -72,7 +73,6 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
                 "similarity": similarity,
             })
         
-        # Prepare top episodes for citations
         citation_payloads = []
         for cit in citation_episodes:
             episode = episode_map.get(cit['episode_id'])
@@ -91,12 +91,7 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
                 "relevance_score": cit['relevance_score'],
                 "total_relevant_chunks": cit['total_relevant_chunks'],
             })
-        
-        # Generate answer using all chunks, but return only top episode citations
-        response = compose_answer(question, chunk_payloads, citation_override=citation_payloads)
-        
     else:
-        # Legacy: Use all retrieved chunks for both answer and citations
         retrieved = retrieve_chunks(db, query_embedding)
         episode_ids = list({chunk.episode_id for chunk, _ in retrieved})
         episode_map = load_episode_map(db, episode_ids)
@@ -117,19 +112,36 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
                 },
                 "similarity": similarity,
             })
-        
-        response = compose_answer(question, chunk_payloads)
-    
-    latency_ms = int((time.time() - start_time) * 1000)
+        citation_payloads = None
 
-    qa_log = log_qa(
-        db,
-        question=question,
-        answer=response["answer"],
-        episode_ids=[c["episode_id"] for c in response["citations"]],
-        latency_ms=latency_ms,
-        user_ip=user_ip,
-    )
+    # ── Release DB session before long OpenAI call ──
+    # Neon serverless kills idle-in-transaction connections after 30s;
+    # OpenAI generation routinely takes 10-25s.
+    db.close()
+
+    # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
+    response = compose_answer(question, chunk_payloads,
+                              citation_override=citation_payloads if use_smart_citations else None)
+
+    # ── Phase 3: Log with a fresh DB session ──
+    latency_ms = int((time.time() - start_time) * 1000)
+    SessionLocal = get_session_local()
+    log_db = SessionLocal()
+    try:
+        qa_log = log_qa(
+            log_db,
+            question=question,
+            answer=response["answer"],
+            episode_ids=[c["episode_id"] for c in response["citations"]],
+            latency_ms=latency_ms,
+            user_ip=user_ip,
+        )
+        qa_log_id = qa_log.id
+    except Exception as e:
+        logger.error("Failed to log QA: %s", e)
+        qa_log_id = None
+    finally:
+        log_db.close()
 
     # Cache this response for future similar questions
     result = {
@@ -138,7 +150,7 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
         "citations": response["citations"],
         "follow_up_questions": response.get("follow_up_questions", []),
         "latency_ms": latency_ms,
-        "qa_log_id": qa_log.id,
+        "qa_log_id": qa_log_id,
     }
     
     cache.put(norm_q, query_embedding, result)
@@ -156,8 +168,12 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
       - {"type": "citations", "citations": [...]} at the end
       - {"type": "follow_up", "questions": [...]} at the end
       - {"type": "done", "qa_log_id": ..., "latency_ms": ...} final event
+    
+    DB session is used only for retrieval and logging — released before
+    the long-running OpenAI streaming to prevent idle-in-transaction timeouts.
     """
     import json
+    from app.core.db import get_session_local
 
     start_time = time.time()
     query_embedding = embed_text(question)
@@ -183,7 +199,10 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
         return
 
-    # Retrieve chunks
+    # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
+    # Send a status event so the client knows retrieval has started
+    yield f"data: {json.dumps({'type': 'status', 'message': 'Searching episodes…'})}\n\n"
+
     retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
     answer_chunks = retrieval_result['answer_chunks']
     citation_episodes = retrieval_result['citation_episodes']
@@ -219,7 +238,13 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
             "total_relevant_chunks": cit['total_relevant_chunks'],
         })
 
-    # Stream the answer text
+    # ── Release the original DB session before the long streaming phase ──
+    # This prevents Neon's idle-in-transaction timeout from killing the connection.
+    db.close()
+
+    # ── Phase 2: OpenAI streaming — no DB needed ──
+    yield f"data: {json.dumps({'type': 'status', 'message': 'Generating answer…'})}\n\n"
+
     from app.qa.answer import generate_intelligent_answer_stream, _generate_basic_answer
     from app.core.config import settings
 
@@ -231,31 +256,41 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
                 full_answer += text_chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error("Streaming failed: %s", e)
+            logger.error("Streaming failed: %s", e)
             full_answer = _generate_basic_answer(question, sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)[:4])
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:
         full_answer = _generate_basic_answer(question, sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)[:4])
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
 
-    # Build citations (reuse compose_answer's citation builder logic)
-    response = compose_answer(question, chunk_payloads, citation_override=citation_payloads)
-    citations = response["citations"]
-    follow_ups = response.get("follow_up_questions", [])
+    # Build citations directly — avoid calling compose_answer which would
+    # regenerate the answer via OpenAI (wasteful, since we already streamed it).
+    from app.qa.answer import _build_citations, _generate_follow_up_questions
+    citations = _build_citations(citation_payloads if citation_payloads else chunk_payloads)
+    follow_ups = _generate_follow_up_questions(question, full_answer, citation_payloads or chunk_payloads)
 
     yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
 
+    # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
-    qa_log = log_qa(
-        db,
-        question=question,
-        answer=full_answer,
-        episode_ids=[c["episode_id"] for c in citations],
-        latency_ms=latency_ms,
-        user_ip=user_ip,
-    )
+    SessionLocal = get_session_local()
+    log_db = SessionLocal()
+    try:
+        qa_log = log_qa(
+            log_db,
+            question=question,
+            answer=full_answer,
+            episode_ids=[c["episode_id"] for c in citations],
+            latency_ms=latency_ms,
+            user_ip=user_ip,
+        )
+        qa_log_id = qa_log.id
+    except Exception as e:
+        logger.error("Failed to log QA: %s", e)
+        qa_log_id = None
+    finally:
+        log_db.close()
 
     # Cache for next time (normalized question for better hit rate)
     cache.put(norm_q, query_embedding, {
@@ -264,9 +299,9 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         "citations": citations,
         "follow_up_questions": follow_ups,
         "latency_ms": latency_ms,
-        "qa_log_id": qa_log.id,
+        "qa_log_id": qa_log_id,
     })
 
-    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id, 'latency_ms': latency_ms})}\n\n"
+    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
 
     gc.collect()

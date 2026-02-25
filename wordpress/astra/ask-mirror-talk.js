@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.4.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.5.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -343,12 +343,14 @@
       submitBtn.disabled = false;
       submitBtn.textContent = 'Ask';
       input.disabled = false;
+      responseContainer.classList.remove('amt-streaming');
     }
   }
 
   // Show error message with shake animation
   function showError(message) {
     responseContainer.style.display = '';
+    responseContainer.classList.remove('amt-streaming');
     output.classList.add('error');
     output.innerHTML = `<p><strong>⚠️ ${message}</strong></p>`;
     citations.innerHTML = "";
@@ -618,9 +620,15 @@
     let answerText = '';
     let buffer = '';
 
-    // Clear loading and prepare output for streaming text
-    output.innerHTML = '';
-    output.classList.remove('error');
+    // Clear error state and prepare for streaming — keep loading dots visible
+    // until the first chunk of answer text arrives
+    output.classList.remove('error', 'amt-complete');
+    responseContainer.classList.add('amt-streaming');
+
+    // Scroll the response container into view once at start so the user
+    // can watch the answer appear; we won't auto-scroll after that to
+    // avoid bouncing the page.
+    responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     while (true) {
       const { done, value } = await reader.read();
@@ -639,7 +647,23 @@
         try {
           const event = JSON.parse(jsonStr);
 
+          if (event.type === 'status') {
+            // Update the loading text with backend progress
+            const textEl = output.querySelector('.amt-loading-text');
+            if (textEl) {
+              textEl.style.opacity = '0';
+              setTimeout(() => {
+                textEl.textContent = event.message;
+                textEl.style.opacity = '1';
+              }, 150);
+            }
+          }
+
           if (event.type === 'chunk') {
+            // First chunk received — clear the loading indicator
+            if (!answerText) {
+              output.innerHTML = '';
+            }
             answerText += event.text;
             // Render incrementally — format the accumulated text
             const formatted = formatMarkdownToHtml(answerText);
@@ -663,6 +687,9 @@
           if (event.type === 'done') {
             // Expose qa_log_id for analytics addon
             window._amtLastQALogId = event.qa_log_id;
+            // Remove streaming class and add completion class for CSS animations
+            responseContainer.classList.remove('amt-streaming');
+            output.classList.add('amt-complete');
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
               latency_ms: event.latency_ms,
@@ -684,6 +711,7 @@
   // Show answer (used for non-streaming fallback)
   function showAnswer(answer, citationsList, followUpQuestions) {
     output.classList.remove('error');
+    responseContainer.classList.remove('amt-streaming');
     
     let formattedAnswer = formatMarkdownToHtml(answer);
     const paragraphs = formattedAnswer.split('\n\n').filter(p => p.trim());
@@ -810,6 +838,7 @@
       await askStreaming(question);
     } catch (streamError) {
       console.warn('SSE streaming failed, falling back to /ask:', streamError);
+      responseContainer.classList.remove('amt-streaming');
 
       // Fallback: non-streaming via WordPress AJAX or direct API
       try {

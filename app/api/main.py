@@ -248,6 +248,15 @@ _QOTD_POOL = [
     {"question": "How do I love someone without losing myself?",            "theme": "Relationships"},
     {"question": "What does courage look like in everyday life?",           "theme": "Fear"},
     {"question": "How do I stop running from my emotions?",                 "theme": "Healing"},
+    {"question": "What does Mirror Talk say about money and purpose?",       "theme": "Purpose"},
+    {"question": "How do I handle criticism without shutting down?",         "theme": "Growth"},
+    {"question": "What does it take to be a better spouse?",                "theme": "Relationships"},
+    {"question": "How do I reconnect with my faith after doubt?",           "theme": "Faith"},
+    {"question": "What does Mirror Talk teach about mental health?",        "theme": "Healing"},
+    {"question": "How do I stop people-pleasing?",                          "theme": "Boundaries"},
+    {"question": "What does surrender look like in practice?",              "theme": "Surrender"},
+    {"question": "How do I raise my kids to know their worth?",             "theme": "Parenting"},
+    {"question": "What's the difference between loneliness and solitude?",  "theme": "Inner peace"},
 ]
 
 
@@ -512,6 +521,8 @@ def status(db: Session = Depends(get_db)):
             "model": settings.answer_generation_model,
             "max_tokens": settings.answer_max_tokens,
             "temperature": settings.answer_temperature,
+            "cache_similarity_threshold": settings.cache_similarity_threshold,
+            "cache_ttl_seconds": settings.cache_ttl_seconds,
             "latest_ingest_run": {
                 "status": latest_run.status if latest_run else None,
                 "started_at": latest_run.started_at.isoformat() if latest_run and latest_run.started_at else None,

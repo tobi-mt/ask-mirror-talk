@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.3.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.4.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -535,7 +535,7 @@
               <span class="citation-title">${episodeTitle}</span>
               ${quoteHtml}
             </div>
-            <span class="citation-time">🎧 ${timeDisplay}</span>
+            <span class="citation-time">▶ ${timeDisplay}</span>
           `;
 
           // Intercept click for inline playback
@@ -668,6 +668,9 @@
               latency_ms: event.latency_ms,
               cached: event.cached || false
             });
+            // Add share button and SEO schema after answer is complete
+            addShareButton(question, answerText);
+            injectFAQSchema(question, answerText);
           }
         } catch (parseErr) {
           console.warn('SSE parse error:', parseErr, jsonStr);
@@ -694,7 +697,93 @@
     showCitations(citationsList);
     showFollowUpQuestions(followUpQuestions);
 
+    // Add share button and SEO schema
+    const questionText = input.value.trim();
+    addShareButton(questionText, answer);
+    injectFAQSchema(questionText, answer);
+
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ========================================
+  // Share Button
+  // ========================================
+
+  function addShareButton(question, answer) {
+    // Remove previous share button if exists
+    const existing = document.getElementById('amt-share-section');
+    if (existing) existing.remove();
+
+    const shareSection = document.createElement('div');
+    shareSection.id = 'amt-share-section';
+    shareSection.className = 'amt-share-section';
+
+    const shareText = `Q: ${question}\n\n${answer.substring(0, 200)}…\n\nAnswered by Ask Mirror Talk`;
+    const pageUrl = window.location.href;
+
+    shareSection.innerHTML = `
+      <button class="amt-share-btn" title="Share this answer">
+        📤 Share this insight
+      </button>
+    `;
+
+    // Insert after the response container
+    responseContainer.appendChild(shareSection);
+
+    shareSection.querySelector('.amt-share-btn').addEventListener('click', async () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: `Mirror Talk: ${question}`,
+            text: shareText,
+            url: pageUrl
+          });
+        } catch (e) {
+          if (e.name !== 'AbortError') console.warn('Share failed:', e);
+        }
+      } else {
+        // Fallback: copy to clipboard
+        try {
+          await navigator.clipboard.writeText(`${shareText}\n\n${pageUrl}`);
+          const btn = shareSection.querySelector('.amt-share-btn');
+          btn.textContent = '✅ Copied to clipboard!';
+          setTimeout(() => { btn.innerHTML = '📤 Share this insight'; }, 2500);
+        } catch (e) {
+          console.warn('Copy failed:', e);
+        }
+      }
+    });
+  }
+
+  // ========================================
+  // SEO: Inject FAQ Schema.org Markup
+  // ========================================
+
+  function injectFAQSchema(question, answer) {
+    // Remove previous schema if exists
+    const existing = document.getElementById('amt-faq-schema');
+    if (existing) existing.remove();
+
+    if (!question || !answer) return;
+
+    const schema = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [{
+        "@type": "Question",
+        "name": question,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": answer.substring(0, 1000)
+        }
+      }]
+    };
+
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.id = 'amt-faq-schema';
+    script.textContent = JSON.stringify(schema);
+    document.head.appendChild(script);
   }
 
   // ========================================
@@ -833,7 +922,65 @@
       if (qotdContainer) qotdContainer.style.display = '';
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
+      const oldShare = document.getElementById('amt-share-section');
+      if (oldShare) oldShare.remove();
     }
   });
+
+  // ========================================
+  // Session Persistence — restore last Q&A for returning visitors
+  // ========================================
+
+  function saveLastSession(question, answer) {
+    try {
+      localStorage.setItem('amt_last_question', question);
+      localStorage.setItem('amt_last_answer', answer.substring(0, 2000));
+      localStorage.setItem('amt_last_time', Date.now().toString());
+    } catch (e) { /* localStorage not available */ }
+  }
+
+  // Save session after successful answer (hook into output rendering)
+  const originalSetLoading = setLoading;
+  // Watch for answer completion: override setLoading(false) to save session
+  const origFormHandler = form.onsubmit;
+
+  // Intercept: after successful stream or fallback, persist the Q&A
+  const _origDispatch = form.dispatchEvent.bind(form);
+
+  // Simple approach: MutationObserver on output to detect answer rendered
+  const sessionObserver = new MutationObserver(() => {
+    const q = input.value.trim();
+    const a = output.textContent.trim();
+    if (q && a && a.length > 50 && !output.querySelector('.amt-loading')) {
+      saveLastSession(q, a);
+    }
+  });
+  sessionObserver.observe(output, { childList: true, subtree: true, characterData: true });
+
+  // On page load, show a subtle "last session" prompt if within 24 hours
+  try {
+    const lastQ = localStorage.getItem('amt_last_question');
+    const lastTime = parseInt(localStorage.getItem('amt_last_time') || '0');
+    const hoursAgo = (Date.now() - lastTime) / (1000 * 60 * 60);
+
+    if (lastQ && hoursAgo < 24 && !input.value) {
+      // Show a subtle prompt to re-ask the last question
+      const resumeHint = document.createElement('div');
+      resumeHint.className = 'amt-resume-hint';
+      resumeHint.innerHTML = `
+        <button type="button" class="amt-resume-btn">
+          ↩ Continue: "${lastQ.substring(0, 60)}${lastQ.length > 60 ? '…' : ''}"
+        </button>
+      `;
+      form.insertBefore(resumeHint, form.firstChild);
+
+      resumeHint.querySelector('.amt-resume-btn').addEventListener('click', () => {
+        input.value = lastQ;
+        resumeHint.remove();
+        input.focus();
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      });
+    }
+  } catch (e) { /* localStorage not available */ }
 
 })();

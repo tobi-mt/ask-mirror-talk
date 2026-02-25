@@ -381,10 +381,10 @@
 
 .citation-time {
   font-size: 13px;
-  color: #6b665d;
+  color: #fff;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   white-space: nowrap;
-  background: #f5f2ed;
+  background: #2e2a24;
   padding: 5px 12px;
   border-radius: 20px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -392,6 +392,7 @@
   flex-shrink: 0;
   align-self: flex-start;
   margin-top: 2px;
+  cursor: pointer;
 }
 
 .citation-link:hover .citation-title {
@@ -399,29 +400,31 @@
 }
 
 .citation-link:hover .citation-time {
-  background: #2e2a24;
+  background: #8b7355;
   color: #fff;
-  transform: scale(1.05);
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.3);
 }
 
 /* "Explore this episode" button */
 .citation-explore {
   display: block;
-  padding: 8px 18px;
-  font-size: 12px;
+  padding: 10px 18px;
+  font-size: 13px;
   font-weight: 600;
-  color: #8b7355;
+  color: #2e2a24;
   text-decoration: none;
-  text-align: right;
+  text-align: center;
   border-top: 1px solid #f0ede8;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   letter-spacing: 0.3px;
   transition: all 0.2s ease;
+  background: #faf8f4;
 }
 
 .citation-explore:hover {
-  color: #2e2a24;
-  background: #faf8f4;
+  color: #fff;
+  background: #2e2a24;
   text-decoration: none;
 }
 
@@ -548,6 +551,36 @@
 @keyframes scaleIn {
   0% { transform: scale(0.8); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* ========================================
+   Share Button
+   ======================================== */
+.amt-share-section {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.amt-share-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b7355;
+  background: transparent;
+  border: 2px solid #d4cec6;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-share-btn:hover {
+  color: #2e2a24;
+  border-color: #2e2a24;
+  background: #faf8f4;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* ========================================
@@ -1231,6 +1264,36 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ========================================
+   Session Resume Hint
+   ======================================== */
+.amt-resume-hint {
+  margin-bottom: 12px;
+}
+
+.amt-resume-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #6b665d;
+  background: #faf8f4;
+  border: 1px dashed #d4cec6;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+
+.amt-resume-btn:hover {
+  color: #2e2a24;
+  border-color: #2e2a24;
+  border-style: solid;
+  background: #f5f2ed;
 }
 
 /* ========================================

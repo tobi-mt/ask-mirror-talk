@@ -60,13 +60,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '3.3.0'
+        '3.4.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '3.3.0',
+        '3.4.0',
         true
     );
 
@@ -75,7 +75,7 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '3.3.0',
+        '3.4.0',
         true
     );
 

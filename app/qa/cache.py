@@ -17,9 +17,24 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+
+def normalize_question(q: str) -> str:
+    """
+    Normalize a question for cache matching.
+    Strips whitespace, lowercases, removes trailing punctuation.
+    Ensures semantically identical questions hit the same cache entry.
+    """
+    import re
+    q = q.strip().lower()
+    # Remove trailing question marks and periods
+    q = re.sub(r'[?.!]+$', '', q).strip()
+    # Collapse multiple spaces
+    q = re.sub(r'\s+', ' ', q)
+    return q
+
 # Default settings
-DEFAULT_SIMILARITY_THRESHOLD = 0.95
-DEFAULT_TTL_SECONDS = 3600  # 1 hour
+DEFAULT_SIMILARITY_THRESHOLD = 0.92  # Lowered from 0.95 to improve cache hit rate
+DEFAULT_TTL_SECONDS = 14400  # 4 hours (answers don't change often)
 DEFAULT_MAX_ENTRIES = 500
 
 
@@ -150,8 +165,12 @@ _answer_cache: AnswerCache | None = None
 
 
 def get_answer_cache() -> AnswerCache:
-    """Get the global answer cache singleton."""
+    """Get the global answer cache singleton, using config from settings."""
     global _answer_cache
     if _answer_cache is None:
-        _answer_cache = AnswerCache()
+        from app.core.config import settings
+        _answer_cache = AnswerCache(
+            similarity_threshold=settings.cache_similarity_threshold,
+            ttl_seconds=settings.cache_ttl_seconds,
+        )
     return _answer_cache

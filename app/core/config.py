@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     answer_generation_model: str = "gpt-4o-mini"  # gpt-4o-mini | gpt-4o | gpt-4-turbo
     answer_max_tokens: int = 700  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
+    cache_similarity_threshold: float = 0.92  # Minimum cosine similarity for cache hits (0.0-1.0)
+    cache_ttl_seconds: int = 14400  # Cache TTL (default: 4 hours)
 
     # API
     rate_limit_per_minute: int = 20

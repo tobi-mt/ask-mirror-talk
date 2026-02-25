@@ -1,8 +1,11 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget
+ * Analytics Add-on for Ask Mirror Talk Widget v3.4.0
  * 
- * Adds citation click tracking and feedback without changing existing widget code
- * Works by intercepting fetch calls and DOM observation
+ * Adds citation click tracking and feedback without changing existing widget code.
+ * Captures qa_log_id from:
+ *   1. SSE streaming (via window._amtLastQALogId set by the main widget)
+ *   2. Non-streaming fetch (intercepted JSON response)
+ *   3. WordPress AJAX wrapper responses
  */
 
 (function() {
@@ -16,45 +19,76 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v3.4.0 loaded');
         
-        // Intercept fetch calls to capture qa_log_id
+        // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
+        
+        // Watch for qa_log_id from SSE streaming (set on window by main widget)
+        watchForStreamingQALogId();
         
         // Watch for citation links being added to the DOM
         observeDOM();
     }
     
-    // Store the qa_log_id when a question is answered
+    /**
+     * Poll for window._amtLastQALogId which is set by the main widget
+     * after an SSE streaming answer completes (the "done" event).
+     * This is the PRIMARY path — SSE is the default answer flow.
+     */
+    function watchForStreamingQALogId() {
+        let lastSeen = null;
+        
+        // Use a MutationObserver on the output element to detect when streaming ends
+        // (citations appear after the answer is done streaming)
+        const checkGlobal = () => {
+            const globalId = window._amtLastQALogId;
+            if (globalId && globalId !== lastSeen) {
+                lastSeen = globalId;
+                currentQALogId = globalId;
+                console.log('✅ QA Session ID captured from SSE stream:', currentQALogId);
+                
+                // Citations are rendered by the main widget; add tracking after a short delay
+                setTimeout(() => {
+                    addCitationTracking();
+                    addFeedbackButtons();
+                }, 500);
+            }
+        };
+        
+        // Poll every 500ms — lightweight and reliable
+        setInterval(checkGlobal, 500);
+    }
+    
+    // Store the qa_log_id when a non-streaming question is answered
     function interceptFetch() {
         window.fetch = function(...args) {
             return originalFetch(...args).then(response => {
-                // Clone the response so we can read it
-                const clonedResponse = response.clone();
-                
                 const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
                 
-                // Check for WordPress AJAX call (admin-ajax.php with ask_mirror_talk action)
-                // or direct /ask API call
-                const isAskRequest = url.includes('/ask') || 
+                // Only intercept non-streaming /ask or WordPress AJAX calls (not /ask/stream)
+                const isNonStreamingAsk = (url.includes('/ask') && !url.includes('/ask/stream')) || 
                     (url.includes('admin-ajax.php') && args[1]?.body && 
                      typeof args[1].body === 'string' && args[1].body.includes('ask_mirror_talk'));
                 
-                if (isAskRequest) {
+                if (isNonStreamingAsk) {
+                    // Clone so the original consumer isn't affected
+                    const clonedResponse = response.clone();
                     clonedResponse.json().then(data => {
                         // Handle WordPress AJAX wrapper: {success: true, data: {qa_log_id: ...}}
                         const qaData = data.data || data;
                         if (qaData.qa_log_id) {
                             currentQALogId = qaData.qa_log_id;
-                            console.log('✅ QA Session ID captured:', currentQALogId);
+                            console.log('✅ QA Session ID captured from fetch:', currentQALogId);
                             
-                            // Add tracking to citation links after they're rendered
                             setTimeout(() => {
                                 addCitationTracking();
                                 addFeedbackButtons();
                             }, 1000);
                         }
-                    }).catch(() => {});
+                    }).catch(() => {
+                        // Response wasn't JSON (e.g. streaming) — ignore silently
+                    });
                 }
                 
                 return response;

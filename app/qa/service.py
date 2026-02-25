@@ -6,7 +6,7 @@ from app.indexing.embeddings import embed_text
 from app.qa.retrieval import retrieve_chunks, load_episode_map
 from app.qa.smart_citations import retrieve_chunks_two_tier
 from app.qa.answer import compose_answer
-from app.qa.cache import get_answer_cache
+from app.qa.cache import get_answer_cache, normalize_question
 from app.storage.repository import log_qa
 
 
@@ -24,9 +24,10 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     start_time = time.time()
     query_embedding = embed_text(question)
     
-    # Check cache for near-identical questions
+    # Check cache for near-identical questions (normalize for better matching)
     cache = get_answer_cache()
-    cached_response = cache.get(question, query_embedding)
+    norm_q = normalize_question(question)
+    cached_response = cache.get(norm_q, query_embedding)
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         # Log the cached response too
@@ -140,7 +141,7 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
         "qa_log_id": qa_log.id,
     }
     
-    cache.put(question, query_embedding, result)
+    cache.put(norm_q, query_embedding, result)
 
     # Explicit garbage collection to free up memory
     gc.collect()
@@ -161,9 +162,10 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     start_time = time.time()
     query_embedding = embed_text(question)
 
-    # Check cache first
+    # Check cache first (normalize for better matching)
     cache = get_answer_cache()
-    cached_response = cache.get(question, query_embedding)
+    norm_q = normalize_question(question)
+    cached_response = cache.get(norm_q, query_embedding)
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         qa_log = log_qa(
@@ -255,8 +257,8 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
         user_ip=user_ip,
     )
 
-    # Cache for next time
-    cache.put(question, query_embedding, {
+    # Cache for next time (normalized question for better hit rate)
+    cache.put(norm_q, query_embedding, {
         "question": question,
         "answer": full_answer,
         "citations": citations,

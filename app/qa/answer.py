@@ -332,7 +332,6 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
         presence_penalty=0.4,
         frequency_penalty=0.3,
         stream=True,
-        stream_options={"include_usage": False},
     )
 
     for chunk in stream:

@@ -257,7 +257,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
                 full_answer += text_chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:
-            logger.error("Streaming failed: %s", e)
+            logger.error("Streaming answer generation failed: %s", e, exc_info=True)
             full_answer = _generate_basic_answer(question, ranked[:5])
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:

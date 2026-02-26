@@ -211,23 +211,39 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
                         "role": "user",
                         "content": (
                             f"Original question: {question}\n"
-                            f"Answer excerpt: {answer[:200]}\n"
+                            f"Answer excerpt: {answer[:400]}\n"
                             f"Episodes referenced: {episodes_str}"
                         ),
                     },
                 ],
                 temperature=0.9,
-                max_tokens=150,
+                max_tokens=200,
             )
 
             import json
             raw = response.choices[0].message.content.strip()
+            logger.info("Follow-up raw response: %s", raw[:300])
+            
+            # Strip markdown code fences if present (```json ... ```)
+            cleaned = raw
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]  # remove first line
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+            
             # Parse JSON array
-            questions = json.loads(raw)
-            if isinstance(questions, list) and all(isinstance(q, str) for q in questions):
-                return questions[:3]
+            questions = json.loads(cleaned)
+            if isinstance(questions, list) and len(questions) > 0:
+                # Coerce all items to strings and filter empties
+                str_questions = [str(q).strip() for q in questions if q]
+                if str_questions:
+                    logger.info("Generated %d OpenAI follow-up questions", len(str_questions))
+                    return str_questions[:3]
+            
+            logger.warning("Follow-up parsed but unexpected format: %s", type(questions))
         except Exception as e:
-            logger.warning("Follow-up generation failed: %s", e)
+            logger.warning("Follow-up generation failed: %s", e, exc_info=True)
 
     # Fallback: topic-based suggestions from chunk metadata
     fallback = []

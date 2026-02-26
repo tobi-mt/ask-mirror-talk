@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     min_chunk_chars: int = 300
 
     # Retrieval
-    top_k: int = 4
+    top_k: int = 6
     min_similarity: float = 0.15
     diversity_lambda: float = 0.7  # MMR: 0.0=max diversity, 1.0=max relevance
     max_cited_episodes: int = 5  # Maximum number of episodes to cite in response
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     # Answer Generation
     answer_generation_provider: str = "openai"  # openai | basic
     answer_generation_model: str = "gpt-4o-mini"  # gpt-4o-mini | gpt-4o | gpt-4-turbo
-    answer_max_tokens: int = 700  # Maximum tokens for generated answers
+    answer_max_tokens: int = 800  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
     cache_similarity_threshold: float = 0.92  # Minimum cosine similarity for cache hits (0.0-1.0)
     cache_ttl_seconds: int = 14400  # Cache TTL (default: 4 hours)

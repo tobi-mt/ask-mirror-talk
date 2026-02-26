@@ -253,15 +253,15 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
     if settings.answer_generation_provider == "openai":
         try:
-            for text_chunk in generate_intelligent_answer_stream(question, ranked[:5]):
+            for text_chunk in generate_intelligent_answer_stream(question, ranked[:6]):
                 full_answer += text_chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:
             logger.error("Streaming failed: %s", e)
-            full_answer = _generate_basic_answer(question, ranked[:4])
+            full_answer = _generate_basic_answer(question, ranked[:5])
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:
-        full_answer = _generate_basic_answer(question, ranked[:4])
+        full_answer = _generate_basic_answer(question, ranked[:5])
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
 
     # ── Send citations immediately — no extra latency ──

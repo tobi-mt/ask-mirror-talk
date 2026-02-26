@@ -46,7 +46,7 @@ def _build_user_prompt(question: str, context: str) -> str:
 Relevant Podcast Wisdom:
 {context}
 
-Please share a thoughtful, conversational response in 3–4 paragraphs that helps this person understand the topic better. Weave in relevant insights naturally — feel free to connect ideas across different episodes if you notice patterns. Always end with a complete closing thought."""
+Drawing deeply from these episode excerpts, share a thoughtful, conversational response in 3–4 paragraphs. Reference specific ideas, phrases, or perspectives from the sources above — weave them naturally into your narrative rather than just summarizing. Connect insights across episodes when you notice patterns. Always end with a complete closing thought."""
 
 
 def _format_timestamp(seconds: float) -> str:
@@ -152,16 +152,16 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
     if settings.answer_generation_provider == "openai":
         try:
             logger.info("Attempting intelligent answer generation with OpenAI...")
-            answer_text = _generate_intelligent_answer(question, ranked[:5])
+            answer_text = _generate_intelligent_answer(question, ranked[:6])
             logger.info("Successfully generated intelligent answer")
         except Exception as e:
             logger.error(f"OpenAI answer generation failed: {e}", exc_info=True)
             logger.warning("Falling back to basic extraction")
-            answer_text = _generate_basic_answer(question, ranked[:4])
+            answer_text = _generate_basic_answer(question, ranked[:5])
     else:
         # Use basic extraction if OpenAI is not configured
         logger.info("Using basic extraction (OpenAI not enabled)")
-        answer_text = _generate_basic_answer(question, ranked[:4])
+        answer_text = _generate_basic_answer(question, ranked[:5])
 
     # Build citations with proper timestamps for audio playback
     # Use citation_chunks (which may be overridden for smart episode selection)
@@ -175,9 +175,8 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
 
 def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]) -> list[str]:
     """
-    Generate 2-3 contextual follow-up questions based on the answer and cited episodes.
+    Generate 3 contextual follow-up questions based on the answer and cited episodes.
     Uses OpenAI if available, otherwise returns topic-based suggestions.
-    Optimized for speed — uses a tight prompt with minimal tokens.
     """
     from app.core.config import settings
 
@@ -190,28 +189,35 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
 
-            # Minimal context — just enough for relevant follow-ups
+            # Build brief context from episode titles
             episode_titles = list(dict.fromkeys(
                 c["episode"]["title"] for c in chunks if c.get("episode")
-            ))[:3]
+            ))[:4]
+            episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
 
             response = client.chat.completions.create(
                 model=settings.answer_generation_model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "Return a JSON array of 3 short follow-up questions. No other text.",
+                        "content": (
+                            "Generate exactly 3 short, natural follow-up questions a listener might ask "
+                            "after hearing this answer from the Mirror Talk podcast Q&A. "
+                            "Questions should be curious, personal-growth oriented, and conversational. "
+                            "Return ONLY a JSON array of 3 strings."
+                        ),
                     },
                     {
                         "role": "user",
                         "content": (
-                            f"Q: {question}\nA (excerpt): {answer[:150]}\n"
-                            f"Episodes: {', '.join(episode_titles)}"
+                            f"Original question: {question}\n"
+                            f"Answer excerpt: {answer[:200]}\n"
+                            f"Episodes referenced: {episodes_str}"
                         ),
                     },
                 ],
                 temperature=0.9,
-                max_tokens=120,
+                max_tokens=150,
             )
 
             import json

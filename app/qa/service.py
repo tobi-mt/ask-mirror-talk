@@ -244,7 +244,9 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     db.close()
 
     # ── Phase 2: OpenAI streaming — no DB needed ──
-    yield f"data: {json.dumps({'type': 'status', 'message': 'Generating answer…'})}\n\n"
+    # Tell the user how deep we're searching — builds trust and feels thorough
+    unique_episodes = len({cp["episode"]["id"] for cp in chunk_payloads})
+    yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {unique_episodes} episodes…'})}\n\n"
 
     from app.qa.answer import generate_intelligent_answer_stream, _generate_basic_answer
     from app.core.config import settings

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.5.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.6.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -210,6 +210,7 @@
 
   let loadingInterval = null;
   let activePlayer = null;
+  let lastDepthMessage = ''; // Track episode depth for display
 
   // Helper: Format timestamp for display (HH:MM:SS)
   function formatTimestamp(seconds) {
@@ -624,6 +625,7 @@
     // until the first chunk of answer text arrives
     output.classList.remove('error', 'amt-complete');
     responseContainer.classList.add('amt-streaming');
+    lastDepthMessage = '';
 
     // Scroll the response container into view once at start so the user
     // can watch the answer appear; we won't auto-scroll after that to
@@ -648,6 +650,10 @@
           const event = JSON.parse(jsonStr);
 
           if (event.type === 'status') {
+            // Capture depth messages like "Drawing from 6 episodes…"
+            if (event.message && event.message.includes('episode')) {
+              lastDepthMessage = event.message;
+            }
             // Update the loading text with backend progress
             const textEl = output.querySelector('.amt-loading-text');
             if (textEl) {
@@ -692,6 +698,16 @@
             // Remove streaming class and add completion class for CSS animations
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
+
+            // Show depth indicator (e.g. "Drawing from 6 episodes…")
+            if (lastDepthMessage) {
+              const depthEl = document.createElement('div');
+              depthEl.className = 'amt-depth-indicator';
+              depthEl.textContent = lastDepthMessage.replace('…', '');
+              // Append after the response text, before share button
+              output.appendChild(depthEl);
+            }
+
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
               latency_ms: event.latency_ms,

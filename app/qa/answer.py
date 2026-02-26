@@ -90,13 +90,62 @@ def _make_quote(text: str, max_len: int = 160) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+# Common podcast intro/outro phrases that don't contain substantive wisdom
+_INTRO_OUTRO_MARKERS = [
+    "pause, take a break, reflect on life",
+    "mirror talk brings you soulful conversations",
+    "let's grow together",
+    "one soulful conversation at a time",
+    "welcome to mirror talk",
+    "soulful conversations with award-winning",
+    "subscribe to the podcast",
+    "thank you for listening",
+    "thanks for tuning in",
+    "leave a review",
+    "follow us on",
+    "visit our website",
+    "connect with us on social",
+    "these conversations will help you",
+    "that awaken our souls and empower",
+    "dive beneath the surface of our lives",
+]
+
+
+def _is_intro_outro_chunk(text: str) -> bool:
+    """
+    Detect generic podcast intro/outro chunks that shouldn't appear as citations.
+    These chunks don't contain substantive wisdom relevant to any specific question.
+    """
+    lower = text.lower().strip()
+
+    # Count how many intro/outro markers appear in the first 200 chars
+    # (intros are front-loaded with these phrases)
+    check_region = lower[:250]
+    marker_hits = sum(1 for marker in _INTRO_OUTRO_MARKERS if marker in check_region)
+
+    # If 2+ markers appear, this is almost certainly an intro/outro
+    if marker_hits >= 2:
+        return True
+
+    # Also catch very short chunks that are just the intro jingle text
+    if len(lower) < 120 and marker_hits >= 1:
+        return True
+
+    return False
+
+
 def _build_citations(chunks: list[dict]) -> list[dict]:
     """
     Build citation dicts from chunk payloads.
     Extracted so the streaming path can reuse it without calling compose_answer.
+    Filters out generic intro/outro chunks that don't add value.
     """
     citations = []
     for chunk in chunks:
+        # Skip generic intro/outro chunks that don't contain substantive content
+        if _is_intro_outro_chunk(chunk["text"]):
+            continue
+
         episode = chunk["episode"]
         start_seconds = int(chunk["start_time"]) if chunk.get("start_time") else 0
         end_seconds = int(chunk["end_time"]) if chunk.get("end_time") else start_seconds + 30
@@ -350,10 +399,26 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
         stream=True,
     )
 
+    # Buffer tokens into small phrases (3-6 words) for smoother perceived streaming.
+    # Single-token SSE events feel jittery; short phrases feel more natural and
+    # reduce network overhead by ~5x.
+    buffer = ""
+    word_count = 0
     for chunk in stream:
         delta = chunk.choices[0].delta
         if delta.content:
-            yield delta.content
+            buffer += delta.content
+            word_count += delta.content.count(" ")
+
+            # Flush on: ≥4 words, sentence boundary, or paragraph break
+            if word_count >= 4 or buffer.rstrip().endswith((".", "!", "?", ":", "\n")):
+                yield buffer
+                buffer = ""
+                word_count = 0
+
+    # Flush any remaining content
+    if buffer:
+        yield buffer
 
 
 def _generate_basic_answer(question: str, chunks: list[dict]) -> str:

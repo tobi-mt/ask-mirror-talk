@@ -21,3 +21,9 @@ builder = "dockerfile"
 #   Settings > Deploy > Healthcheck: Disable
 #   Settings > Deploy > Start Command: python scripts/bulk_ingest.py --max-episodes 20 --no-confirm
 #   Settings > Variables > WHISPER_MODEL: tiny
+#
+# mirror-talk-qotd-cron service (optional, for daily push notifications):
+#   Settings > Build > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Cron Schedule: 0 9 * * * (9 AM UTC daily)
+#   Settings > Deploy > Start Command: python3 scripts/send_daily_qotd.py
+#   Settings > Variables: same DB + VAPID keys as the API service

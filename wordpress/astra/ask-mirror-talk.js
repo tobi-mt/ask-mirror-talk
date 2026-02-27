@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.6.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.8.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1029,5 +1029,299 @@
       });
     }
   } catch (e) { /* localStorage not available */ }
+
+  // ========================================
+  // PWA Install Prompt — "Add to Home Screen"
+  // ========================================
+
+  let deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    console.log('[PWA] Install prompt captured');
+    showInstallBanner();
+  });
+
+  function showInstallBanner() {
+    // Don't show if already dismissed this session
+    try {
+      if (sessionStorage.getItem('amt_install_dismissed')) return;
+    } catch (e) { /* storage not available */ }
+
+    // Don't show if already installed (standalone mode)
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+    // Remove any existing banner
+    const existing = document.getElementById('amt-install-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'amt-install-banner';
+    banner.className = 'amt-install-banner';
+    banner.innerHTML = `
+      <div class="amt-install-inner">
+        <div class="amt-install-text">
+          <strong>📲 Add Mirror Talk to your home screen</strong>
+          <span>Instant access, no app store needed</span>
+        </div>
+        <div class="amt-install-actions">
+          <button class="amt-install-btn" type="button">Install</button>
+          <button class="amt-install-dismiss" type="button" aria-label="Dismiss">✕</button>
+        </div>
+      </div>
+    `;
+
+    // Insert at the top of the widget
+    const widget = document.querySelector('.ask-mirror-talk');
+    if (widget) {
+      widget.insertBefore(banner, widget.firstChild);
+    } else {
+      document.body.appendChild(banner);
+    }
+
+    banner.querySelector('.amt-install-btn').addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const result = await deferredInstallPrompt.userChoice;
+      console.log('[PWA] User choice:', result.outcome);
+      deferredInstallPrompt = null;
+      banner.remove();
+    });
+
+    banner.querySelector('.amt-install-dismiss').addEventListener('click', () => {
+      banner.classList.add('amt-install-hiding');
+      setTimeout(() => banner.remove(), 300);
+      try { sessionStorage.setItem('amt_install_dismissed', '1'); } catch (e) {}
+    });
+
+    // Auto-dismiss after 15 seconds to avoid annoyance
+    setTimeout(() => {
+      if (banner.parentNode) {
+        banner.classList.add('amt-install-hiding');
+        setTimeout(() => banner.remove(), 300);
+      }
+    }, 15000);
+  }
+
+  // Listen for successful install
+  window.addEventListener('appinstalled', () => {
+    console.log('[PWA] App installed successfully');
+    deferredInstallPrompt = null;
+    const banner = document.getElementById('amt-install-banner');
+    if (banner) banner.remove();
+
+    // After install, prompt for notifications after a short delay
+    setTimeout(() => showNotificationOptIn(), 2000);
+  });
+
+  // ========================================
+  // Push Notifications — Daily QOTD & New Episodes
+  // ========================================
+
+  /**
+   * Show a friendly notification opt-in banner.
+   * Only shown if: Push API is available, permission not already decided,
+   * and user hasn't dismissed it this session.
+   */
+  function showNotificationOptIn() {
+    // Guard: Push API must be available
+    if (!('PushManager' in window) || !('Notification' in window)) return;
+
+    // Already granted or denied — don't nag
+    if (Notification.permission !== 'default') return;
+
+    // Don't show if dismissed this session
+    try {
+      if (sessionStorage.getItem('amt_notif_dismissed')) return;
+    } catch (e) {}
+
+    // Don't show if they dismissed permanently
+    try {
+      if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+    } catch (e) {}
+
+    // Remove any existing banner
+    const existing = document.getElementById('amt-notif-optin');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'amt-notif-optin';
+    banner.className = 'amt-notif-optin';
+    banner.innerHTML = `
+      <div class="amt-notif-inner">
+        <div class="amt-notif-text">
+          <strong>🔔 Get daily wisdom from Mirror Talk</strong>
+          <span>Receive the Question of the Day and new episode alerts</span>
+        </div>
+        <div class="amt-notif-actions">
+          <button class="amt-notif-enable" type="button">Enable</button>
+          <button class="amt-notif-dismiss" type="button" aria-label="Not now">Not now</button>
+        </div>
+      </div>
+      <div class="amt-notif-prefs" style="display:none;">
+        <label class="amt-notif-pref">
+          <input type="checkbox" id="amt-notif-qotd" checked>
+          <span>✨ Daily Question of the Day</span>
+        </label>
+        <label class="amt-notif-pref">
+          <input type="checkbox" id="amt-notif-episodes" checked>
+          <span>🎙️ New episode alerts</span>
+        </label>
+        <button class="amt-notif-save" type="button">Save & Enable</button>
+      </div>
+    `;
+
+    // Insert after the widget heading or at top of widget
+    const widget = document.querySelector('.ask-mirror-talk');
+    const heading = widget ? widget.querySelector('h2') : null;
+    if (heading && heading.nextSibling) {
+      widget.insertBefore(banner, heading.nextSibling);
+    } else if (widget) {
+      widget.appendChild(banner);
+    } else {
+      document.body.appendChild(banner);
+    }
+
+    // Show preferences on "Enable" click
+    banner.querySelector('.amt-notif-enable').addEventListener('click', () => {
+      banner.querySelector('.amt-notif-actions').style.display = 'none';
+      banner.querySelector('.amt-notif-prefs').style.display = '';
+    });
+
+    // "Save & Enable" — request permission and subscribe
+    banner.querySelector('.amt-notif-save').addEventListener('click', async () => {
+      const qotd = document.getElementById('amt-notif-qotd').checked;
+      const episodes = document.getElementById('amt-notif-episodes').checked;
+
+      banner.querySelector('.amt-notif-save').textContent = 'Enabling…';
+      banner.querySelector('.amt-notif-save').disabled = true;
+
+      const success = await subscribeToPush(qotd, episodes);
+      if (success) {
+        banner.innerHTML = `
+          <div class="amt-notif-inner amt-notif-success">
+            <span>✅ Notifications enabled! You'll receive daily wisdom from Mirror Talk.</span>
+          </div>
+        `;
+        setTimeout(() => {
+          banner.classList.add('amt-notif-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }, 3000);
+      } else {
+        banner.innerHTML = `
+          <div class="amt-notif-inner amt-notif-error">
+            <span>Unable to enable notifications. Please check your browser settings.</span>
+          </div>
+        `;
+        setTimeout(() => banner.remove(), 4000);
+      }
+    });
+
+    // Dismiss
+    banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
+      banner.classList.add('amt-notif-hiding');
+      setTimeout(() => banner.remove(), 300);
+      try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
+    });
+
+    // Auto-dismiss after 20 seconds
+    setTimeout(() => {
+      if (banner.parentNode && !banner.querySelector('.amt-notif-prefs[style=""]')) {
+        banner.classList.add('amt-notif-hiding');
+        setTimeout(() => banner.remove(), 300);
+      }
+    }, 20000);
+  }
+
+  /**
+   * Subscribe the browser to push notifications.
+   */
+  async function subscribeToPush(notifyQotd = true, notifyEpisodes = true) {
+    try {
+      // Request notification permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        console.warn('[Push] Permission denied');
+        return false;
+      }
+
+      // Get the VAPID public key from the API
+      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-key`);
+      if (!vapidRes.ok) {
+        console.warn('[Push] VAPID key not available');
+        return false;
+      }
+      const { public_key } = await vapidRes.json();
+
+      // Convert base64url to Uint8Array
+      const applicationServerKey = urlBase64ToUint8Array(public_key);
+
+      // Get the service worker registration
+      const registration = await navigator.serviceWorker.ready;
+
+      // Subscribe to push
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      });
+
+      const subJson = subscription.toJSON();
+
+      // Send subscription to our API
+      const res = await fetch(`${API_BASE}/api/push/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          notify_qotd: notifyQotd,
+          notify_new_episodes: notifyEpisodes,
+        }),
+      });
+
+      if (res.ok) {
+        console.log('[Push] Subscription registered successfully');
+        try { localStorage.setItem('amt_push_subscribed', '1'); } catch (e) {}
+        return true;
+      } else {
+        console.warn('[Push] Server rejected subscription:', res.status);
+        return false;
+      }
+    } catch (err) {
+      console.error('[Push] Subscription failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Convert a base64url-encoded string to a Uint8Array (for applicationServerKey).
+   */
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  // Show notification opt-in after a delay for returning visitors
+  // (New visitors see the install banner first, then notification prompt after install)
+  setTimeout(() => {
+    try {
+      // Only show if they've visited before (have a last session or are in standalone mode)
+      const isReturning = localStorage.getItem('amt_last_question') ||
+                          window.matchMedia('(display-mode: standalone)').matches;
+      const alreadySubscribed = localStorage.getItem('amt_push_subscribed');
+
+      if (isReturning && !alreadySubscribed) {
+        showNotificationOptIn();
+      }
+    } catch (e) {}
+  }, 8000);
 
 })();

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, DateTime, Text, Float, ForeignKey
+from sqlalchemy import String, Integer, DateTime, Text, Float, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
@@ -112,3 +112,19 @@ class UserFeedback(Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)  # Optional user comment
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     user_ip: Mapped[str] = mapped_column(String(100))
+
+
+class PushSubscription(Base):
+    """Store Web Push notification subscriptions from PWA users."""
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    p256dh_key: Mapped[str] = mapped_column(String(200))
+    auth_key: Mapped[str] = mapped_column(String(100))
+    user_ip: Mapped[str] = mapped_column(String(100))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_qotd: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_new_episodes: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)

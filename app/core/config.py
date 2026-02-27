@@ -101,5 +101,18 @@ class Settings(BaseSettings):
     admin_password: str = "change-me"
     admin_ip_allowlist: str = ""  # comma-separated CIDRs or IPs
 
+    # Push Notifications (VAPID)
+    vapid_public_key: str = ""  # Base64url-encoded public key for browser subscriptions
+    vapid_private_key: str = ""  # PEM-encoded private key for signing push messages
+    vapid_claim_email: str = ""  # Contact email for VAPID claims (e.g. mailto:you@example.com)
+
+    @field_validator("vapid_private_key")
+    @classmethod
+    def fix_vapid_pem(cls, v: str) -> str:
+        """Ensure literal \\n in PEM env vars become real newlines."""
+        if v and "\\n" in v:
+            v = v.replace("\\n", "\n")
+        return v
+
 
 settings = Settings()

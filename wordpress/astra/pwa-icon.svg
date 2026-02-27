@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#2e2a24"/>
+  
+  <!-- Warm gradient overlay -->
+  <rect width="512" height="512" rx="96" fill="url(#grad)" opacity="0.15"/>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4a857"/>
+      <stop offset="100%" stop-color="#8b7355"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Mirror/reflection symbol — two overlapping speech bubbles -->
+  <!-- Left bubble -->
+  <path d="M156 160 C156 130, 180 110, 220 110 L280 110 C320 110, 344 130, 344 160 L344 230 C344 260, 320 280, 280 280 L240 280 L210 310 L220 280 L220 280 C180 280, 156 260, 156 230 Z" 
+        fill="none" stroke="#faf8f4" stroke-width="8" opacity="0.5"/>
+  
+  <!-- Right bubble (main, overlapping) -->
+  <path d="M168 180 C168 145, 196 120, 240 120 L310 120 C354 120, 382 145, 382 180 L382 260 C382 295, 354 320, 310 320 L270 320 L235 355 L248 320 L240 320 C196 320, 168 295, 168 260 Z" 
+        fill="none" stroke="#faf8f4" stroke-width="10"/>
+  
+  <!-- "MT" text inside bubble -->
+  <text x="275" y="245" font-family="Georgia, serif" font-size="80" font-weight="700" 
+        fill="#faf8f4" text-anchor="middle" dominant-baseline="middle">MT</text>
+  
+  <!-- Subtle sparkle/star accent -->
+  <circle cx="360" cy="140" r="4" fill="#d4a857"/>
+  <circle cx="375" cy="155" r="2.5" fill="#d4a857" opacity="0.6"/>
+  
+  <!-- Bottom tagline -->
+  <text x="256" y="410" font-family="-apple-system, sans-serif" font-size="28" font-weight="600" 
+        fill="#8b7355" text-anchor="middle" letter-spacing="3">ASK</text>
+</svg>

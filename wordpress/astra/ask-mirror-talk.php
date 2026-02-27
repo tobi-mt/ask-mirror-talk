@@ -60,13 +60,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '3.6.0'
+        '3.8.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '3.6.0',
+        '3.8.0',
         true
     );
 
@@ -75,7 +75,7 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '3.6.0',
+        '3.8.0',
         true
     );
 
@@ -86,6 +86,57 @@ function ask_mirror_talk_enqueue_assets() {
     ));
 }
 add_action('wp_enqueue_scripts', 'ask_mirror_talk_enqueue_assets');
+
+/**
+ * PWA Support: manifest, meta tags, service worker registration, and Apple touch icons.
+ */
+function ask_mirror_talk_pwa_head() {
+    $theme_uri = get_stylesheet_directory_uri();
+    ?>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="<?php echo esc_url($theme_uri . '/manifest.json'); ?>" crossorigin="use-credentials">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2e2a24">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Apple PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Mirror Talk">
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="192x192" href="<?php echo esc_url($theme_uri . '/pwa-icon-192.png'); ?>">
+    <link rel="apple-touch-icon" sizes="512x512" href="<?php echo esc_url($theme_uri . '/pwa-icon-512.png'); ?>">
+
+    <!-- Apple Splash Screen (optional, improves iOS launch experience) -->
+    <meta name="apple-touch-fullscreen" content="yes">
+    <?php
+}
+add_action('wp_head', 'ask_mirror_talk_pwa_head', 1);
+
+/**
+ * PWA: Register service worker via inline script in footer.
+ */
+function ask_mirror_talk_pwa_footer() {
+    $theme_uri = get_stylesheet_directory_uri();
+    ?>
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('<?php echo esc_url($theme_uri . '/sw.js'); ?>', {
+                scope: '/'
+            }).then(function(reg) {
+                console.log('[PWA] Service Worker registered, scope:', reg.scope);
+            }).catch(function(err) {
+                console.warn('[PWA] Service Worker registration failed:', err);
+            });
+        });
+    }
+    </script>
+    <?php
+}
+add_action('wp_footer', 'ask_mirror_talk_pwa_footer', 99);
 
 /**
  * AJAX endpoint to refresh expired nonces without a full page reload.

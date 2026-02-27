@@ -398,6 +398,219 @@ def get_topics(db: Session = Depends(get_db)):
     return {"topics": result}
 
 
+# ── Push Notifications ─────────────────────────────────────────
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: dict  # {"p256dh": "...", "auth": "..."}
+    notify_qotd: bool = True
+    notify_new_episodes: bool = True
+
+
+class PushPreferencesRequest(BaseModel):
+    endpoint: str
+    notify_qotd: bool = True
+    notify_new_episodes: bool = True
+
+
+@app.get("/api/push/vapid-key")
+def get_vapid_public_key():
+    """Return the VAPID public key so the browser can subscribe."""
+    if not settings.vapid_public_key:
+        raise HTTPException(status_code=503, detail="Push notifications not configured")
+    return {"public_key": settings.vapid_public_key}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(
+    payload: PushSubscriptionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Register a browser push subscription.
+    If the endpoint already exists, reactivate it and update keys.
+    """
+    if not settings.vapid_public_key:
+        raise HTTPException(status_code=503, detail="Push notifications not configured")
+
+    p256dh = payload.keys.get("p256dh", "")
+    auth = payload.keys.get("auth", "")
+    if not p256dh or not auth:
+        raise HTTPException(status_code=400, detail="Missing p256dh or auth key")
+
+    try:
+        # Upsert: insert or update on conflict
+        db.execute(
+            text("""
+                INSERT INTO push_subscriptions (endpoint, p256dh_key, auth_key, user_ip,
+                                                 active, notify_qotd, notify_new_episodes,
+                                                 created_at, updated_at)
+                VALUES (:endpoint, :p256dh, :auth, :ip, true, :qotd, :episodes, NOW(), NOW())
+                ON CONFLICT (endpoint)
+                DO UPDATE SET
+                    p256dh_key = :p256dh,
+                    auth_key = :auth,
+                    user_ip = :ip,
+                    active = true,
+                    notify_qotd = :qotd,
+                    notify_new_episodes = :episodes,
+                    updated_at = NOW()
+            """),
+            {
+                "endpoint": payload.endpoint,
+                "p256dh": p256dh,
+                "auth": auth,
+                "ip": request.client.host,
+                "qotd": payload.notify_qotd,
+                "episodes": payload.notify_new_episodes,
+            },
+        )
+        db.commit()
+
+        subscriber_count = db.execute(
+            text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true")
+        ).scalar()
+
+        logger.info("Push subscription registered from %s (total active: %d)", request.client.host, subscriber_count)
+        return {"status": "subscribed", "total_subscribers": subscriber_count}
+
+    except Exception as e:
+        db.rollback()
+        logger.error("Push subscription error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to save subscription") from e
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Deactivate a push subscription."""
+    endpoint = payload.get("endpoint", "")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Missing endpoint")
+
+    try:
+        db.execute(
+            text("UPDATE push_subscriptions SET active = false, updated_at = NOW() WHERE endpoint = :endpoint"),
+            {"endpoint": endpoint},
+        )
+        db.commit()
+        logger.info("Push subscription deactivated from %s", request.client.host)
+        return {"status": "unsubscribed"}
+    except Exception as e:
+        db.rollback()
+        logger.error("Push unsubscribe error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to unsubscribe") from e
+
+
+@app.put("/api/push/preferences")
+def update_push_preferences(
+    payload: PushPreferencesRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Update notification preferences for an existing subscription."""
+    try:
+        result = db.execute(
+            text("""
+                UPDATE push_subscriptions
+                SET notify_qotd = :qotd,
+                    notify_new_episodes = :episodes,
+                    updated_at = NOW()
+                WHERE endpoint = :endpoint AND active = true
+            """),
+            {
+                "endpoint": payload.endpoint,
+                "qotd": payload.notify_qotd,
+                "episodes": payload.notify_new_episodes,
+            },
+        )
+        db.commit()
+
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        return {"status": "updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("Push preferences error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update preferences") from e
+
+
+@app.post("/api/push/send-qotd")
+def send_qotd_push(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin endpoint: Send today's QOTD as a push notification to all subscribers.
+    Protected by admin auth.
+    """
+    _admin_auth(credentials, request)
+
+    from app.notifications.push import send_qotd_notification
+    result = send_qotd_notification(db)
+    return result
+
+
+@app.post("/api/push/send-new-episode")
+def send_new_episode_push(
+    payload: dict,
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin endpoint: Notify subscribers about a new episode.
+    Protected by admin auth.
+
+    Body: {"episode_title": "...", "episode_id": 123}
+    """
+    _admin_auth(credentials, request)
+
+    title = payload.get("episode_title", "")
+    episode_id = payload.get("episode_id", 0)
+    if not title or not episode_id:
+        raise HTTPException(status_code=400, detail="Missing episode_title or episode_id")
+
+    from app.notifications.push import send_new_episode_notification
+    result = send_new_episode_notification(db, title, episode_id)
+    return result
+
+
+@app.get("/api/push/stats")
+def get_push_stats(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
+):
+    """Admin endpoint: Get push subscription statistics."""
+    _admin_auth(credentials, request)
+
+    total = db.execute(text("SELECT COUNT(*) FROM push_subscriptions")).scalar() or 0
+    active = db.execute(text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true")).scalar() or 0
+    qotd_enabled = db.execute(
+        text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true AND notify_qotd = true")
+    ).scalar() or 0
+    episodes_enabled = db.execute(
+        text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true AND notify_new_episodes = true")
+    ).scalar() or 0
+
+    return {
+        "total_subscriptions": total,
+        "active": active,
+        "inactive": total - active,
+        "qotd_enabled": qotd_enabled,
+        "new_episodes_enabled": episodes_enabled,
+    }
+
+
 @app.get("/api/cache/stats")
 def get_cache_stats():
     """Return answer cache statistics."""

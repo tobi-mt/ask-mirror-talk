@@ -5,17 +5,42 @@ Sends daily QOTD notifications and new episode alerts to subscribed users.
 Uses the Web Push protocol with VAPID authentication.
 """
 
+import base64
 import json
 import logging
 from datetime import datetime, timezone
 
 from pywebpush import webpush, WebPushException
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _get_vapid_private_key_b64() -> str:
+    """
+    Convert PEM-encoded VAPID private key to raw base64url format
+    that pywebpush expects.
+
+    pywebpush's webpush(vapid_private_key=...) expects a raw 32-byte
+    EC private key encoded as base64url, NOT a PEM string.
+    """
+    pem_str = settings.vapid_private_key
+    if not pem_str:
+        return ""
+
+    # If it's already base64url (no PEM markers), return as-is
+    if not pem_str.strip().startswith("-----"):
+        return pem_str
+
+    # Parse PEM → extract raw 32-byte private number → base64url encode
+    private_key = load_pem_private_key(pem_str.encode(), password=None)
+    private_numbers = private_key.private_numbers()
+    raw_bytes = private_numbers.private_value.to_bytes(32, byteorder="big")
+    return base64.urlsafe_b64encode(raw_bytes).decode().rstrip("=")
 
 
 def send_push_notification(
@@ -51,10 +76,15 @@ def send_push_notification(
     }
 
     try:
+        private_key_b64 = _get_vapid_private_key_b64()
+        if not private_key_b64:
+            logger.warning("Could not convert VAPID private key")
+            return "failed"
+
         webpush(
             subscription_info=subscription_info,
             data=json.dumps(payload),
-            vapid_private_key=settings.vapid_private_key,
+            vapid_private_key=private_key_b64,
             vapid_claims={"sub": f"mailto:{settings.vapid_claim_email}"},
         )
         return "sent"
@@ -78,21 +108,63 @@ def send_qotd_notification(db: Session) -> dict:
     Returns:
         dict with sent/failed/expired counts
     """
-    # Get today's QOTD (reuse the same logic as the API endpoint)
-    from app.api.main import _QOTD_POOL
-
     today = datetime.now(timezone.utc).date()
     index = today.toordinal() % len(_QOTD_POOL)
     qotd = _QOTD_POOL[index]
 
     return _broadcast_notification(
         db=db,
-        title=f"✨ {qotd['theme']} — Question of the Day",
+        title=f"\u2728 {qotd['theme']} \u2014 Question of the Day",
         body=qotd["question"],
-        url=f"/?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}#ask-mirror-talk-form",
+        url=f"/ask-mirror-talk/?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}#ask-mirror-talk-form",
         tag="qotd",
         notification_type="qotd",
     )
+
+
+# ── QOTD pool (self-contained so we don't need to import app.api.main) ──
+_QOTD_POOL = [
+    {"question": "How do I stop comparing myself to others?",               "theme": "Self-worth"},
+    {"question": "What does it mean to truly forgive someone?",             "theme": "Forgiveness"},
+    {"question": "How do I find peace when everything feels uncertain?",    "theme": "Inner peace"},
+    {"question": "What's the difference between being busy and being productive?", "theme": "Purpose"},
+    {"question": "How do I let go of things I can't control?",              "theme": "Surrender"},
+    {"question": "What does it look like to lead with vulnerability?",      "theme": "Leadership"},
+    {"question": "How can I rebuild trust after it's been broken?",         "theme": "Relationships"},
+    {"question": "What role does gratitude play in overcoming hardship?",   "theme": "Gratitude"},
+    {"question": "How do I know when it's time to walk away?",              "theme": "Boundaries"},
+    {"question": "What does Mirror Talk say about healing from trauma?",    "theme": "Healing"},
+    {"question": "How do I stay hopeful when grief feels overwhelming?",    "theme": "Grief"},
+    {"question": "What can I do when fear is holding me back?",             "theme": "Fear"},
+    {"question": "How do I raise kids who are emotionally resilient?",      "theme": "Parenting"},
+    {"question": "What's the first step to breaking a bad habit?",          "theme": "Addiction"},
+    {"question": "How do I have hard conversations without damaging the relationship?", "theme": "Communication"},
+    {"question": "What does alignment between faith and action look like?", "theme": "Faith"},
+    {"question": "How do I deal with loneliness even when I'm surrounded by people?", "theme": "Identity"},
+    {"question": "What can I learn from failure?",                          "theme": "Growth"},
+    {"question": "How do I set boundaries without feeling guilty?",         "theme": "Boundaries"},
+    {"question": "What does it mean to live authentically?",                "theme": "Identity"},
+    {"question": "How do I support someone who is grieving?",               "theme": "Grief"},
+    {"question": "What does healthy ambition look like?",                   "theme": "Purpose"},
+    {"question": "How do I find my voice when I've been silenced?",         "theme": "Empowerment"},
+    {"question": "What's the connection between physical health and emotional healing?", "theme": "Healing"},
+    {"question": "How do I move forward after a major life change?",        "theme": "Transition"},
+    {"question": "What does Mirror Talk teach about the power of community?", "theme": "Community"},
+    {"question": "How do I parent through my own unresolved pain?",         "theme": "Parenting"},
+    {"question": "What does rest really look like in a culture of hustle?", "theme": "Inner peace"},
+    {"question": "How do I love someone without losing myself?",            "theme": "Relationships"},
+    {"question": "What does courage look like in everyday life?",           "theme": "Fear"},
+    {"question": "How do I stop running from my emotions?",                 "theme": "Healing"},
+    {"question": "What does Mirror Talk say about money and purpose?",       "theme": "Purpose"},
+    {"question": "How do I handle criticism without shutting down?",         "theme": "Growth"},
+    {"question": "What does it take to be a better spouse?",                "theme": "Relationships"},
+    {"question": "How do I reconnect with my faith after doubt?",           "theme": "Faith"},
+    {"question": "What does Mirror Talk teach about mental health?",        "theme": "Healing"},
+    {"question": "How do I stop people-pleasing?",                          "theme": "Boundaries"},
+    {"question": "What does surrender look like in practice?",              "theme": "Surrender"},
+    {"question": "How do I raise my kids to know their worth?",             "theme": "Parenting"},
+    {"question": "What's the difference between loneliness and solitude?",  "theme": "Inner peace"},
+]
 
 
 def send_new_episode_notification(

@@ -2,7 +2,7 @@
   "name": "Ask Mirror Talk",
   "short_name": "Mirror Talk",
   "description": "Explore personal growth wisdom from the Mirror Talk podcast. Ask questions, discover insights, and listen to relevant episodes.",
-  "start_url": "/?utm_source=pwa&utm_medium=homescreen",
+  "start_url": "/ask-mirror-talk/?utm_source=pwa&utm_medium=homescreen",
   "display": "standalone",
   "background_color": "#faf8f4",
   "theme_color": "#2e2a24",
@@ -28,7 +28,7 @@
     {
       "name": "Ask a Question",
       "short_name": "Ask",
-      "url": "/?utm_source=pwa&utm_medium=shortcut#ask-mirror-talk-form",
+      "url": "/ask-mirror-talk/?utm_source=pwa&utm_medium=shortcut#ask-mirror-talk-form",
       "icons": []
     }
   ]

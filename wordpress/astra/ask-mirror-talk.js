@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.8.0 loaded');
+  console.log('Ask Mirror Talk Widget v3.9.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1116,6 +1116,62 @@
     setTimeout(() => showNotificationOptIn(), 2000);
   });
 
+  // ── iOS Safari fallback ──
+  // Safari doesn't fire 'beforeinstallprompt', so show a manual instruction banner.
+  (function showIOSInstallHint() {
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
+    const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true;
+
+    if (!isIOS || !isSafari || isStandalone) return;
+
+    // Don't show if dismissed
+    try {
+      if (sessionStorage.getItem('amt_install_dismissed')) return;
+      if (localStorage.getItem('amt_ios_install_dismissed')) return;
+    } catch (e) {}
+
+    // Show after a short delay
+    setTimeout(() => {
+      const widget = document.querySelector('.ask-mirror-talk');
+      if (!widget) return;
+
+      const banner = document.createElement('div');
+      banner.id = 'amt-install-banner';
+      banner.className = 'amt-install-banner amt-ios-install';
+      banner.innerHTML = `
+        <div class="amt-install-inner">
+          <div class="amt-install-text">
+            <strong>📲 Add Mirror Talk to your home screen</strong>
+            <span>Tap <strong>Share</strong> <span style="font-size:1.2em">⎋</span> then <strong>"Add to Home Screen"</strong></span>
+          </div>
+          <div class="amt-install-actions">
+            <button class="amt-install-dismiss" type="button" aria-label="Dismiss">✕</button>
+          </div>
+        </div>
+      `;
+      widget.insertBefore(banner, widget.firstChild);
+
+      banner.querySelector('.amt-install-dismiss').addEventListener('click', () => {
+        banner.classList.add('amt-install-hiding');
+        setTimeout(() => banner.remove(), 300);
+        try {
+          sessionStorage.setItem('amt_install_dismissed', '1');
+          localStorage.setItem('amt_ios_install_dismissed', '1');
+        } catch (e) {}
+      });
+
+      // Auto-dismiss after 20 seconds
+      setTimeout(() => {
+        if (banner.parentNode) {
+          banner.classList.add('amt-install-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 20000);
+    }, 3000);
+  })();
+
   // ========================================
   // Push Notifications — Daily QOTD & New Episodes
   // ========================================
@@ -1126,7 +1182,111 @@
    * and user hasn't dismissed it this session.
    */
   function showNotificationOptIn() {
-    // Guard: Push API must be available
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true;
+
+    // iOS Safari (not added to home screen): Push API is not available.
+    // Show a banner explaining they need to install the PWA first.
+    if (isIOS && !isStandalone) {
+      // Don't show if dismissed
+      try {
+        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+      } catch (e) {}
+
+      const existing = document.getElementById('amt-notif-optin');
+      if (existing) existing.remove();
+
+      const banner = document.createElement('div');
+      banner.id = 'amt-notif-optin';
+      banner.className = 'amt-notif-optin';
+      banner.innerHTML = `
+        <div class="amt-notif-inner">
+          <div class="amt-notif-text">
+            <strong>🔔 Want daily wisdom from Mirror Talk?</strong>
+            <span>To receive notifications on iOS, first add this app to your home screen: tap <strong>Share</strong> <span style="font-size:1.2em">⎋</span> then <strong>"Add to Home Screen"</strong>, then open it from there to enable alerts.</span>
+          </div>
+          <div class="amt-notif-actions">
+            <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
+          </div>
+        </div>
+      `;
+
+      const widget = document.querySelector('.ask-mirror-talk');
+      const heading = widget ? widget.querySelector('h2') : null;
+      if (heading && heading.nextSibling) {
+        widget.insertBefore(banner, heading.nextSibling);
+      } else if (widget) {
+        widget.appendChild(banner);
+      }
+
+      banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
+        banner.classList.add('amt-notif-hiding');
+        setTimeout(() => banner.remove(), 300);
+        try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
+      });
+
+      setTimeout(() => {
+        if (banner.parentNode) {
+          banner.classList.add('amt-notif-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 20000);
+
+      return;
+    }
+
+    // iOS standalone (home screen PWA) but Push API unavailable:
+    // This means iOS version is below 16.4. Show a helpful message.
+    if (isIOS && isStandalone && (!('PushManager' in window) || !('Notification' in window))) {
+      try {
+        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+      } catch (e) {}
+
+      const existing = document.getElementById('amt-notif-optin');
+      if (existing) existing.remove();
+
+      const banner = document.createElement('div');
+      banner.id = 'amt-notif-optin';
+      banner.className = 'amt-notif-optin';
+      banner.innerHTML = `
+        <div class="amt-notif-inner">
+          <div class="amt-notif-text">
+            <strong>🔔 Notifications require iOS 16.4+</strong>
+            <span>Your iOS version does not support push notifications for web apps. Please update your iPhone/iPad to iOS 16.4 or later in Settings > General > Software Update.</span>
+          </div>
+          <div class="amt-notif-actions">
+            <button class="amt-notif-dismiss" type="button" aria-label="OK">OK</button>
+          </div>
+        </div>
+      `;
+
+      const widget = document.querySelector('.ask-mirror-talk');
+      const heading = widget ? widget.querySelector('h2') : null;
+      if (heading && heading.nextSibling) {
+        widget.insertBefore(banner, heading.nextSibling);
+      } else if (widget) {
+        widget.appendChild(banner);
+      }
+
+      banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
+        banner.classList.add('amt-notif-hiding');
+        setTimeout(() => banner.remove(), 300);
+        try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
+      });
+
+      setTimeout(() => {
+        if (banner.parentNode) {
+          banner.classList.add('amt-notif-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 20000);
+
+      return;
+    }
+
+    // Guard: Push API must be available (non-iOS browsers without support)
     if (!('PushManager' in window) || !('Notification' in window)) return;
 
     // Already granted or denied — don't nag
@@ -1198,8 +1358,8 @@
       banner.querySelector('.amt-notif-save').textContent = 'Enabling…';
       banner.querySelector('.amt-notif-save').disabled = true;
 
-      const success = await subscribeToPush(qotd, episodes);
-      if (success) {
+      const result = await subscribeToPush(qotd, episodes);
+      if (result.success) {
         banner.innerHTML = `
           <div class="amt-notif-inner amt-notif-success">
             <span>✅ Notifications enabled! You'll receive daily wisdom from Mirror Talk.</span>
@@ -1210,12 +1370,22 @@
           setTimeout(() => banner.remove(), 300);
         }, 3000);
       } else {
+        let errorMsg;
+        if (result.reason === 'private') {
+          errorMsg = 'Notifications are not available in private/incognito mode. Please open Mirror Talk in a regular browser window to subscribe.';
+        } else if (result.reason === 'denied') {
+          errorMsg = 'Notification permission was blocked. To enable, tap the 🔒 icon in your address bar → Site settings → Notifications → Allow.';
+        } else if (result.reason === 'not_configured') {
+          errorMsg = 'Push notifications are being set up and will be available soon. Please check back later!';
+        } else {
+          errorMsg = 'Unable to enable notifications. Please try again later.';
+        }
         banner.innerHTML = `
           <div class="amt-notif-inner amt-notif-error">
-            <span>Unable to enable notifications. Please check your browser settings.</span>
+            <span>${errorMsg}</span>
           </div>
         `;
-        setTimeout(() => banner.remove(), 4000);
+        setTimeout(() => banner.remove(), 6000);
       }
     });
 
@@ -1236,22 +1406,46 @@
   }
 
   /**
+   * Detect if the browser is in private/incognito mode.
+   */
+  function isPrivateBrowsing() {
+    // Check if storage is restricted (common in private mode)
+    try {
+      localStorage.setItem('__amt_private_test', '1');
+      localStorage.removeItem('__amt_private_test');
+    } catch (e) {
+      return true;
+    }
+    // Safari private mode: serviceWorker may exist but registration always fails
+    // Firefox private: serviceWorker is undefined
+    if (!('serviceWorker' in navigator)) return true;
+    return false;
+  }
+
+  /**
    * Subscribe the browser to push notifications.
+   * Returns { success: boolean, reason?: string }
    */
   async function subscribeToPush(notifyQotd = true, notifyEpisodes = true) {
     try {
+      // Check for private browsing early
+      if (isPrivateBrowsing()) {
+        console.warn('[Push] Private/incognito mode detected');
+        return { success: false, reason: 'private' };
+      }
+
       // Request notification permission
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         console.warn('[Push] Permission denied');
-        return false;
+        return { success: false, reason: 'denied' };
       }
 
       // Get the VAPID public key from the API
       const vapidRes = await fetch(`${API_BASE}/api/push/vapid-key`);
       if (!vapidRes.ok) {
-        console.warn('[Push] VAPID key not available');
-        return false;
+        console.warn('[Push] VAPID key not available — server returned', vapidRes.status);
+        return { success: false, reason: 'not_configured' };
       }
       const { public_key } = await vapidRes.json();
 
@@ -1284,14 +1478,19 @@
       if (res.ok) {
         console.log('[Push] Subscription registered successfully');
         try { localStorage.setItem('amt_push_subscribed', '1'); } catch (e) {}
-        return true;
+        return { success: true };
       } else {
         console.warn('[Push] Server rejected subscription:', res.status);
-        return false;
+        return { success: false, reason: 'server' };
       }
     } catch (err) {
       console.error('[Push] Subscription failed:', err);
-      return false;
+      // Common in private mode: DOMException about storage or AbortError
+      if (err.name === 'NotAllowedError' || err.name === 'AbortError' ||
+          (err.message && err.message.includes('storage'))) {
+        return { success: false, reason: 'private' };
+      }
+      return { success: false, reason: 'error' };
     }
   }
 
@@ -1309,19 +1508,24 @@
     return outputArray;
   }
 
-  // Show notification opt-in after a delay for returning visitors
-  // (New visitors see the install banner first, then notification prompt after install)
+  // Show notification opt-in after a delay.
+  // For returning visitors: show after 5 seconds.
+  // For new visitors: show after 15 seconds (give them time to explore first).
+  // The install banner is separate and handled by 'beforeinstallprompt'.
   setTimeout(() => {
     try {
-      // Only show if they've visited before (have a last session or are in standalone mode)
-      const isReturning = localStorage.getItem('amt_last_question') ||
-                          window.matchMedia('(display-mode: standalone)').matches;
       const alreadySubscribed = localStorage.getItem('amt_push_subscribed');
 
-      if (isReturning && !alreadySubscribed) {
+      if (!alreadySubscribed) {
         showNotificationOptIn();
       }
     } catch (e) {}
-  }, 8000);
+  }, (() => {
+    try {
+      const isReturning = localStorage.getItem('amt_last_question') ||
+                          window.matchMedia('(display-mode: standalone)').matches;
+      return isReturning ? 5000 : 15000;
+    } catch (e) { return 10000; }
+  })());
 
 })();

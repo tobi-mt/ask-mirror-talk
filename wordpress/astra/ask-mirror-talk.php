@@ -60,13 +60,13 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.css',
         array(),
-        '3.8.0'
+        '3.9.0'
     );
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
-        '3.8.0',
+        '3.9.0',
         true
     );
 
@@ -75,7 +75,7 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-analytics',
         $theme_uri . '/analytics-addon.js',
         array('ask-mirror-talk'),
-        '3.8.0',
+        '3.9.0',
         true
     );
 
@@ -93,8 +93,8 @@ add_action('wp_enqueue_scripts', 'ask_mirror_talk_enqueue_assets');
 function ask_mirror_talk_pwa_head() {
     $theme_uri = get_stylesheet_directory_uri();
     ?>
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="<?php echo esc_url($theme_uri . '/manifest.json'); ?>" crossorigin="use-credentials">
+    <!-- PWA Manifest — served from same origin, no CORS needed -->
+    <link rel="manifest" href="/manifest.json">
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#2e2a24">
@@ -116,15 +116,82 @@ function ask_mirror_talk_pwa_head() {
 add_action('wp_head', 'ask_mirror_talk_pwa_head', 1);
 
 /**
+ * PWA: Serve service worker from root URL (/sw.js) with proper scope header.
+ *
+ * Browsers restrict SW scope to the directory the file is served from.
+ * Since our SW lives in /wp-content/themes/astra/sw.js but needs scope "/",
+ * we intercept the request very early (before WordPress routing) and serve
+ * the file with the required Service-Worker-Allowed header.
+ *
+ * This approach does NOT rely on add_rewrite_rule (which requires flushing
+ * permalinks and can conflict with LiteSpeed/LSCWP caching on Hostinger).
+ * Instead, it hooks into 'init' and checks the raw REQUEST_URI.
+ *
+ * Alternative: place a physical sw.js file in the WordPress document root.
+ */
+function ask_mirror_talk_serve_sw() {
+    // Parse the request URI and check if it's /sw.js (ignore query strings)
+    $request_path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($request_path !== '/sw.js') {
+        return;
+    }
+
+    $sw_file = get_stylesheet_directory() . '/sw.js';
+    if (file_exists($sw_file)) {
+        // Prevent any output buffering or caching from interfering
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        http_response_code(200);
+        header('Content-Type: application/javascript; charset=UTF-8');
+        header('Service-Worker-Allowed: /');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        header('X-Content-Type-Options: nosniff');
+        readfile($sw_file);
+        exit;
+    }
+}
+add_action('init', 'ask_mirror_talk_serve_sw', 0); // Priority 0 = run first
+
+/**
+ * PWA: Serve manifest.json from root URL (/manifest.json).
+ * Same approach as the service worker — intercept early, no rewrite rules needed.
+ */
+function ask_mirror_talk_serve_manifest() {
+    $request_path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($request_path !== '/manifest.json') {
+        return;
+    }
+
+    $manifest_file = get_stylesheet_directory() . '/manifest.json';
+    if (file_exists($manifest_file)) {
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        http_response_code(200);
+        header('Content-Type: application/manifest+json; charset=UTF-8');
+        header('Cache-Control: public, max-age=86400');
+        header('X-Content-Type-Options: nosniff');
+        readfile($manifest_file);
+        exit;
+    }
+}
+add_action('init', 'ask_mirror_talk_serve_manifest', 0);
+
+/**
  * PWA: Register service worker via inline script in footer.
+ * Uses the root-level /sw.js proxy URL so scope: '/' works correctly.
  */
 function ask_mirror_talk_pwa_footer() {
-    $theme_uri = get_stylesheet_directory_uri();
     ?>
     <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-            navigator.serviceWorker.register('<?php echo esc_url($theme_uri . '/sw.js'); ?>', {
+            navigator.serviceWorker.register('/sw.js', {
                 scope: '/'
             }).then(function(reg) {
                 console.log('[PWA] Service Worker registered, scope:', reg.scope);

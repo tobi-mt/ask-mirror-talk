@@ -1,0 +1,516 @@
+/* ========================================
+   Ask Mirror Talk - Enhanced UX Features
+   Quick Wins: Visual Feedback & Micro-interactions
+   ======================================== */
+
+/* ========================================
+   1. PULSING QOTD CARD
+   ======================================== */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(212, 165, 116, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(212, 165, 116, 0);
+  }
+}
+
+.amt-qotd-inner {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.amt-qotd-inner:hover {
+  animation: none;
+  transform: translateY(-2px);
+  transition: transform 0.3s ease;
+}
+
+/* ========================================
+   2. RIPPLE EFFECT ON BUTTONS
+   ======================================== */
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.amt-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.amt-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+}
+
+.amt-ripple.active::after {
+  animation: ripple 0.6s ease-out;
+}
+
+/* ========================================
+   3. SUCCESS CELEBRATION ANIMATION
+   ======================================== */
+@keyframes celebrate {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.amt-celebrate {
+  animation: celebrate 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.amt-confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-warm, #d4a574);
+  animation: confetti 1s ease-out forwards;
+  pointer-events: none;
+}
+
+/* ========================================
+   4. SKELETON LOADERS
+   ======================================== */
+@keyframes skeleton-loading {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.amt-skeleton {
+  background: linear-gradient(90deg,
+    #f0f0f0 0px,
+    #e0e0e0 40px,
+    #f0f0f0 80px
+  );
+  background-size: 200px 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.amt-skeleton-line {
+  height: 16px;
+  margin-bottom: 8px;
+}
+
+.amt-skeleton-line:last-child {
+  width: 70%;
+}
+
+/* ========================================
+   5. PROGRESS INDICATOR WITH TIME
+   ======================================== */
+.amt-progress-container {
+  position: relative;
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(46, 42, 36, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(46, 42, 36, 0.08);
+}
+
+.amt-progress-bar {
+  height: 4px;
+  background: #e6e2dc;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.amt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2e2a24, #8b7355);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.amt-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: progress-shine 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-shine {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.amt-progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #6b665d;
+}
+
+.amt-progress-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.amt-progress-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.amt-progress-icon {
+  font-size: 16px;
+}
+
+/* ========================================
+   6. ESTIMATED READING TIME
+   ======================================== */
+.amt-reading-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(123, 168, 168, 0.1);
+  border-radius: 16px;
+  font-size: 13px;
+  color: #6b665d;
+  margin-bottom: 16px;
+}
+
+.amt-reading-time-icon {
+  font-size: 14px;
+}
+
+/* ========================================
+   7. SMOOTH STATE TRANSITIONS
+   ======================================== */
+.amt-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.amt-fade-out {
+  animation: fadeOut 0.3s ease-in;
+}
+
+.amt-slide-up {
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.amt-slide-down {
+  animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   8. WORD COUNT DURING STREAMING
+   ======================================== */
+.amt-streaming-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(46, 42, 36, 0.03);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #8b8378;
+  margin-top: 12px;
+  border: 1px solid rgba(46, 42, 36, 0.05);
+}
+
+.amt-streaming-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.amt-streaming-icon {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ========================================
+   9. CITATION HOVER EFFECTS
+   ======================================== */
+.ask-mirror-talk-citations li {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.ask-mirror-talk-citations li::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 0;
+  background: linear-gradient(180deg, #d4a574, #8b7355);
+  border-radius: 2px;
+  transition: height 0.3s ease;
+}
+
+.ask-mirror-talk-citations li:hover::before {
+  height: 70%;
+}
+
+.ask-mirror-talk-citations li:hover {
+  transform: translateX(8px);
+  background: rgba(212, 165, 116, 0.05);
+}
+
+/* ========================================
+   10. FLOATING ACTION BUTTON (Mobile)
+   ======================================== */
+.amt-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 16px rgba(46, 42, 36, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+}
+
+.amt-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 24px rgba(46, 42, 36, 0.4);
+}
+
+.amt-fab:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 768px) {
+  .amt-fab {
+    display: none; /* Hide on desktop */
+  }
+}
+
+/* ========================================
+   11. BOTTOM SHEET (Mobile Citations)
+   ======================================== */
+.amt-bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1001;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.amt-bottom-sheet.active {
+  transform: translateY(0);
+}
+
+.amt-bottom-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: #d4cec6;
+  border-radius: 2px;
+  margin: 12px auto 16px;
+}
+
+.amt-bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+}
+
+.amt-bottom-sheet-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ========================================
+   12. TOOLTIP ENHANCEMENTS
+   ======================================== */
+.amt-tooltip {
+  position: relative;
+  cursor: help;
+}
+
+.amt-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: 8px 12px;
+  background: #2e2a24;
+  color: #fff;
+  font-size: 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 1000;
+}
+
+.amt-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #2e2a24;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.amt-tooltip:hover::after,
+.amt-tooltip:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-12px);
+}
+
+/* ========================================
+   13. ACCESSIBILITY - REDUCED MOTION
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ========================================
+   14. FOCUS VISIBLE (Keyboard Navigation)
+   ======================================== */
+*:focus-visible {
+  outline: 2px solid #d4a574;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ========================================
+   15. HAPTIC FEEDBACK INDICATOR
+   ======================================== */
+@keyframes haptic-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.amt-haptic-active {
+  animation: haptic-pulse 0.15s ease-out;
+}

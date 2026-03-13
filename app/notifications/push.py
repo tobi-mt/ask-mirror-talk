@@ -48,13 +48,24 @@ def send_push_notification(
     title: str,
     body: str,
     url: str = "/",
-    icon: str = "/wp-content/themes/astra/pwa-icon-192.png",
-    badge: str = "/wp-content/themes/astra/pwa-icon-192.png",
+    icon: str = "/wp-content/themes/astra-child/pwa-icon-192.png",
+    badge: str = "/wp-content/themes/astra-child/pwa-icon-192.png",
     tag: str = "mirror-talk",
     data: dict | None = None,
+    image: str | None = None,
+    actions: list[dict] | None = None,
+    require_interaction: bool = False,
+    vibrate: list[int] | None = None,
 ) -> str:
     """
-    Send a push notification to a single subscriber.
+    Send a premium push notification to a single subscriber.
+
+    Enhanced with:
+    - Custom vibration patterns
+    - Action buttons
+    - Large images
+    - Rich data
+    - Interaction requirements
 
     Returns:
         "sent"    — delivered successfully
@@ -73,7 +84,17 @@ def send_push_notification(
         "tag": tag,
         "url": url,
         "data": data or {},
+        "requireInteraction": require_interaction,
+        "vibrate": vibrate or [100, 50, 100],  # Default: subtle pulse pattern
     }
+    
+    # Add image for visual appeal
+    if image:
+        payload["image"] = image
+    
+    # Add action buttons
+    if actions:
+        payload["actions"] = actions
 
     try:
         private_key_b64 = _get_vapid_private_key_b64()
@@ -103,7 +124,14 @@ def send_push_notification(
 
 def send_qotd_notification(db: Session) -> dict:
     """
-    Send today's Question of the Day as a push notification to all subscribers.
+    Send today's Question of the Day as a premium push notification to all subscribers.
+    
+    Enhanced with:
+    - Compelling, emoji-rich titles
+    - Actionable CTAs
+    - Vibration patterns
+    - Action buttons
+    - Premium messaging
 
     Returns:
         dict with sent/failed/expired counts
@@ -111,59 +139,91 @@ def send_qotd_notification(db: Session) -> dict:
     today = datetime.now(timezone.utc).date()
     index = today.toordinal() % len(_QOTD_POOL)
     qotd = _QOTD_POOL[index]
+    
+    # Create premium title with emotional hooks
+    title = f"{qotd['emoji']} {qotd['hook']}"
+    
+    # Add compelling subtitle/body
+    body = f"{qotd['question']} Tap to discover wisdom from Mirror Talk."
+    
+    # Create action buttons
+    actions = [
+        {
+            "action": "answer",
+            "title": "💬 Get Answer",
+            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
+        },
+        {
+            "action": "save",
+            "title": "🔖 Save for Later",
+            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
+        }
+    ]
+    
+    # Premium vibration pattern (double pulse)
+    vibrate = [200, 100, 200]
 
     return _broadcast_notification(
         db=db,
-        title=f"\u2728 {qotd['theme']} \u2014 Question of the Day",
-        body=qotd["question"],
-        url=f"/ask-mirror-talk/?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}#ask-mirror-talk-form",
-        tag="qotd",
+        title=title,
+        body=body,
+        url=f"/ask-mirror-talk/?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}&qotd={qotd['id']}#ask-mirror-talk-form",
+        tag=f"qotd-{today.isoformat()}",
         notification_type="qotd",
+        data={
+            "question": qotd["question"],
+            "theme": qotd["theme"],
+            "qotd_id": qotd["id"],
+            "date": today.isoformat()
+        },
+        actions=actions,
+        vibrate=vibrate,
+        require_interaction=True,  # Keep visible until user interacts
     )
 
 
-# ── QOTD pool (self-contained so we don't need to import app.api.main) ──
+# ── PREMIUM QOTD POOL (compelling, emoji-rich, action-oriented) ──
 _QOTD_POOL = [
-    {"question": "How do I stop comparing myself to others?",               "theme": "Self-worth"},
-    {"question": "What does it mean to truly forgive someone?",             "theme": "Forgiveness"},
-    {"question": "How do I find peace when everything feels uncertain?",    "theme": "Inner peace"},
-    {"question": "What's the difference between being busy and being productive?", "theme": "Purpose"},
-    {"question": "How do I let go of things I can't control?",              "theme": "Surrender"},
-    {"question": "What does it look like to lead with vulnerability?",      "theme": "Leadership"},
-    {"question": "How can I rebuild trust after it's been broken?",         "theme": "Relationships"},
-    {"question": "What role does gratitude play in overcoming hardship?",   "theme": "Gratitude"},
-    {"question": "How do I know when it's time to walk away?",              "theme": "Boundaries"},
-    {"question": "What does Mirror Talk say about healing from trauma?",    "theme": "Healing"},
-    {"question": "How do I stay hopeful when grief feels overwhelming?",    "theme": "Grief"},
-    {"question": "What can I do when fear is holding me back?",             "theme": "Fear"},
-    {"question": "How do I raise kids who are emotionally resilient?",      "theme": "Parenting"},
-    {"question": "What's the first step to breaking a bad habit?",          "theme": "Addiction"},
-    {"question": "How do I have hard conversations without damaging the relationship?", "theme": "Communication"},
-    {"question": "What does alignment between faith and action look like?", "theme": "Faith"},
-    {"question": "How do I deal with loneliness even when I'm surrounded by people?", "theme": "Identity"},
-    {"question": "What can I learn from failure?",                          "theme": "Growth"},
-    {"question": "How do I set boundaries without feeling guilty?",         "theme": "Boundaries"},
-    {"question": "What does it mean to live authentically?",                "theme": "Identity"},
-    {"question": "How do I support someone who is grieving?",               "theme": "Grief"},
-    {"question": "What does healthy ambition look like?",                   "theme": "Purpose"},
-    {"question": "How do I find my voice when I've been silenced?",         "theme": "Empowerment"},
-    {"question": "What's the connection between physical health and emotional healing?", "theme": "Healing"},
-    {"question": "How do I move forward after a major life change?",        "theme": "Transition"},
-    {"question": "What does Mirror Talk teach about the power of community?", "theme": "Community"},
-    {"question": "How do I parent through my own unresolved pain?",         "theme": "Parenting"},
-    {"question": "What does rest really look like in a culture of hustle?", "theme": "Inner peace"},
-    {"question": "How do I love someone without losing myself?",            "theme": "Relationships"},
-    {"question": "What does courage look like in everyday life?",           "theme": "Fear"},
-    {"question": "How do I stop running from my emotions?",                 "theme": "Healing"},
-    {"question": "What does Mirror Talk say about money and purpose?",       "theme": "Purpose"},
-    {"question": "How do I handle criticism without shutting down?",         "theme": "Growth"},
-    {"question": "What does it take to be a better spouse?",                "theme": "Relationships"},
-    {"question": "How do I reconnect with my faith after doubt?",           "theme": "Faith"},
-    {"question": "What does Mirror Talk teach about mental health?",        "theme": "Healing"},
-    {"question": "How do I stop people-pleasing?",                          "theme": "Boundaries"},
-    {"question": "What does surrender look like in practice?",              "theme": "Surrender"},
-    {"question": "How do I raise my kids to know their worth?",             "theme": "Parenting"},
-    {"question": "What's the difference between loneliness and solitude?",  "theme": "Inner peace"},
+    {"id": 1,  "emoji": "✨", "hook": "Today's Wisdom: Self-Worth",           "question": "How do I stop comparing myself to others?",               "theme": "Self-worth"},
+    {"id": 2,  "emoji": "💫", "hook": "Your Daily Insight: Forgiveness",      "question": "What does it mean to truly forgive someone?",             "theme": "Forgiveness"},
+    {"id": 3,  "emoji": "🌊", "hook": "Find Peace: Today's Question",         "question": "How do I find peace when everything feels uncertain?",    "theme": "Inner peace"},
+    {"id": 4,  "emoji": "🎯", "hook": "Unlock Your Purpose",                 "question": "What's the difference between being busy and being productive?", "theme": "Purpose"},
+    {"id": 5,  "emoji": "🕊️", "hook": "Let Go: Daily Wisdom",                "question": "How do I let go of things I can't control?",              "theme": "Surrender"},
+    {"id": 6,  "emoji": "💪", "hook": "Lead with Courage",                   "question": "What does it look like to lead with vulnerability?",      "theme": "Leadership"},
+    {"id": 7,  "emoji": "🤝", "hook": "Rebuild & Heal",                      "question": "How can I rebuild trust after it's been broken?",         "theme": "Relationships"},
+    {"id": 8,  "emoji": "🙏", "hook": "Transform Through Gratitude",         "question": "What role does gratitude play in overcoming hardship?",   "theme": "Gratitude"},
+    {"id": 9,  "emoji": "🚪", "hook": "Know When to Walk Away",              "question": "How do I know when it's time to walk away?",              "theme": "Boundaries"},
+    {"id": 10, "emoji": "💚", "hook": "Healing Starts Here",                 "question": "What does Mirror Talk say about healing from trauma?",    "theme": "Healing"},
+    {"id": 11, "emoji": "🌟", "hook": "Hope in Grief",                       "question": "How do I stay hopeful when grief feels overwhelming?",    "theme": "Grief"},
+    {"id": 12, "emoji": "🔥", "hook": "Conquer Your Fear",                   "question": "What can I do when fear is holding me back?",             "theme": "Fear"},
+    {"id": 13, "emoji": "👨‍👩‍👧", "hook": "Raise Resilient Kids",                "question": "How do I raise kids who are emotionally resilient?",      "theme": "Parenting"},
+    {"id": 14, "emoji": "⚡", "hook": "Break Free Today",                    "question": "What's the first step to breaking a bad habit?",          "theme": "Addiction"},
+    {"id": 15, "emoji": "💬", "hook": "Master Difficult Conversations",      "question": "How do I have hard conversations without damaging the relationship?", "theme": "Communication"},
+    {"id": 16, "emoji": "🙌", "hook": "Faith in Action",                     "question": "What does alignment between faith and action look like?", "theme": "Faith"},
+    {"id": 17, "emoji": "🌈", "hook": "Overcome Loneliness",                 "question": "How do I deal with loneliness even when I'm surrounded by people?", "theme": "Identity"},
+    {"id": 18, "emoji": "📈", "hook": "Learn from Failure",                  "question": "What can I learn from failure?",                          "theme": "Growth"},
+    {"id": 19, "emoji": "🛡️", "hook": "Boundaries Without Guilt",            "question": "How do I set boundaries without feeling guilty?",         "theme": "Boundaries"},
+    {"id": 20, "emoji": "💎", "hook": "Live Authentically",                  "question": "What does it mean to live authentically?",                "theme": "Identity"},
+    {"id": 21, "emoji": "🤲", "hook": "Support Someone in Grief",            "question": "How do I support someone who is grieving?",               "theme": "Grief"},
+    {"id": 22, "emoji": "🎪", "hook": "Healthy Ambition Unlocked",           "question": "What does healthy ambition look like?",                   "theme": "Purpose"},
+    {"id": 23, "emoji": "📣", "hook": "Find Your Voice",                     "question": "How do I find my voice when I've been silenced?",         "theme": "Empowerment"},
+    {"id": 24, "emoji": "🏃", "hook": "Mind-Body Connection",                "question": "What's the connection between physical health and emotional healing?", "theme": "Healing"},
+    {"id": 25, "emoji": "🔄", "hook": "Navigate Life Transitions",           "question": "How do I move forward after a major life change?",        "theme": "Transition"},
+    {"id": 26, "emoji": "🏘️", "hook": "The Power of Community",              "question": "What does Mirror Talk teach about the power of community?", "theme": "Community"},
+    {"id": 27, "emoji": "👪", "hook": "Parent with Awareness",               "question": "How do I parent through my own unresolved pain?",         "theme": "Parenting"},
+    {"id": 28, "emoji": "😌", "hook": "Rest Without Guilt",                  "question": "What does rest really look like in a culture of hustle?", "theme": "Inner peace"},
+    {"id": 29, "emoji": "❤️", "hook": "Love Without Losing Yourself",        "question": "How do I love someone without losing myself?",            "theme": "Relationships"},
+    {"id": 30, "emoji": "🦁", "hook": "Everyday Courage",                    "question": "What does courage look like in everyday life?",           "theme": "Fear"},
+    {"id": 31, "emoji": "🎭", "hook": "Embrace Your Emotions",               "question": "How do I stop running from my emotions?",                 "theme": "Healing"},
+    {"id": 32, "emoji": "💰", "hook": "Money & Purpose Aligned",             "question": "What does Mirror Talk say about money and purpose?",      "theme": "Purpose"},
+    {"id": 33, "emoji": "🌱", "hook": "Handle Criticism Gracefully",         "question": "How do I handle criticism without shutting down?",        "theme": "Growth"},
+    {"id": 34, "emoji": "💑", "hook": "Become a Better Spouse",              "question": "What does it take to be a better spouse?",                "theme": "Relationships"},
+    {"id": 35, "emoji": "🙏", "hook": "Rebuild Your Faith",                  "question": "How do I reconnect with my faith after doubt?",           "theme": "Faith"},
+    {"id": 36, "emoji": "🧠", "hook": "Mental Health Wisdom",                "question": "What does Mirror Talk teach about mental health?",        "theme": "Healing"},
+    {"id": 37, "emoji": "🚫", "hook": "Stop People-Pleasing",                "question": "How do I stop people-pleasing?",                          "theme": "Boundaries"},
+    {"id": 38, "emoji": "🤲", "hook": "Surrender in Practice",               "question": "What does surrender look like in practice?",              "theme": "Surrender"},
+    {"id": 39, "emoji": "👑", "hook": "Raise Kids Who Know Their Worth",     "question": "How do I raise my kids to know their worth?",             "theme": "Parenting"},
+    {"id": 40, "emoji": "🧘", "hook": "Loneliness vs. Solitude",             "question": "What's the difference between loneliness and solitude?",  "theme": "Inner peace"},
 ]
 
 
@@ -173,19 +233,49 @@ def send_new_episode_notification(
     episode_id: int,
 ) -> dict:
     """
-    Notify subscribers about a newly ingested episode.
+    Notify subscribers about a newly ingested episode with premium styling.
+    
+    Enhanced with:
+    - Compelling title with emoji
+    - Action buttons
+    - Episode metadata
+    - Premium vibration
 
     Returns:
         dict with sent/failed/expired counts
     """
+    # Create premium title with visual appeal
+    title = f"🎙️ Fresh Wisdom: New Episode!"
+    body = f'"{episode_title}" — Discover insights now. Tap to explore!'
+    
+    # Action buttons
+    actions = [
+        {
+            "action": "explore",
+            "title": "🔍 Explore Now",
+            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
+        },
+        {
+            "action": "remind",
+            "title": "🔔 Remind Me Later",
+            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
+        }
+    ]
+    
+    # Energetic vibration pattern
+    vibrate = [150, 75, 150, 75, 150]
+    
     return _broadcast_notification(
         db=db,
-        title="🎙️ New Mirror Talk Episode",
-        body=f'"{episode_title}" — Ask a question about this episode now!',
+        title=title,
+        body=body,
         url=f"/?utm_source=push&utm_medium=new_episode&utm_campaign=ep{episode_id}#ask-mirror-talk-form",
         tag=f"new-episode-{episode_id}",
         notification_type="new_episode",
         data={"episode_id": episode_id, "episode_title": episode_title},
+        actions=actions,
+        vibrate=vibrate,
+        require_interaction=False,  # Allow auto-dismiss after viewing
     )
 
 
@@ -197,10 +287,21 @@ def _broadcast_notification(
     tag: str,
     notification_type: str,
     data: dict | None = None,
+    actions: list[dict] | None = None,
+    vibrate: list[int] | None = None,
+    require_interaction: bool = False,
+    image: str | None = None,
 ) -> dict:
     """
-    Send a notification to all active push subscribers.
+    Send a premium notification to all active push subscribers.
     Automatically cleans up expired subscriptions.
+    
+    Enhanced with full support for:
+    - Action buttons
+    - Custom vibration patterns
+    - Images
+    - Interaction requirements
+    - Rich data payloads
     """
     # Fetch all active subscriptions
     rows = db.execute(
@@ -215,7 +316,7 @@ def _broadcast_notification(
         logger.info("No active push subscribers for %s notification", notification_type)
         return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
 
-    logger.info("Sending %s notification to %d subscribers", notification_type, len(rows))
+    logger.info("Sending premium %s notification to %d subscribers", notification_type, len(rows))
 
     sent = 0
     failed = 0
@@ -235,6 +336,10 @@ def _broadcast_notification(
             url=url,
             tag=tag,
             data=data,
+            actions=actions,
+            vibrate=vibrate,
+            require_interaction=require_interaction,
+            image=image,
         )
 
         if result == "sent":
@@ -260,5 +365,5 @@ def _broadcast_notification(
         "expired": len(expired_ids),
         "total_subscribers": len(rows),
     }
-    logger.info("Push notification result: %s", result)
+    logger.info("Premium push notification result: %s", result)
     return result

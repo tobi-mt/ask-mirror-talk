@@ -56,7 +56,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.2.0'; // Fix: citations display:none regression + depth label
+    $version = '4.3.0'; // Fix: scroll to top of response on load completion
     
     // Core styles
     wp_enqueue_style(

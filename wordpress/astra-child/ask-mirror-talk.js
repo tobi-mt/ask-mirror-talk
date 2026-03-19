@@ -242,9 +242,7 @@
       followupsList.appendChild(btn);
     });
     followupsContainer.style.display = '';
-    setTimeout(() => {
-      followupsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 300);
+    // No auto-scroll to follow-ups — user is reading the answer from top to bottom.
   }
 
   // Rotating loading messages for engagement
@@ -788,6 +786,12 @@
             // Add share button and SEO schema after answer is complete
             addShareButton(question, answerText);
             injectFAQSchema(question, answerText);
+
+            // Scroll to top of response so user reads from the beginning.
+            // Small delay lets the DOM finish painting the depth indicator + share button.
+            setTimeout(() => {
+              responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
           }
         } catch (parseErr) {
           console.warn('SSE parse error:', parseErr, jsonStr);

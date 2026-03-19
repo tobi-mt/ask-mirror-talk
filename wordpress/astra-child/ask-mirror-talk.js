@@ -51,13 +51,12 @@
     return false;
   }
 
-  // Hide response and citations on initial load if empty
+  // Response container starts hidden via display:none — revealed smoothly on first question.
+  // Citations start hidden; CSS controls visibility via .amt-visible class.
   if (responseContainer && (!output.innerHTML || output.innerHTML.trim() === '')) {
     responseContainer.style.display = 'none';
   }
-  if (citationsContainer) {
-    citationsContainer.style.display = 'none';
-  }
+  // citationsContainer opacity is 0 by CSS default; no inline display:none needed.
 
   // ─── Question of the Day ─────────────────────────────────────
   function loadQuestionOfTheDay() {
@@ -356,13 +355,20 @@
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
 
+      // Reveal response container with smooth fade-in (display:none → block then opacity transition)
       responseContainer.style.display = '';
+      responseContainer.classList.add('amt-loading-state');
+      // rAF: let browser paint display:block first, then trigger opacity transition
+      requestAnimationFrame(() => responseContainer.classList.add('amt-visible'));
       responseContainer.querySelector('h3').textContent = 'Response';
 
       output.innerHTML = `
         <div class="amt-loading">
-          <div class="amt-loading-dots">
-            <span></span><span></span><span></span>
+          <div class="amt-shimmer-group">
+            <div class="amt-shimmer"></div>
+            <div class="amt-shimmer"></div>
+            <div class="amt-shimmer"></div>
+            <div class="amt-shimmer"></div>
           </div>
           <div class="amt-loading-text">${loadingMessages[0]}</div>
         </div>
@@ -382,21 +388,29 @@
       }, 3000);
 
       citations.innerHTML = "";
-      citationsContainer.style.display = "none";
+      // Hide citations smoothly — remove visible class; display:none needed since CSS opacity:0 alone
+      // doesn't prevent citations from taking vertical space in some browsers when non-empty
+      citationsContainer.classList.remove('amt-visible');
+      setTimeout(() => {
+        if (!citationsContainer.classList.contains('amt-visible')) {
+          citationsContainer.style.display = 'none';
+        }
+      }, 350);
     } else {
       clearInterval(loadingInterval);
       loadingInterval = null;
       submitBtn.disabled = false;
       submitBtn.textContent = 'Ask';
       input.disabled = false;
-      responseContainer.classList.remove('amt-streaming');
+      responseContainer.classList.remove('amt-streaming', 'amt-loading-state');
     }
   }
 
   // Show error message with shake animation
   function showError(message) {
     responseContainer.style.display = '';
-    responseContainer.classList.remove('amt-streaming');
+    requestAnimationFrame(() => responseContainer.classList.add('amt-visible'));
+    responseContainer.classList.remove('amt-streaming', 'amt-loading-state');
     output.classList.add('error');
     output.innerHTML = `<p><strong>⚠️ ${message}</strong></p>`;
     citations.innerHTML = "";
@@ -635,10 +649,17 @@
         citations.appendChild(li);
       });
 
-      citationsContainer.style.display = "block";
+      // Fade citations in smoothly
+      citationsContainer.style.display = '';
+      requestAnimationFrame(() => citationsContainer.classList.add('amt-visible'));
     } else {
       citations.innerHTML = "";
-      citationsContainer.style.display = "none";
+      citationsContainer.classList.remove('amt-visible');
+      setTimeout(() => {
+        if (!citationsContainer.classList.contains('amt-visible')) {
+          citationsContainer.style.display = 'none';
+        }
+      }, 350);
     }
   }
 
@@ -672,10 +693,9 @@
     responseContainer.classList.add('amt-streaming');
     lastDepthMessage = '';
 
-    // Scroll the response container into view once at start so the user
-    // can watch the answer appear; we won't auto-scroll after that to
-    // avoid bouncing the page.
-    responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Scroll response into view once at start — use 'nearest' to avoid forcing
+    // a scroll when the user is already looking at the right area.
+    responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     while (true) {
       const { done, value } = await reader.read();

@@ -128,3 +128,18 @@ class PushSubscription(Base):
     notify_new_episodes: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class PushQotdHistory(Base):
+    """Track which QOTD questions have been sent to each push subscriber.
+
+    Enables no-repeat delivery: each subscriber cycles through the full pool
+    before any question is repeated. When all questions are exhausted the
+    history for that subscriber is cleared and the cycle restarts.
+    """
+    __tablename__ = "push_qotd_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int] = mapped_column(Integer, index=True)
+    qotd_id: Mapped[int] = mapped_column(Integer)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

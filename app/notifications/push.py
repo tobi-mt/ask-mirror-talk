@@ -124,73 +124,141 @@ def send_push_notification(
 
 def send_qotd_notification(db: Session) -> dict:
     """
-    Send today's Question of the Day as a premium push notification to all subscribers.
-    
-    Enhanced with:
-    - Compelling, emoji-rich titles
-    - Actionable CTAs
-    - Vibration patterns
-    - Action buttons
-    - Premium messaging
+    Send an individualised QOTD push notification to each subscriber.
 
-    Returns:
-        dict with sent/failed/expired counts
+    Each subscriber receives the next question in the pool that they have
+    NOT yet been sent — no repeats until all 40 have been delivered, at
+    which point their history is cleared and the cycle restarts.
+
+    Delivery is tracked in the push_qotd_history table.
     """
-    today = datetime.now(timezone.utc).date()
-    index = today.toordinal() % len(_QOTD_POOL)
-    qotd = _QOTD_POOL[index]
-    
-    # Create premium title with emotional hooks
-    title = f"{qotd['emoji']} {qotd['hook']}"
-    
-    # Add compelling subtitle/body
-    body = f"{qotd['question']} Tap to discover wisdom from Mirror Talk."
-    
-    # Create action buttons
-    actions = [
-        {
-            "action": "answer",
-            "title": "💬 Get Answer",
-            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
-        },
-        {
-            "action": "save",
-            "title": "🔖 Save for Later",
-            "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
-        }
-    ]
-    
-    # Premium vibration pattern (double pulse)
-    vibrate = [200, 100, 200]
-
-    # Encode the question into the URL so the widget auto-submits it on load
-    # without requiring the user to click anything — ?autoask= is detected
-    # by ask-mirror-talk.js and triggers an immediate form submission.
     from urllib.parse import quote
-    auto_url = (
-        f"/ask-mirror-talk/"
-        f"?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}"
-        f"&autoask={quote(qotd['question'])}"
-        f"#ask-mirror-talk-form"
-    )
 
-    return _broadcast_notification(
-        db=db,
-        title=title,
-        body=body,
-        url=auto_url,
-        tag=f"qotd-{today.isoformat()}",
-        notification_type="qotd",
-        data={
-            "question": qotd["question"],
-            "theme": qotd["theme"],
-            "qotd_id": qotd["id"],
-            "date": today.isoformat()
-        },
-        actions=actions,
-        vibrate=vibrate,
-        require_interaction=True,  # Keep visible until user interacts
-    )
+    # Fetch all active QOTD subscribers
+    rows = db.execute(
+        text("""
+            SELECT id, endpoint, p256dh_key, auth_key
+            FROM push_subscriptions
+            WHERE active = true AND notify_qotd = true
+        """)
+    ).fetchall()
+
+    if not rows:
+        logger.info("No active QOTD subscribers")
+        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+
+    logger.info("Sending individualised QOTD to %d subscribers", len(rows))
+
+    pool_ids = [q["id"] for q in _QOTD_POOL]
+    pool_by_id = {q["id"]: q for q in _QOTD_POOL}
+
+    today = datetime.now(timezone.utc).date()
+    sent = 0
+    failed = 0
+    expired_ids: list[int] = []
+
+    for row in rows:
+        sub_id, endpoint, p256dh, auth = row
+
+        # Which questions has this subscriber already received?
+        seen_rows = db.execute(
+            text("SELECT qotd_id FROM push_qotd_history WHERE subscription_id = :sid"),
+            {"sid": sub_id},
+        ).fetchall()
+        seen_ids = {r[0] for r in seen_rows}
+
+        # Find the first unseen question (preserving pool order)
+        next_qotd = next((pool_by_id[qid] for qid in pool_ids if qid not in seen_ids), None)
+
+        # Full cycle complete — reset history and start over
+        if next_qotd is None:
+            db.execute(
+                text("DELETE FROM push_qotd_history WHERE subscription_id = :sid"),
+                {"sid": sub_id},
+            )
+            db.flush()
+            next_qotd = pool_by_id[pool_ids[0]]
+
+        qotd = next_qotd
+        title = f"{qotd['emoji']} {qotd['hook']}"
+        body = f"{qotd['question']} Tap to discover wisdom from Mirror Talk."
+
+        actions = [
+            {
+                "action": "answer",
+                "title": "💬 Get Answer",
+                "icon": "/wp-content/themes/astra-child/pwa-icon-192.png",
+            },
+            {
+                "action": "save",
+                "title": "🔖 Save for Later",
+                "icon": "/wp-content/themes/astra-child/pwa-icon-192.png",
+            },
+        ]
+
+        auto_url = (
+            f"/ask-mirror-talk/"
+            f"?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}"
+            f"&autoask={quote(qotd['question'])}"
+            f"#ask-mirror-talk-form"
+        )
+
+        subscription_info = {
+            "endpoint": endpoint,
+            "keys": {"p256dh": p256dh, "auth": auth},
+        }
+
+        result = send_push_notification(
+            subscription_info=subscription_info,
+            title=title,
+            body=body,
+            url=auto_url,
+            tag=f"qotd-{today.isoformat()}",
+            data={
+                "question": qotd["question"],
+                "theme": qotd["theme"],
+                "qotd_id": qotd["id"],
+                "date": today.isoformat(),
+            },
+            actions=actions,
+            vibrate=[200, 100, 200],
+            require_interaction=True,
+        )
+
+        if result == "sent":
+            sent += 1
+            # Record delivery so this question won't be sent again
+            db.execute(
+                text(
+                    "INSERT INTO push_qotd_history (subscription_id, qotd_id, sent_at) "
+                    "VALUES (:sid, :qid, NOW())"
+                ),
+                {"sid": sub_id, "qid": qotd["id"]},
+            )
+        elif result == "expired":
+            expired_ids.append(sub_id)
+            failed += 1
+        else:
+            failed += 1
+
+    # Deactivate expired subscriptions
+    if expired_ids:
+        db.execute(
+            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
+            {"ids": expired_ids},
+        )
+
+    db.commit()
+    logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    result_summary = {
+        "sent": sent,
+        "failed": failed,
+        "expired": len(expired_ids),
+        "total_subscribers": len(rows),
+    }
+    logger.info("Individualised QOTD result: %s", result_summary)
+    return result_summary
 
 
 # ── PREMIUM QOTD POOL (compelling, emoji-rich, action-oriented) ──

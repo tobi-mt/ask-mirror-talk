@@ -51,12 +51,16 @@
     return false;
   }
 
-  // Response container starts hidden via display:none — revealed smoothly on first question.
-  // Citations start hidden; CSS controls visibility via .amt-visible class.
-  if (responseContainer && (!output.innerHTML || output.innerHTML.trim() === '')) {
-    responseContainer.style.display = 'none';
+  // Response container: hidden if empty on page load, immediately visible if it has content.
+  if (responseContainer) {
+    if (!output.innerHTML || output.innerHTML.trim() === '') {
+      responseContainer.style.display = 'none';
+    } else {
+      // Pre-existing content (e.g. cached answer visible on page load) — show immediately.
+      responseContainer.classList.add('amt-visible');
+    }
   }
-  // citationsContainer opacity is 0 by CSS default; no inline display:none needed.
+  // Citations: CSS default is display:none so the h3 heading doesn't create blank space.
 
   // ─── Question of the Day ─────────────────────────────────────
   function loadQuestionOfTheDay() {

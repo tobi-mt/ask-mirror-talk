@@ -314,7 +314,9 @@
    ======================================== */
 .ask-mirror-talk-citations {
   margin-top: 28px;
-  /* Fade-in instead of display toggle — no layout jump */
+  /* display:none collapses the h3 heading so no blank space appears on page load.
+     JS reveals it via: display:'' then rAF .amt-visible for the opacity transition. */
+  display: none;
   opacity: 0;
   transform: translateY(4px);
   pointer-events: none;

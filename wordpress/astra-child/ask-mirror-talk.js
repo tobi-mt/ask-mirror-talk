@@ -653,8 +653,10 @@
         citations.appendChild(li);
       });
 
-      // Fade citations in smoothly
-      citationsContainer.style.display = '';
+      // Reveal citations: must explicitly set display:block (not '') because the CSS
+      // default for .ask-mirror-talk-citations is display:none — clearing the inline
+      // style would just fall back to the CSS rule and keep it hidden.
+      citationsContainer.style.display = 'block';
       requestAnimationFrame(() => citationsContainer.classList.add('amt-visible'));
     } else {
       citations.innerHTML = "";
@@ -719,8 +721,9 @@
           const event = JSON.parse(jsonStr);
 
           if (event.type === 'status') {
-            // Capture depth messages like "Drawing from 6 episodes…"
-            if (event.message && event.message.includes('episode')) {
+            // Only capture the final depth message (e.g. "Drawing from 6 episodes…")
+            // — not the initial "Searching episodes…" loading message.
+            if (event.message && event.message.startsWith('Drawing from')) {
               lastDepthMessage = event.message;
             }
             // Update the loading text with backend progress

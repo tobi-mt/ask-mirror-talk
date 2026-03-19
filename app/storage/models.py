@@ -133,9 +133,9 @@ class PushSubscription(Base):
 class PushQotdHistory(Base):
     """Track which QOTD questions have been sent to each push subscriber.
 
-    Enables no-repeat delivery: each subscriber cycles through the full pool
-    before any question is repeated. When all questions are exhausted the
-    history for that subscriber is cleared and the cycle restarts.
+    Enables no-repeat delivery: each subscriber gets the next question from the
+    global push_qotd_questions pool that they haven't seen yet. New questions are
+    AI-generated and appended to the pool before it can be exhausted.
     """
     __tablename__ = "push_qotd_history"
 
@@ -143,3 +143,21 @@ class PushQotdHistory(Base):
     subscription_id: Mapped[int] = mapped_column(Integer, index=True)
     qotd_id: Mapped[int] = mapped_column(Integer)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class PushQotdQuestion(Base):
+    """Pool of QOTD questions — seeded from static list, expanded by AI generation.
+
+    New questions are generated via GPT and appended whenever any subscriber is
+    within REFILL_THRESHOLD questions of exhausting the pool, so the pool never
+    runs dry and questions are never repeated.
+    """
+    __tablename__ = "push_qotd_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    theme: Mapped[str] = mapped_column(String(100))
+    emoji: Mapped[str] = mapped_column(String(20))
+    hook: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(20), default="static")  # "static" | "generated"
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

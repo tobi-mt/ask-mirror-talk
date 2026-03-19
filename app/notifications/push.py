@@ -122,17 +122,159 @@ def send_push_notification(
         return "failed"
 
 
+def _load_pool_from_db(db: Session) -> list[dict]:
+    """Return all questions from push_qotd_questions ordered by id."""
+    rows = db.execute(
+        text("SELECT id, question, theme, emoji, hook FROM push_qotd_questions ORDER BY id")
+    ).fetchall()
+    return [{"id": r[0], "question": r[1], "theme": r[2], "emoji": r[3], "hook": r[4]} for r in rows]
+
+
+def _ensure_pool_seeded(db: Session) -> None:
+    """Seed push_qotd_questions from the static list if the table is empty."""
+    count = db.execute(text("SELECT COUNT(*) FROM push_qotd_questions")).scalar()
+    if count == 0:
+        logger.info("Seeding QOTD pool from static list (%d questions)", len(_QOTD_POOL))
+        for q in _QOTD_POOL:
+            db.execute(
+                text(
+                    "INSERT INTO push_qotd_questions (question, theme, emoji, hook, source) "
+                    "VALUES (:question, :theme, :emoji, :hook, 'static')"
+                ),
+                {"question": q["question"], "theme": q["theme"], "emoji": q["emoji"], "hook": q["hook"]},
+            )
+        db.commit()
+        logger.info("✓ QOTD pool seeded")
+
+
+def generate_qotd_batch(db: Session, n: int = 20) -> int:
+    """
+    Generate n new QOTD questions via GPT and append them to push_qotd_questions.
+
+    The prompt is grounded in real episode titles and themes from the corpus so
+    questions stay relevant to Mirror Talk content.  Duplicate detection prevents
+    re-inserting a question that already exists in the pool (exact match).
+
+    Returns the number of questions actually inserted.
+    """
+    import os
+    from openai import OpenAI
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        from app.core.config import settings
+        api_key = settings.openai_api_key
+    if not api_key:
+        logger.warning("Cannot generate QOTD batch: OPENAI_API_KEY not set")
+        return 0
+
+    # Sample up to 20 episode titles to ground the prompt in real content
+    episode_rows = db.execute(
+        text("SELECT title FROM episodes ORDER BY published_at DESC LIMIT 20")
+    ).fetchall()
+    episode_titles = [r[0] for r in episode_rows]
+
+    # Fetch existing questions so we instruct GPT to avoid them
+    existing_rows = db.execute(text("SELECT question FROM push_qotd_questions")).fetchall()
+    existing_questions = {r[0].strip().lower() for r in existing_rows}
+
+    themes = [
+        "Self-worth", "Forgiveness", "Inner peace", "Purpose", "Surrender",
+        "Leadership", "Relationships", "Gratitude", "Boundaries", "Healing",
+        "Grief", "Fear", "Parenting", "Growth", "Communication",
+        "Faith", "Identity", "Empowerment", "Transition", "Community",
+    ]
+
+    prompt = f"""You are creating push notification questions for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
+
+Recent Mirror Talk episodes include:
+{chr(10).join(f"- {t}" for t in episode_titles[:10])}
+
+Generate exactly {n} unique, compelling questions a listener might ask about the podcast's wisdom. Each question should be something a real person would genuinely wonder about.
+
+Rules:
+- Each question must be distinct in theme and wording
+- Use natural, conversational language (not academic)
+- Questions should be answerable using podcast insights
+- Cover a range of these themes: {", ".join(themes)}
+- Do NOT repeat any of these existing questions: {", ".join(list(existing_questions)[:20])}
+
+Respond with a JSON array of objects. Each object must have exactly these keys:
+  "question" (string), "theme" (one of the themes above), "emoji" (single emoji), "hook" (short 3-6 word title, e.g. "Heal Your Inner Child")
+
+Example: {{"question": "How do I stop self-sabotaging?", "theme": "Growth", "emoji": "🌱", "hook": "Break the Cycle"}}
+
+Return only the JSON array, no other text."""
+
+    client = OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=2000,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        import json
+        questions = json.loads(raw.strip())
+    except Exception as e:
+        logger.error("QOTD generation failed: %s", e, exc_info=True)
+        return 0
+
+    inserted = 0
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        question_text = str(q.get("question", "")).strip()
+        if not question_text or question_text.lower() in existing_questions:
+            continue
+        db.execute(
+            text(
+                "INSERT INTO push_qotd_questions (question, theme, emoji, hook, source) "
+                "VALUES (:question, :theme, :emoji, :hook, 'generated')"
+            ),
+            {
+                "question": question_text,
+                "theme": str(q.get("theme", "Growth"))[:100],
+                "emoji": str(q.get("emoji", "✨"))[:20],
+                "hook": str(q.get("hook", "Today's Question"))[:200],
+            },
+        )
+        existing_questions.add(question_text.lower())
+        inserted += 1
+
+    if inserted:
+        db.commit()
+        logger.info("✓ Generated and inserted %d new QOTD questions", inserted)
+    return inserted
+
+
+# How many unseen questions must remain in the global pool for any subscriber
+# before a fresh batch is generated. Keeps the pool comfortably ahead.
+_REFILL_THRESHOLD = 10
+_REFILL_BATCH_SIZE = 20
+
+
 def send_qotd_notification(db: Session) -> dict:
     """
-    Send an individualised QOTD push notification to each subscriber.
+    Send an individualised, no-repeat QOTD push notification to each subscriber.
 
-    Each subscriber receives the next question in the pool that they have
-    NOT yet been sent — no repeats until all 40 have been delivered, at
-    which point their history is cleared and the cycle restarts.
-
-    Delivery is tracked in the push_qotd_history table.
+    Questions come from the push_qotd_questions DB table (seeded from the static
+    list; expanded by AI generation). Each subscriber gets the next question in
+    the pool they haven't received yet.  When any subscriber is within
+    _REFILL_THRESHOLD questions of exhausting the pool, a new AI-generated batch
+    is appended automatically before sends begin — so the pool never runs dry and
+    questions are never repeated.
     """
     from urllib.parse import quote
+
+    # Ensure the DB pool is seeded (no-op if already populated)
+    _ensure_pool_seeded(db)
 
     # Fetch all active QOTD subscribers
     rows = db.execute(
@@ -149,8 +291,35 @@ def send_qotd_notification(db: Session) -> dict:
 
     logger.info("Sending individualised QOTD to %d subscribers", len(rows))
 
-    pool_ids = [q["id"] for q in _QOTD_POOL]
-    pool_by_id = {q["id"]: q for q in _QOTD_POOL}
+    # ── Proactive refill check ──────────────────────────────────────────────
+    # Find the subscriber who has seen the most questions (furthest along), then
+    # check if the remaining pool for them is below the threshold.
+    pool_size = db.execute(text("SELECT COUNT(*) FROM push_qotd_questions")).scalar() or 0
+    max_seen = db.execute(
+        text("""
+            SELECT COALESCE(MAX(seen_count), 0)
+            FROM (
+                SELECT COUNT(*) AS seen_count
+                FROM push_qotd_history
+                WHERE subscription_id = ANY(:sids)
+                GROUP BY subscription_id
+            ) sub
+        """),
+        {"sids": [r[0] for r in rows]},
+    ).scalar() or 0
+
+    unseen_headroom = pool_size - max_seen
+    if unseen_headroom < _REFILL_THRESHOLD:
+        logger.info(
+            "Pool headroom %d < threshold %d — generating %d new questions",
+            unseen_headroom, _REFILL_THRESHOLD, _REFILL_BATCH_SIZE,
+        )
+        generate_qotd_batch(db, n=_REFILL_BATCH_SIZE)
+
+    # Reload pool after potential expansion
+    pool = _load_pool_from_db(db)
+    pool_ids = [q["id"] for q in pool]
+    pool_by_id = {q["id"]: q for q in pool}
 
     today = datetime.now(timezone.utc).date()
     sent = 0
@@ -167,17 +336,13 @@ def send_qotd_notification(db: Session) -> dict:
         ).fetchall()
         seen_ids = {r[0] for r in seen_rows}
 
-        # Find the first unseen question (preserving pool order)
+        # Pick the first unseen question (pool order = chronological insertion)
         next_qotd = next((pool_by_id[qid] for qid in pool_ids if qid not in seen_ids), None)
 
-        # Full cycle complete — reset history and start over
+        # Should never happen after the refill above, but guard anyway
         if next_qotd is None:
-            db.execute(
-                text("DELETE FROM push_qotd_history WHERE subscription_id = :sid"),
-                {"sid": sub_id},
-            )
-            db.flush()
-            next_qotd = pool_by_id[pool_ids[0]]
+            logger.warning("Subscriber %d has seen all %d questions — skipping", sub_id, len(pool))
+            continue
 
         qotd = next_qotd
         title = f"{qotd['emoji']} {qotd['hook']}"
@@ -227,7 +392,6 @@ def send_qotd_notification(db: Session) -> dict:
 
         if result == "sent":
             sent += 1
-            # Record delivery so this question won't be sent again
             db.execute(
                 text(
                     "INSERT INTO push_qotd_history (subscription_id, qotd_id, sent_at) "
@@ -241,7 +405,6 @@ def send_qotd_notification(db: Session) -> dict:
         else:
             failed += 1
 
-    # Deactivate expired subscriptions
     if expired_ids:
         db.execute(
             text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
@@ -249,7 +412,8 @@ def send_qotd_notification(db: Session) -> dict:
         )
 
     db.commit()
-    logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+    if expired_ids:
+        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
 
     result_summary = {
         "sent": sent,
@@ -261,7 +425,9 @@ def send_qotd_notification(db: Session) -> dict:
     return result_summary
 
 
-# ── PREMIUM QOTD POOL (compelling, emoji-rich, action-oriented) ──
+# ── STATIC SEED POOL ────────────────────────────────────────────────────────
+# Used only to seed push_qotd_questions on first run.  Do not use directly
+# in send_qotd_notification — always read from the DB table instead.
 _QOTD_POOL = [
     {"id": 1,  "emoji": "✨", "hook": "Today's Wisdom: Self-Worth",           "question": "How do I stop comparing myself to others?",               "theme": "Self-worth"},
     {"id": 2,  "emoji": "💫", "hook": "Your Daily Insight: Forgiveness",      "question": "What does it mean to truly forgive someone?",             "theme": "Forgiveness"},
@@ -304,6 +470,8 @@ _QOTD_POOL = [
     {"id": 39, "emoji": "👑", "hook": "Raise Kids Who Know Their Worth",     "question": "How do I raise my kids to know their worth?",             "theme": "Parenting"},
     {"id": 40, "emoji": "🧘", "hook": "Loneliness vs. Solitude",             "question": "What's the difference between loneliness and solitude?",  "theme": "Inner peace"},
 ]
+
+
 
 
 def send_new_episode_notification(

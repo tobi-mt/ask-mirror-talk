@@ -97,6 +97,51 @@
       });
   }
 
+  // ─── Auto-submit helper ──────────────────────────────────────
+  // Used by both the URL ?autoask= path and the SW postMessage path.
+  function autoSubmitQuestion(question) {
+    if (!question || !form) return;
+    input.value = question;
+    // Hide the QOTD card so the answer takes centre stage
+    if (qotdContainer) qotdContainer.style.display = 'none';
+    // Scroll the form into view smoothly before firing
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Short delay so the scroll completes and the page paint is visible
+    setTimeout(() => {
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }, 300);
+  }
+
+  // ─── Handle ?autoask= URL param (notification click → new tab) ─
+  (function checkAutoAsk() {
+    const params = new URLSearchParams(window.location.search);
+    const question = params.get('autoask');
+    if (question) {
+      // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
+      const cleanUrl = window.location.pathname +
+        (params.toString().replace(/autoask=[^&]*&?/, '').replace(/&$/, '').replace(/^\?$/, '') || '') +
+        window.location.hash;
+      history.replaceState(null, '', cleanUrl || window.location.pathname);
+
+      // Wait for DOM to be fully ready then auto-submit
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => autoSubmitQuestion(question));
+      } else {
+        // Tiny delay to let the widget's own init finish
+        setTimeout(() => autoSubmitQuestion(question), 100);
+      }
+    }
+  })();
+
+  // ─── Handle AUTO_SUBMIT from service worker (already-open tab) ─
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
+        autoSubmitQuestion(event.data.question);
+      }
+    });
+  }
+
   loadQuestionOfTheDay();
 
   // ─── Suggested Questions ────────────────────────────────────

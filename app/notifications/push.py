@@ -163,11 +163,22 @@ def send_qotd_notification(db: Session) -> dict:
     # Premium vibration pattern (double pulse)
     vibrate = [200, 100, 200]
 
+    # Encode the question into the URL so the widget auto-submits it on load
+    # without requiring the user to click anything — ?autoask= is detected
+    # by ask-mirror-talk.js and triggers an immediate form submission.
+    from urllib.parse import quote
+    auto_url = (
+        f"/ask-mirror-talk/"
+        f"?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}"
+        f"&autoask={quote(qotd['question'])}"
+        f"#ask-mirror-talk-form"
+    )
+
     return _broadcast_notification(
         db=db,
         title=title,
         body=body,
-        url=f"/ask-mirror-talk/?utm_source=push&utm_medium=qotd&utm_campaign={today.isoformat()}&qotd={qotd['id']}#ask-mirror-talk-form",
+        url=auto_url,
         tag=f"qotd-{today.isoformat()}",
         notification_type="qotd",
         data={

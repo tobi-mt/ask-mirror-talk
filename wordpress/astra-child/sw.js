@@ -206,44 +206,61 @@ self.addEventListener('notificationclick', (event) => {
 
   const action = event.action;
   const data = event.notification.data;
-  const targetUrl = data?.url || '/';
+  const baseUrl = data?.url || '/';
 
-  // Handle specific actions
-  if (action === 'dismiss' || action === 'save' || action === 'remind') {
-    // Save notification for later (could store in IndexedDB)
-    if (action === 'save' || action === 'remind') {
-      // Store in IndexedDB or localStorage for "Saved Questions" feature
-      event.waitUntil(
-        self.clients.matchAll({ type: 'window' }).then((clients) => {
-          if (clients.length > 0) {
-            clients[0].postMessage({
-              type: 'SAVE_NOTIFICATION',
-              data: {
-                title: event.notification.title,
-                body: event.notification.body,
-                url: targetUrl,
-                savedAt: Date.now(),
-              }
-            });
-          }
-        })
-      );
-    }
+  // Handle dismiss/save actions without opening the app
+  if (action === 'dismiss') {
     return;
   }
 
-  // For "answer" or "explore" or "open" actions, open the app
+  if (action === 'save' || action === 'remind') {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window' }).then((windowClients) => {
+        if (windowClients.length > 0) {
+          windowClients[0].postMessage({
+            type: 'SAVE_NOTIFICATION',
+            data: {
+              title: event.notification.title,
+              body: event.notification.body,
+              url: baseUrl,
+              savedAt: Date.now(),
+            }
+          });
+        }
+      })
+    );
+    return;
+  }
+
+  // For "answer" action or plain notification body tap:
+  // Build a URL with ?autoask= so the widget immediately submits the
+  // question without any extra tap. The question comes from notification.data
+  // which is always set by send_qotd_notification().
+  const question = data?.question;
+  let targetUrl = baseUrl;
+  if (question) {
+    // Remove any existing hash, append autoask param, restore hash
+    const hashIdx = targetUrl.indexOf('#');
+    const hash = hashIdx !== -1 ? targetUrl.slice(hashIdx) : '#ask-mirror-talk-form';
+    const base = hashIdx !== -1 ? targetUrl.slice(0, hashIdx) : targetUrl;
+    const separator = base.includes('?') ? '&' : '?';
+    targetUrl = `${base}${separator}autoask=${encodeURIComponent(question)}${hash}`;
+  }
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If the site is already open, focus it and navigate
+      // If the Mirror Talk page is already open, post a message so it
+      // auto-submits immediately without a full page reload
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url.includes(self.location.origin)) {
+          if (question) {
+            client.postMessage({ type: 'AUTO_SUBMIT', question });
+          }
           client.focus();
-          client.navigate(targetUrl);
           return;
         }
       }
-      // Otherwise open a new window
+      // Otherwise open a fresh tab — the ?autoask= param will trigger auto-submit
       return clients.openWindow(targetUrl);
     })
   );

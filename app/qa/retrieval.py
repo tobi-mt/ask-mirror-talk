@@ -1,12 +1,23 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from pgvector.sqlalchemy import Vector
+import math
 import logging
 
 from app.storage.models import Chunk, Episode
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    """Fast cosine similarity between two embedding vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 def retrieve_chunks(db: Session, query_embedding: list[float], diversity_lambda: float = None):
@@ -72,15 +83,19 @@ def retrieve_chunks(db: Session, query_embedding: list[float], diversity_lambda:
             if chunk.episode_id in seen_episodes:
                 continue
             
-            # Calculate diversity: penalize episodes similar to already selected ones
-            # In simple implementation, just ensure it's a different episode
-            # More advanced: calculate embedding distance to selected chunks
-            diversity_bonus = 0.3  # Fixed bonus for being a different episode
+            # Real MMR diversity: penalise candidates that are semantically
+            # close to any already-selected chunk (not just a different episode).
+            # diversity_score = 1 - max_cosine_similarity_to_selected_chunks
+            max_sim_to_selected = max(
+                _cosine_sim(chunk.embedding, sel_chunk.embedding)
+                for sel_chunk, _ in selected
+            )
+            diversity_score = 1.0 - max_sim_to_selected
             
             # MMR score combines relevance and diversity
             # Higher lambda = more weight on relevance
             # Lower lambda = more weight on diversity
-            mmr_score = (diversity_lambda * similarity) + ((1 - diversity_lambda) * diversity_bonus)
+            mmr_score = (diversity_lambda * similarity) + ((1 - diversity_lambda) * diversity_score)
             
             if mmr_score > best_mmr_score:
                 best_mmr_score = mmr_score

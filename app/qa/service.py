@@ -268,18 +268,21 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
 
     # ── Send citations immediately — no extra latency ──
     from app.qa.answer import _build_citations, _generate_follow_up_questions
-    citations = _build_citations(citation_payloads if citation_payloads else chunk_payloads)
-    yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
+    import concurrent.futures
 
-    # ── Generate follow-ups (fast, async-safe) ──
-    # This is a lightweight OpenAI call; we send it as its own event so
-    # the client can render citations while follow-ups load.
-    try:
-        follow_ups = _generate_follow_up_questions(question, full_answer, citation_payloads or chunk_payloads)
-    except Exception as e:
-        logger.warning("Follow-up generation failed in stream: %s", e)
-        follow_ups = []
-    yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
+    citations = _build_citations(citation_payloads if citation_payloads else chunk_payloads)
+
+    # ── Start follow-up generation in a background thread ──
+    # This runs concurrently while we yield citations and log to the DB,
+    # saving ~1–3 s that would otherwise be a blocking OpenAI call after
+    # the user has already seen the full answer and citations.
+    _follow_up_ctx = citation_payloads or chunk_payloads
+    _follow_up_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    follow_up_future = _follow_up_executor.submit(
+        _generate_follow_up_questions, question, full_answer, _follow_up_ctx
+    )
+
+    yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
 
     # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
@@ -301,6 +304,16 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     finally:
         log_db.close()
 
+    # ── Collect follow-ups (background thread should be done by now) ──
+    try:
+        follow_ups = follow_up_future.result(timeout=15)
+    except Exception as e:
+        logger.warning("Follow-up generation failed in stream: %s", e)
+        follow_ups = []
+    finally:
+        _follow_up_executor.shutdown(wait=False)
+
+    yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
     yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
 
     # Cache for next time (normalized question for better hit rate)

@@ -86,10 +86,14 @@ class Settings(BaseSettings):
     # Answer Generation
     answer_generation_provider: str = "openai"  # openai | basic
     answer_generation_model: str = "gpt-4o-mini"  # gpt-4o-mini | gpt-4o | gpt-4-turbo
+    answer_followup_model: str = "gpt-4o-mini"  # Always fast; decoupled from main answer model
     answer_max_tokens: int = 800  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
     cache_similarity_threshold: float = 0.92  # Minimum cosine similarity for cache hits (0.0-1.0)
     cache_ttl_seconds: int = 14400  # Cache TTL (default: 4 hours)
+
+    # Persistent cache (optional Redis backend — survives restarts/deploys)
+    redis_url: str | None = None  # e.g. redis://default:password@host:6379
 
     # API
     rate_limit_per_minute: int = 20

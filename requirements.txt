@@ -23,3 +23,6 @@ sentence-transformers>=2.6.0
 
 # Push Notifications
 pywebpush>=2.0.0
+
+# Persistent cache (optional — set REDIS_URL env var to enable)
+redis>=5.0.0

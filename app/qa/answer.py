@@ -245,7 +245,7 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
 
             response = client.chat.completions.create(
-                model=settings.answer_generation_model,
+                model=settings.answer_followup_model,
                 messages=[
                     {
                         "role": "system",

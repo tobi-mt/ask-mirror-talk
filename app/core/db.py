@@ -126,6 +126,22 @@ def init_db():
 
         Base.metadata.create_all(bind=db_engine)
         logger.info("✓ Database tables created/verified")
+
+        # Create HNSW index for fast approximate nearest-neighbour search.
+        # Without this, every vector query is a full sequential scan over all
+        # chunks which grows from ~100ms to 10+ seconds as the corpus expands.
+        # HNSW is the recommended index type for pgvector ≥ 0.5.
+        # m=16 / ef_construction=64 are good defaults for a 384-dim corpus of
+        # this size; index creation on ~45K vectors takes roughly 30–90 seconds
+        # but only runs once (CREATE INDEX IF NOT EXISTS is a no-op thereafter).
+        with db_engine.connect() as connection:
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
+                "ON chunks USING hnsw (embedding vector_cosine_ops) "
+                "WITH (m = 16, ef_construction = 64)"
+            ))
+            connection.commit()
+        logger.info("✓ HNSW vector index verified")
     except Exception as e:
         logger.error(f"✗ Database initialization failed: {e}")
         raise

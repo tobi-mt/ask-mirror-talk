@@ -56,7 +56,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.1.0'; // Bumped for premium UI, bounce fix, citations display fix
+    $version = '4.2.0'; // Fix: citations display:none regression + depth label
     
     // Core styles
     wp_enqueue_style(

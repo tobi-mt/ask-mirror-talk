@@ -199,7 +199,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
         # Stream the full cached answer as a single chunk for instant display
         cached_episode_count = len({c["episode_id"] for c in cached_response.get("citations", []) if c.get("episode_id")})
         if cached_episode_count:
-            yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {cached_episode_count} episodes\u2026'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {cached_episode_count} episodes…'})}\n\n"
         yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"

@@ -133,29 +133,56 @@ function ask_mirror_talk_enqueue_assets() {
 add_action('wp_enqueue_scripts', 'ask_mirror_talk_enqueue_assets');
 
 /**
+ * Remove WordPress core's wp_site_icon() output from wp_head.
+ * WordPress injects its own apple-touch-icon and shortcut-icon tags based on
+ * Settings → General → Site Icon, which would conflict with our custom PWA icons.
+ */
+add_action( 'init', function() {
+    remove_action( 'wp_head', 'wp_site_icon', 99 );
+} );
+
+/**
  * PWA Support: manifest, meta tags, service worker registration, and Apple touch icons.
+ *
+ * iOS/Safari ignores the Web App Manifest entirely for home-screen icons.
+ * It only reads <link rel="apple-touch-icon"> tags in <head>.
+ * We provide device-specific sizes so every iPhone and iPad gets a pixel-perfect icon:
+ *   180×180 — all modern iPhones (6 through 16)
+ *   167×167 — iPad Pro (9.7", 10.5", 11", 12.9")
+ *   152×152 — iPad / iPad mini
+ * These PNGs are full-bleed squares (no pre-baked rounded corners) so iOS can apply
+ * its own squircle clipping cleanly, identical to how Android uses the manifest icons.
+ *
+ * Android/Chrome/Edge/Samsung Internet read the manifest.json instead (served dynamically)
+ * and use the 192/512 PNG icons which have our custom rounded corners baked in.
  */
 function ask_mirror_talk_pwa_head() {
     $theme_uri = get_stylesheet_directory_uri();
     ?>
-    <!-- PWA Manifest — served from same origin, no CORS needed -->
+    <!-- PWA Manifest — served dynamically from /manifest.json with correct icon URLs -->
     <link rel="manifest" href="/manifest.json">
 
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#2e2a24">
+    <!-- Standard PWA meta tag (Android / Chrome) -->
+    <meta name="theme-color" content="#1a1209">
     <meta name="mobile-web-app-capable" content="yes">
 
-    <!-- Apple PWA Meta Tags -->
+    <!-- Apple PWA meta tags — makes "Add to Home Screen" launch as a standalone app -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Mirror Talk">
-
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" sizes="192x192" href="<?php echo esc_url($theme_uri . '/pwa-icon-192.png'); ?>">
-    <link rel="apple-touch-icon" sizes="512x512" href="<?php echo esc_url($theme_uri . '/pwa-icon-512.png'); ?>">
-
-    <!-- Apple Splash Screen (optional, improves iOS launch experience) -->
     <meta name="apple-touch-fullscreen" content="yes">
+
+    <!--
+        Apple Touch Icons — full-bleed squares, iOS clips to its own squircle shape.
+        Largest first; iOS picks the best match for the current device.
+        Using rel="apple-touch-icon" (not "precomposed") because iOS 7+ no longer
+        adds gloss, and the default behaviour gives the best result on all devices.
+    -->
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo esc_url($theme_uri . '/pwa-icon-180.png'); ?>">
+    <link rel="apple-touch-icon" sizes="167x167" href="<?php echo esc_url($theme_uri . '/pwa-icon-167.png'); ?>">
+    <link rel="apple-touch-icon" sizes="152x152" href="<?php echo esc_url($theme_uri . '/pwa-icon-152.png'); ?>">
+    <!-- Fallback for very old iOS devices (<= iOS 6) -->
+    <link rel="apple-touch-icon"                href="<?php echo esc_url($theme_uri . '/pwa-icon-180.png'); ?>">
     <?php
 }
 add_action('wp_head', 'ask_mirror_talk_pwa_head', 1);
@@ -203,7 +230,8 @@ add_action('init', 'ask_mirror_talk_serve_sw', 0); // Priority 0 = run first
 
 /**
  * PWA: Serve manifest.json from root URL (/manifest.json).
- * Same approach as the service worker — intercept early, no rewrite rules needed.
+ * Icons are injected dynamically so they always point to the correct child-theme URL,
+ * regardless of what directory WordPress installs the theme in.
  */
 function ask_mirror_talk_serve_manifest() {
     $request_path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
@@ -212,18 +240,61 @@ function ask_mirror_talk_serve_manifest() {
     }
 
     $manifest_file = get_stylesheet_directory() . '/manifest.json';
-    if (file_exists($manifest_file)) {
-        while (ob_get_level()) {
-            ob_end_clean();
-        }
-
-        http_response_code(200);
-        header('Content-Type: application/manifest+json; charset=UTF-8');
-        header('Cache-Control: public, max-age=86400');
-        header('X-Content-Type-Options: nosniff');
-        readfile($manifest_file);
-        exit;
+    if ( ! file_exists($manifest_file) ) {
+        return;
     }
+
+    $theme_uri = rtrim( get_stylesheet_directory_uri(), '/' );
+
+    $manifest = json_decode( file_get_contents($manifest_file), true );
+    if ( ! $manifest ) {
+        return;
+    }
+
+    // Always use the live child-theme URI for icons so paths survive theme renames
+    $manifest['icons'] = [
+        [
+            'src'     => $theme_uri . '/pwa-icon-192.png',
+            'sizes'   => '192x192',
+            'type'    => 'image/png',
+            'purpose' => 'any',
+        ],
+        [
+            'src'     => $theme_uri . '/pwa-icon-192.png',
+            'sizes'   => '192x192',
+            'type'    => 'image/png',
+            'purpose' => 'maskable',
+        ],
+        [
+            'src'     => $theme_uri . '/pwa-icon-512.png',
+            'sizes'   => '512x512',
+            'type'    => 'image/png',
+            'purpose' => 'any',
+        ],
+        [
+            'src'     => $theme_uri . '/pwa-icon-512.png',
+            'sizes'   => '512x512',
+            'type'    => 'image/png',
+            'purpose' => 'maskable',
+        ],
+        [
+            'src'     => $theme_uri . '/pwa-icon.svg',
+            'sizes'   => 'any',
+            'type'    => 'image/svg+xml',
+            'purpose' => 'any',
+        ],
+    ];
+
+    while ( ob_get_level() ) {
+        ob_end_clean();
+    }
+
+    http_response_code(200);
+    header('Content-Type: application/manifest+json; charset=UTF-8');
+    header('Cache-Control: public, max-age=86400');
+    header('X-Content-Type-Options: nosniff');
+    echo json_encode( $manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT );
+    exit;
 }
 add_action('init', 'ask_mirror_talk_serve_manifest', 0);
 

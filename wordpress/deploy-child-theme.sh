@@ -9,7 +9,8 @@ set -e
 cd "$(dirname "$0")"
 
 THEME_DIR="astra-child"
-ZIP_NAME="astra-child-mirror-talk.zip"
+VERSION=$(grep 'Version:' "$THEME_DIR/style.css" | sed 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+ZIP_NAME="astra-child-v${VERSION}.zip"
 
 echo "📦 Packaging Astra Child Theme for WordPress..."
 echo ""
@@ -19,7 +20,7 @@ rm -f "$ZIP_NAME"
 
 # Create zip (exclude hidden files, .DS_Store, etc.)
 cd "$THEME_DIR"
-zip -r "../$ZIP_NAME" . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "*.md"
+zip -r "../$ZIP_NAME" . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "*.md" -x "*.py"
 cd ..
 
 echo "✓ Created: $ZIP_NAME"

@@ -546,15 +546,16 @@
   gap: 10px;
 }
 
-.amt-feedback-btn {
+/* Base for analytics-addon legacy feedback (overridden by lines below for new circular buttons) */
+.amt-feedback-buttons .amt-feedback-btn {
   flex: 1;
-  padding: 12px 20px !important;
-  border: 2px solid transparent !important;
-  border-radius: 8px !important;
-  font-size: 15px !important;
-  font-weight: 600 !important;
+  padding: 12px 20px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -1323,8 +1324,9 @@
 
 .amt-resume-label {
   font-size: 0.8rem;
-  color: rgba(255,255,255,0.45);
+  color: #6b665d;
   padding-left: 2px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-resume-btn {
@@ -2108,20 +2110,22 @@
   align-items: center;
   gap: 10px;
   margin-top: 12px;
-  padding: 10px 14px;
-  background: rgba(255,255,255,0.04);
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #faf8f4, #f5f2ed);
+  border: 1px solid #e6e2dc;
   border-radius: 10px;
 }
 
 .amt-feedback-label {
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.6);
+  color: #6b665d;
   margin-right: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-feedback-btn {
-  background: none;
-  border: 1.5px solid rgba(255,255,255,0.18);
+  background: #fff;
+  border: 1.5px solid #d4cec6;
   border-radius: 50%;
   width: 38px;
   height: 38px;
@@ -2134,18 +2138,18 @@
 }
 
 .amt-feedback-btn:not(:disabled):hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.4);
+  background: #f0ede8;
+  border-color: #2e2a24;
   transform: scale(1.12);
 }
 
 .amt-feedback-btn.amt-feedback-selected.amt-feedback-up {
-  background: rgba(62,207,142,0.2);
-  border-color: #3ecf8e;
+  background: #d1fae5;
+  border-color: #10b981;
 }
 
 .amt-feedback-btn.amt-feedback-selected.amt-feedback-down {
-  background: rgba(232,67,147,0.2);
+  background: #fce7f3;
   border-color: #e84393;
 }
 
@@ -2160,8 +2164,10 @@
 
 .amt-feedback-thanks {
   font-size: 0.82rem;
-  color: #3ecf8e;
+  color: #059669;
+  font-weight: 600;
   margin-left: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* ── Save to Email ───────────────────────────────────────────── */
@@ -2171,18 +2177,20 @@
 
 .amt-email-btn {
   background: none;
-  border: 1.5px solid rgba(255,255,255,0.15);
+  border: 1.5px solid #d4cec6;
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.55);
+  color: #6b665d;
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
 .amt-email-btn:hover {
-  border-color: rgba(255,255,255,0.4);
-  color: rgba(255,255,255,0.85);
+  border-color: #2e2a24;
+  color: #2e2a24;
+  background: #f5f2ed;
 }
 
 /* ── Citation Preview Button ─────────────────────────────────── */
@@ -2191,18 +2199,20 @@
   margin-top: 6px;
   margin-right: 8px;
   background: none;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid #d4cec6;
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 0.8rem;
-  color: rgba(255,255,255,0.55);
+  color: #6b665d;
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
 .citation-preview-btn:hover {
-  border-color: rgba(247,201,72,0.5);
-  color: #f7c948;
+  border-color: #8b7355;
+  color: #2e2a24;
+  background: #f5f2ed;
 }
 
 /* ── Dark Mode ───────────────────────────────────────────────── */
@@ -2392,15 +2402,16 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-related-section {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid #e6e2dc;
 }
 
 .amt-related-label {
   font-size: 0.82rem;
-  color: rgba(255,255,255,0.45);
+  color: #6b665d;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-related-list {
@@ -2410,28 +2421,29 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-related-btn {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: #fff;
+  border: 1px solid #e6e2dc;
   border-radius: 8px;
   padding: 9px 14px;
   font-size: 0.88rem;
-  color: rgba(255,255,255,0.75);
+  color: #4a453d;
   cursor: pointer;
   text-align: left;
-  transition: background 0.2s, border-color 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .amt-related-btn:hover {
-  background: rgba(247,201,72,0.08);
-  border-color: rgba(247,201,72,0.25);
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  border-color: #2e2a24;
   color: #fff;
 }
 
 /* ── Freshness year badge on citations ───────────────────────── */
 .citation-year {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.4);
-  background: rgba(255,255,255,0.06);
+  color: rgba(46,42,36,0.45);
+  background: rgba(46,42,36,0.07);
   border-radius: 4px;
   padding: 1px 5px;
   margin-left: 6px;
@@ -2445,7 +2457,7 @@ body.amt-light-mode .amt-suggestions-label {
   gap: 5px;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  border-top: 1px solid #e6e2dc;
 }
 
 .amt-topic-item.amt-topic-open .amt-topic-starter-list {
@@ -2453,33 +2465,35 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-topic-starter-btn {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #fff;
+  border: 1px solid #e6e2dc;
   border-radius: 8px;
   padding: 7px 12px;
   font-size: 0.84rem;
-  color: rgba(255,255,255,0.72);
+  color: #4a453d;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .amt-topic-starter-btn:hover {
-  background: rgba(247,201,72,0.1);
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
   color: #fff;
+  border-color: #2e2a24;
 }
 
 .amt-topic-item {
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid #e6e2dc;
   border-radius: 10px;
   padding: 10px 14px;
-  background: rgba(255,255,255,0.03);
-  transition: border-color 0.2s;
+  background: #faf8f4;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .amt-topic-item.amt-topic-open {
-  border-color: rgba(247,201,72,0.3);
-  background: rgba(247,201,72,0.04);
+  border-color: #8b7355;
+  background: #f5f2ed;
 }
 
 .amt-topic-item .amt-topic-btn {
@@ -2488,11 +2502,14 @@ body.amt-light-mode .amt-suggestions-label {
   align-items: center;
   gap: 8px;
   justify-content: space-between;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .amt-topic-expand-arrow {
   font-size: 0.75rem;
-  color: rgba(255,255,255,0.35);
+  color: #b5afa5;
   transition: transform 0.2s;
   margin-left: auto;
 }

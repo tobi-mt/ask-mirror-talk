@@ -756,6 +756,10 @@
 
           if (event.type === 'citations') {
             showCitations(event.citations);
+            // Capture the first citation's theme for the explorer badge
+            if (event.citations && event.citations[0] && event.citations[0].theme) {
+              window._amtLastTheme = event.citations[0].theme;
+            }
           }
 
           if (event.type === 'follow_up') {
@@ -786,6 +790,10 @@
             // Add share button and SEO schema after answer is complete
             addShareButton(question, answerText);
             injectFAQSchema(question, answerText);
+
+            // Gamification: record the answered question
+            onQuestionAnswered(question, window._amtLastTheme || null);
+            window._amtLastTheme = null;
 
             // Scroll to top of response so user reads from the beginning.
             // Small delay lets the DOM finish painting the depth indicator + share button.
@@ -1603,5 +1611,286 @@
       return isReturning ? 5000 : 15000;
     } catch (e) { return 10000; }
   })());
+
+  // ========================================
+  // Gamification — Streak, Badges, Explorer
+  // ========================================
+
+  const AMT_BADGES = [
+    { id: 'first_step',   emoji: '🌱', name: 'First Step',         desc: 'Asked your first question',              check: s => s.totalQuestions >= 1 },
+    { id: 'curious',      emoji: '🔍', name: 'Curious Mind',        desc: 'Asked 10 questions',                     check: s => s.totalQuestions >= 10 },
+    { id: 'streak_3',     emoji: '🔥', name: 'On Fire',             desc: 'Kept a 3-day streak',                    check: s => s.maxStreak >= 3 },
+    { id: 'streak_7',     emoji: '💫', name: 'Week Warrior',        desc: 'Kept a 7-day streak',                    check: s => s.maxStreak >= 7 },
+    { id: 'streak_30',    emoji: '💎', name: 'Devoted',             desc: 'Kept a 30-day streak',                   check: s => s.maxStreak >= 30 },
+    { id: 'explorer',     emoji: '🗺️', name: 'Explorer',            desc: 'Explored 5 different topics',            check: s => s.themesExplored.size >= 5 },
+    { id: 'deep_diver',   emoji: '⚡', name: 'Deep Diver',          desc: 'Clicked a podcast citation',             check: s => s.citationsClicked >= 1 },
+    { id: 'sharer',       emoji: '📤', name: 'Sharer',              desc: 'Shared an insight',                      check: s => s.sharesCount >= 1 },
+    { id: 'night_owl',    emoji: '🌙', name: 'Night Owl',           desc: 'Asked a question after 10pm',            check: s => s.nightOwl },
+    { id: 'completionist',emoji: '🏆', name: 'Completionist',       desc: 'Explored all 20 topics',                 check: s => s.themesExplored.size >= 20 },
+  ];
+
+  // Themes the backend already uses in the QOTD pool
+  const AMT_THEMES = [
+    'Self-worth','Forgiveness','Inner peace','Purpose','Surrender',
+    'Leadership','Relationships','Gratitude','Boundaries','Healing',
+    'Grief','Fear','Parenting','Growth','Communication',
+    'Faith','Identity','Empowerment','Transition','Community',
+  ];
+
+  function loadStats() {
+    try {
+      const raw = localStorage.getItem('amt_gamification');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // themesExplored is serialised as an array
+        parsed.themesExplored = new Set(parsed.themesExplored || []);
+        parsed.earnedBadges   = new Set(parsed.earnedBadges   || []);
+        return parsed;
+      }
+    } catch (e) {}
+    return {
+      totalQuestions:   0,
+      currentStreak:    0,
+      maxStreak:        0,
+      lastActiveDate:   null,   // 'YYYY-MM-DD'
+      themesExplored:   new Set(),
+      earnedBadges:     new Set(),
+      citationsClicked: 0,
+      sharesCount:      0,
+      nightOwl:         false,
+    };
+  }
+
+  function saveStats(s) {
+    try {
+      const serialisable = Object.assign({}, s, {
+        themesExplored: [...s.themesExplored],
+        earnedBadges:   [...s.earnedBadges],
+      });
+      localStorage.setItem('amt_gamification', JSON.stringify(serialisable));
+    } catch (e) {}
+  }
+
+  function todayStr() {
+    return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  }
+
+  function recordQuestion(stats, themeHint) {
+    const today = todayStr();
+    const last  = stats.lastActiveDate;
+
+    if (last !== today) {
+      // Check streak continuity
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yStr = yesterday.toISOString().slice(0, 10);
+
+      if (last === yStr) {
+        stats.currentStreak += 1;
+      } else if (last === null) {
+        stats.currentStreak = 1;
+      } else {
+        // Streak broken
+        stats.currentStreak = 1;
+      }
+      stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
+      stats.lastActiveDate = today;
+    }
+
+    stats.totalQuestions += 1;
+
+    // Night owl check (22:00–23:59)
+    const hour = new Date().getHours();
+    if (hour >= 22) stats.nightOwl = true;
+
+    // Theme tracking — try to match from the question text
+    if (themeHint) {
+      stats.themesExplored.add(themeHint);
+    } else {
+      // Simple keyword → theme mapping for organic questions
+      const q = (themeHint || '').toLowerCase();
+      for (const theme of AMT_THEMES) {
+        if (q.includes(theme.toLowerCase())) {
+          stats.themesExplored.add(theme);
+          break;
+        }
+      }
+    }
+
+    return stats;
+  }
+
+  function checkAndAwardBadges(stats) {
+    const newBadges = [];
+    for (const badge of AMT_BADGES) {
+      if (!stats.earnedBadges.has(badge.id) && badge.check(stats)) {
+        stats.earnedBadges.add(badge.id);
+        newBadges.push(badge);
+      }
+    }
+    return newBadges;
+  }
+
+  function renderStatsBar(stats) {
+    const bar = document.getElementById('amt-stats-bar');
+    if (!bar) return;
+
+    document.getElementById('amt-streak-value').textContent   = stats.currentStreak;
+    document.getElementById('amt-questions-value').textContent = stats.totalQuestions;
+    document.getElementById('amt-themes-value').textContent   = stats.themesExplored.size;
+    document.getElementById('amt-badge-count').textContent    = stats.earnedBadges.size;
+
+    // Pulse the streak icon when streak > 0
+    const streakIcon = bar.querySelector('.amt-stat-streak .amt-stat-icon');
+    if (streakIcon) {
+      streakIcon.classList.toggle('amt-streak-active', stats.currentStreak >= 3);
+    }
+
+    bar.style.display = '';
+  }
+
+  function renderBadgeShelf(stats) {
+    const shelf = document.getElementById('amt-badge-shelf');
+    if (!shelf) return;
+    shelf.innerHTML = '';
+
+    for (const badge of AMT_BADGES) {
+      const earned = stats.earnedBadges.has(badge.id);
+      const el = document.createElement('div');
+      el.className = 'amt-badge' + (earned ? ' amt-badge-earned' : ' amt-badge-locked');
+      el.title = earned ? badge.name + ': ' + badge.desc : badge.desc + ' (locked)';
+      el.innerHTML = `<span class="amt-badge-emoji">${badge.emoji}</span><span class="amt-badge-name">${badge.name}</span>`;
+      shelf.appendChild(el);
+    }
+  }
+
+  // Confetti burst (lightweight, no library)
+  function launchConfetti() {
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99999';
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const colours = ['#f7c948','#e84393','#3ecf8e','#7c5cbf','#ff6b35','#4ecdc4'];
+    const pieces  = Array.from({ length: 80 }, () => ({
+      x: Math.random() * canvas.width,
+      y: -10 - Math.random() * 40,
+      r: 4 + Math.random() * 5,
+      c: colours[Math.floor(Math.random() * colours.length)],
+      vx: (Math.random() - 0.5) * 4,
+      vy: 2 + Math.random() * 3,
+      rot: Math.random() * Math.PI * 2,
+      vr: (Math.random() - 0.5) * 0.2,
+    }));
+
+    let frame = 0;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pieces.forEach(p => {
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.rot += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.c;
+        ctx.globalAlpha = Math.max(0, 1 - frame / 90);
+        ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+        ctx.restore();
+      });
+      frame++;
+      if (frame < 100) requestAnimationFrame(draw);
+      else canvas.remove();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  function showMilestoneToast(emoji, headline, sub) {
+    const toast = document.getElementById('amt-milestone-toast');
+    if (!toast) return;
+    toast.innerHTML = `<span class="amt-toast-emoji">${emoji}</span><div><strong>${headline}</strong><span>${sub}</span></div>`;
+    toast.style.display = '';
+    toast.classList.add('amt-toast-in');
+    launchConfetti();
+    setTimeout(() => {
+      toast.classList.remove('amt-toast-in');
+      toast.classList.add('amt-toast-out');
+      setTimeout(() => {
+        toast.style.display = 'none';
+        toast.classList.remove('amt-toast-out');
+      }, 500);
+    }, 3500);
+  }
+
+  const STREAK_MILESTONES = new Set([3, 7, 14, 30, 60, 100]);
+
+  function onQuestionAnswered(questionText, themeHint) {
+    let stats = loadStats();
+    const prevStreak = stats.currentStreak;
+
+    stats = recordQuestion(stats, themeHint);
+    const newBadges = checkAndAwardBadges(stats);
+    saveStats(stats);
+    renderStatsBar(stats);
+
+    // Streak milestone toast
+    if (stats.currentStreak !== prevStreak && STREAK_MILESTONES.has(stats.currentStreak)) {
+      showMilestoneToast('🔥', `${stats.currentStreak}-day streak!`, 'Keep the wisdom flowing.');
+    }
+
+    // New badge toasts (queue sequentially)
+    newBadges.forEach((badge, i) => {
+      setTimeout(() => {
+        showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc);
+      }, i * 4200);
+    });
+  }
+
+  // Badge shelf toggle
+  const badgesBtn = document.getElementById('amt-badges-btn');
+  const badgeShelf = document.getElementById('amt-badge-shelf');
+  if (badgesBtn && badgeShelf) {
+    badgesBtn.addEventListener('click', () => {
+      const open = badgeShelf.style.display !== 'none';
+      badgeShelf.style.display = open ? 'none' : '';
+      if (!open) renderBadgeShelf(loadStats());
+    });
+  }
+
+  // Track citation clicks for the Deep Diver badge
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.citation-link') || e.target.closest('.citation-explore')) {
+      try {
+        const s = loadStats();
+        s.citationsClicked = (s.citationsClicked || 0) + 1;
+        const newBadges = checkAndAwardBadges(s);
+        saveStats(s);
+        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc));
+      } catch (e2) {}
+    }
+  });
+
+  // Track share button clicks for the Sharer badge
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#amt-share-section')) {
+      try {
+        const s = loadStats();
+        s.sharesCount = (s.sharesCount || 0) + 1;
+        const newBadges = checkAndAwardBadges(s);
+        saveStats(s);
+        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc));
+      } catch (e2) {}
+    }
+  });
+
+  // Initialise stats bar on page load
+  try {
+    const initStats = loadStats();
+    if (initStats.totalQuestions > 0) {
+      renderStatsBar(initStats);
+    }
+  } catch (e) {}
 
 })();

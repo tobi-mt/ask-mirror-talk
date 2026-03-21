@@ -17,6 +17,26 @@ function ask_mirror_talk_shortcode() {
     ?>
     <div class="ask-mirror-talk">
         <h2>Ask Mirror Talk</h2>
+        <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
+            <div class="amt-stat amt-stat-streak">
+                <span class="amt-stat-icon">🔥</span>
+                <span class="amt-stat-value" id="amt-streak-value">0</span>
+                <span class="amt-stat-label">day streak</span>
+            </div>
+            <div class="amt-stat amt-stat-questions">
+                <span class="amt-stat-icon">💬</span>
+                <span class="amt-stat-value" id="amt-questions-value">0</span>
+                <span class="amt-stat-label">questions</span>
+            </div>
+            <div class="amt-stat amt-stat-themes">
+                <span class="amt-stat-icon">🗺️</span>
+                <span class="amt-stat-value" id="amt-themes-value">0</span>
+                <span class="amt-stat-label">/ 20 topics</span>
+            </div>
+            <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges">🏆 <span id="amt-badge-count">0</span></button>
+        </div>
+        <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
+        <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
         <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
             <p class="amt-topics-label">Browse by topic:</p>
@@ -56,7 +76,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.3.0'; // Fix: scroll to top of response on load completion
+    $version = '4.4.0'; // Gamification: streaks, badges, explorer, confetti
     
     // Core styles
     wp_enqueue_style(

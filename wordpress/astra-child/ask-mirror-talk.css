@@ -1930,3 +1930,162 @@
     border: none;
   }
 }
+
+/* ========================================
+   Gamification — Stats Bar, Badges, Toasts
+   ======================================== */
+
+/* ── Stats bar ── */
+.amt-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.amt-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.amt-stat-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* Pulse animation when streak ≥ 3 days */
+.amt-streak-active {
+  animation: streakPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes streakPulse {
+  0%, 100% { transform: scale(1);   filter: drop-shadow(0 0 0px #f7c948); }
+  50%       { transform: scale(1.25); filter: drop-shadow(0 0 6px #f7c948); }
+}
+
+.amt-stat-value {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #f7c948;
+  font-variant-numeric: tabular-nums;
+}
+
+.amt-stat-label {
+  color: rgba(255,255,255,0.65);
+  font-size: 0.78rem;
+}
+
+.amt-stat-themes .amt-stat-value { color: #4ecdc4; }
+.amt-stat-questions .amt-stat-value { color: #e884c8; }
+
+.amt-badges-btn {
+  margin-left: auto;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  color: #fff;
+  font-size: 0.82rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.amt-badges-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* ── Badge shelf ── */
+.amt-badge-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #0f0f23;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.25s ease;
+}
+
+.amt-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+  text-align: center;
+  cursor: default;
+  transition: transform 0.15s;
+}
+
+.amt-badge:hover { transform: scale(1.08); }
+
+.amt-badge-emoji {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.amt-badge-name {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.amt-badge-locked .amt-badge-emoji { filter: grayscale(1) opacity(0.3); }
+.amt-badge-locked .amt-badge-name  { color: rgba(255,255,255,0.3); }
+
+.amt-badge-earned .amt-badge-emoji {
+  filter: drop-shadow(0 0 6px rgba(247,201,72,0.7));
+}
+
+/* ── Milestone / badge toast ── */
+.amt-milestone-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: linear-gradient(135deg, #1a1a2e, #2d1b4e);
+  border: 1.5px solid rgba(247,201,72,0.4);
+  border-radius: 16px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #fff;
+  font-size: 0.9rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  z-index: 99998;
+  max-width: min(380px, 90vw);
+  opacity: 0;
+  transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.amt-milestone-toast.amt-toast-in {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.amt-milestone-toast.amt-toast-out {
+  transform: translateX(-50%) translateY(80px);
+  opacity: 0;
+}
+
+.amt-toast-emoji { font-size: 2rem; flex-shrink: 0; }
+
+.amt-milestone-toast strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #f7c948;
+  margin-bottom: 2px;
+}
+
+.amt-milestone-toast span { color: rgba(255,255,255,0.75); }

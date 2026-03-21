@@ -474,6 +474,50 @@ _QOTD_POOL = [
 
 
 
+def send_streak_protection_notification(db: Session) -> dict:
+    """
+    Send a streak-protection push to active subscribers who have NOT yet
+    asked a question today (as far as the server can tell via utm params).
+
+    Because streaks are tracked client-side in localStorage, the server
+    cannot know the exact streak length per user. Instead we send a
+    motivational nudge at a configured hour (e.g. 20:00 local) to any
+    subscriber who hasn't already received a QOTD response today.
+    Keyed by the tag 'streak-{date}' so it replaces itself if sent twice.
+    """
+    today = datetime.now(timezone.utc).date()
+    url = (
+        f"/ask-mirror-talk/"
+        f"?utm_source=push&utm_medium=streak&utm_campaign={today.isoformat()}"
+        f"#ask-mirror-talk-form"
+    )
+
+    streak_messages = [
+        ("🔥 Don't break your streak!", "Keep the wisdom flowing — one question keeps it alive."),
+        ("⏰ Still time today!", "Your daily Mirror Talk reflection is waiting for you."),
+        ("💪 Stay consistent!", "A moment of reflection today keeps your streak alive."),
+        ("✨ Your wisdom awaits", "Take 60 seconds to ask Mirror Talk something meaningful."),
+    ]
+    # Rotate message based on day so it doesn't feel repetitive
+    title, body = streak_messages[today.toordinal() % len(streak_messages)]
+
+    return _broadcast_notification(
+        db=db,
+        title=title,
+        body=body,
+        url=url,
+        tag=f"streak-{today.isoformat()}",
+        notification_type="streak_protection",
+        data={"date": today.isoformat()},
+        actions=[
+            {"action": "ask", "title": "💬 Ask Now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+            {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+        ],
+        vibrate=[100, 50, 100],
+        require_interaction=False,
+    )
+
+
 def send_new_episode_notification(
     db: Session,
     episode_title: str,

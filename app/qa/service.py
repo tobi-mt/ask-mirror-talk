@@ -161,7 +161,7 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     return result
 
 
-def answer_question_stream(db: Session, question: str, user_ip: str):
+def answer_question_stream(db: Session, question: str, user_ip: str, context: list[dict] | None = None):
     """
     Stream an answer using SSE. Yields JSON events:
       - {"type": "chunk", "text": "..."} for each text chunk
@@ -223,7 +223,12 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
             "text": chunk.text,
             "start_time": chunk.start_time,
             "end_time": chunk.end_time,
-            "episode": {"id": episode.id, "title": episode.title, "audio_url": episode.audio_url or ""},
+            "episode": {
+                "id": episode.id,
+                "title": episode.title,
+                "audio_url": episode.audio_url or "",
+                "published_year": episode.published_at.year if episode.published_at else None,
+            },
             "similarity": similarity,
         })
 
@@ -236,7 +241,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
             "text": cit['chunk'].text,
             "start_time": cit['chunk'].start_time,
             "end_time": cit['chunk'].end_time,
-            "episode": {"id": episode.id, "title": episode.title, "audio_url": episode.audio_url or ""},
+            "episode": {"id": episode.id, "title": episode.title, "audio_url": episode.audio_url or "", "published_year": episode.published_at.year if episode.published_at else None},
             "similarity": cit['similarity'],
             "relevance_score": cit['relevance_score'],
             "total_relevant_chunks": cit['total_relevant_chunks'],
@@ -258,7 +263,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str):
     ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
     if settings.answer_generation_provider == "openai":
         try:
-            for text_chunk in generate_intelligent_answer_stream(question, ranked[:6]):
+            for text_chunk in generate_intelligent_answer_stream(question, ranked[:6], context=context or []):
                 full_answer += text_chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:

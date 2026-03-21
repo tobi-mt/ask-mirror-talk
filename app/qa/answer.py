@@ -159,6 +159,7 @@ def _build_citations(chunks: list[dict]) -> list[dict]:
         citations.append({
             "episode_id": episode["id"],
             "episode_title": episode["title"],
+            "episode_year": episode.get("published_year"),
             "timestamp_start": start,
             "timestamp_end": end,
             "timestamp_start_seconds": start_seconds,
@@ -359,7 +360,7 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
     return answer
 
 
-def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
+def generate_intelligent_answer_stream(question: str, chunks: list[dict], context: list[dict] | None = None):
     """
     Stream an intelligent answer using OpenAI GPT with server-sent events.
     Yields chunks of text as they arrive from the API.
@@ -373,25 +374,31 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict]):
 
     client = OpenAI(api_key=api_key)
 
-    # Build context from chunks
+    # Build RAG context from chunks
     context_parts = []
     for idx, chunk in enumerate(chunks, 1):
         episode_title = chunk["episode"]["title"]
         text = chunk["text"].strip()
         context_parts.append(f"[Source {idx} - {episode_title}]\n{text}")
 
-    context = "\n\n".join(context_parts)
+    rag_context = "\n\n".join(context_parts)
 
-    system_prompt = _SYSTEM_PROMPT
+    user_prompt = _build_user_prompt(question, rag_context)
 
-    user_prompt = _build_user_prompt(question, context)
+    # Build messages: system + optional prior conversation turns + current question
+    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    if context:
+        # Limit prior turns to last 6 (3 user + 3 assistant) to stay within token budget
+        for turn in context[-6:]:
+            role = turn.get("role", "user")
+            content = turn.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": str(content)[:600]})
+    messages.append({"role": "user", "content": user_prompt})
 
     stream = client.chat.completions.create(
         model=settings.answer_generation_model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages=messages,
         temperature=settings.answer_temperature,
         max_tokens=settings.answer_max_tokens,
         presence_penalty=0.4,

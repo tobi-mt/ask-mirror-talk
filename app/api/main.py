@@ -156,6 +156,7 @@ _security = HTTPBasic()
 
 class AskRequest(BaseModel):
     question: str
+    context: list[dict] | None = None  # Prior turns: [{"role": "user"|"assistant", "content": "..."}]
 
 
 @app.get("/health")
@@ -205,7 +206,7 @@ def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_
     from app.qa.service import answer_question_stream
 
     return StreamingResponse(
-        answer_question_stream(db, payload.question.strip(), user_ip=request.client.host),
+        answer_question_stream(db, payload.question.strip(), user_ip=request.client.host, context=payload.context or []),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -340,16 +341,26 @@ def get_suggested_questions(db: Session = Depends(get_db)):
 # Curated topic definitions: display label, icon, and the pre-built question
 # the widget fires when a user clicks the tag.
 _TOPIC_CATALOG = [
-    {"slug": "grief",         "label": "Grief & Loss",      "icon": "💔", "query": "How do I deal with grief and loss?"},
-    {"slug": "addiction",     "label": "Addiction",          "icon": "🔗", "query": "How do I break free from addiction?"},
-    {"slug": "purpose",       "label": "Purpose",           "icon": "🧭", "query": "How do I find my purpose in life?"},
-    {"slug": "relationships", "label": "Relationships",     "icon": "❤️", "query": "What's the key to building healthy relationships?"},
-    {"slug": "fear",          "label": "Fear & Doubt",      "icon": "🌊", "query": "How can I overcome fear and self-doubt?"},
-    {"slug": "faith",         "label": "Faith",             "icon": "🙏", "query": "What role does faith play in personal growth?"},
-    {"slug": "leadership",    "label": "Leadership",        "icon": "🏆", "query": "What makes a great leader?"},
-    {"slug": "identity",      "label": "Identity",          "icon": "🪞", "query": "How do I discover my true identity?"},
-    {"slug": "healing",       "label": "Healing",           "icon": "🌱", "query": "How do I start the healing process?"},
-    {"slug": "forgiveness",   "label": "Forgiveness",       "icon": "🕊️", "query": "What does Mirror Talk say about forgiveness?"},
+    {"slug": "grief",         "label": "Grief & Loss",      "icon": "💔", "query": "How do I deal with grief and loss?",
+     "starters": ["How do I stay hopeful when grief feels overwhelming?", "How do I support someone who is grieving?", "What does healing look like after loss?"]},
+    {"slug": "addiction",     "label": "Addiction",          "icon": "🔗", "query": "How do I break free from addiction?",
+     "starters": ["What's the first step to breaking a bad habit?", "How do I stay sober when life gets hard?", "What does recovery really look like?"]},
+    {"slug": "purpose",       "label": "Purpose",           "icon": "🧭", "query": "How do I find my purpose in life?",
+     "starters": ["What does healthy ambition look like?", "How do I know if I'm living my calling?", "What does Mirror Talk say about money and purpose?"]},
+    {"slug": "relationships", "label": "Relationships",     "icon": "❤️", "query": "What's the key to building healthy relationships?",
+     "starters": ["How do I love someone without losing myself?", "How do I rebuild trust after it's been broken?", "What does it take to be a better spouse?"]},
+    {"slug": "fear",          "label": "Fear & Doubt",      "icon": "🌊", "query": "How can I overcome fear and self-doubt?",
+     "starters": ["What can I do when fear is holding me back?", "What does courage look like in everyday life?", "How do I stop comparing myself to others?"]},
+    {"slug": "faith",         "label": "Faith",             "icon": "🙏", "query": "What role does faith play in personal growth?",
+     "starters": ["How do I reconnect with my faith after doubt?", "What does alignment between faith and action look like?", "What does Mirror Talk teach about prayer?"]},
+    {"slug": "leadership",    "label": "Leadership",        "icon": "🏆", "query": "What makes a great leader?",
+     "starters": ["What does it look like to lead with vulnerability?", "How do I lead without burning out?", "What does Mirror Talk say about servant leadership?"]},
+    {"slug": "identity",      "label": "Identity",          "icon": "🪞", "query": "How do I discover my true identity?",
+     "starters": ["What does it mean to live authentically?", "How do I deal with loneliness even when I'm surrounded by people?", "How do I find my voice when I've been silenced?"]},
+    {"slug": "healing",       "label": "Healing",           "icon": "🌱", "query": "How do I start the healing process?",
+     "starters": ["How do I stop running from my emotions?", "What's the connection between physical health and emotional healing?", "What does Mirror Talk teach about mental health?"]},
+    {"slug": "forgiveness",   "label": "Forgiveness",       "icon": "🕊️", "query": "What does Mirror Talk say about forgiveness?",
+     "starters": ["What does it mean to truly forgive someone?", "How do I forgive someone who hurt me deeply?", "What's the difference between forgiveness and reconciliation?"]},
 ]
 
 
@@ -701,6 +712,142 @@ def submit_feedback(
     except Exception as e:
         logger.error("Error logging user feedback: %s", e)
         raise HTTPException(status_code=500, detail="Failed to log feedback") from e
+
+
+@app.get("/api/related-questions")
+def get_related_questions(
+    qa_log_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Return up to 3 questions that other users asked about the same episodes.
+    Uses shared episode overlap to find thematically related questions.
+    """
+    try:
+        # Look up the episode_ids for this QA log
+        row = db.execute(
+            text("SELECT episode_ids FROM qa_logs WHERE id = :id"),
+            {"id": qa_log_id},
+        ).fetchone()
+
+        if not row or not row[0]:
+            return {"questions": []}
+
+        # Parse comma-separated episode IDs — validate each is an integer to prevent injection
+        valid_ep_ids = []
+        for e in row[0].split(","):
+            try:
+                valid_ep_ids.append(str(int(e.strip())))
+            except ValueError:
+                pass
+        if not valid_ep_ids:
+            return {"questions": []}
+
+        # Build LIKE conditions using validated integer strings (safe for interpolation)
+        like_clauses = " OR ".join([f"episode_ids LIKE :ep{i}" for i in range(len(valid_ep_ids[:5]))])
+        like_params = {f"ep{i}": f"%{eid}%" for i, eid in enumerate(valid_ep_ids[:5])}
+        like_params["qa_log_id"] = qa_log_id
+
+        # Find other popular questions that cited any of the same episodes
+        related = db.execute(
+            text(f"""
+                SELECT question, COUNT(*) AS freq
+                FROM qa_logs
+                WHERE id != :qa_log_id
+                  AND LENGTH(question) > 20
+                  AND LOWER(question) NOT IN ('test', 'hello', 'hi')
+                  AND episode_ids IS NOT NULL
+                  AND ({like_clauses})
+                GROUP BY question
+                ORDER BY freq DESC
+                LIMIT 5
+            """),
+            like_params,
+        ).fetchall()
+
+        questions = [r[0] for r in related]
+
+        # If not enough overlap results, fill with trending recent questions
+        if len(questions) < 3:
+            from datetime import datetime, timedelta, timezone
+            cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            trending = db.execute(
+                text("""
+                    SELECT question, COUNT(*) AS freq
+                    FROM qa_logs
+                    WHERE created_at >= :cutoff
+                      AND LENGTH(question) > 20
+                      AND question NOT LIKE '{{%'
+                      AND LOWER(question) NOT IN ('test', 'hello', 'hi')
+                    GROUP BY question
+                    ORDER BY freq DESC
+                    LIMIT 10
+                """),
+                {"cutoff": cutoff},
+            ).fetchall()
+            existing = set(q.lower() for q in questions)
+            for r in trending:
+                if r[0].lower() not in existing:
+                    questions.append(r[0])
+                    existing.add(r[0].lower())
+                if len(questions) >= 3:
+                    break
+
+        return {"questions": questions[:3]}
+
+    except Exception as e:
+        logger.error("Error fetching related questions: %s", e)
+        return {"questions": []}
+
+
+@app.get("/api/answer-archive")
+def get_answer_archive(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """
+    Return the most-asked questions with their best answers.
+    Used for SEO-friendly archive pages.
+    Only returns questions asked more than once to ensure quality.
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        rows = db.execute(
+            text("""
+                SELECT
+                    question,
+                    COUNT(*) AS asked_count,
+                    MAX(answer) AS answer,
+                    MAX(created_at) AS last_asked
+                FROM qa_logs
+                WHERE LENGTH(question) > 20
+                  AND question NOT LIKE '{%%'
+                  AND LOWER(question) NOT IN ('test', 'hello', 'hi', 'test me')
+                  AND answer IS NOT NULL
+                  AND LENGTH(answer) > 100
+                GROUP BY question
+                HAVING COUNT(*) >= 1
+                ORDER BY COUNT(*) DESC, MAX(created_at) DESC
+                LIMIT :limit
+            """),
+            {"limit": max(1, min(limit, 200))},
+        ).fetchall()
+
+        archive = []
+        for r in rows:
+            archive.append({
+                "question": r[0],
+                "asked_count": r[1],
+                "answer_snippet": r[2][:400] if r[2] else "",
+                "last_asked": r[3].isoformat() if r[3] else None,
+            })
+
+        return {"archive": archive, "total": len(archive)}
+
+    except Exception as e:
+        logger.error("Error fetching answer archive: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch archive") from e
 
 
 @app.get("/status")

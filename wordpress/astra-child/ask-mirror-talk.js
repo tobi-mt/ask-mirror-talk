@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v3.9.0 loaded');
+  console.log('Ask Mirror Talk Widget v4.5.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -197,18 +197,46 @@
         }
         topicsList.innerHTML = '';
         topics.forEach(t => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'amt-topic-btn';
-          btn.title = `Explore ${t.label}` + (t.episode_count ? ` (${t.episode_count} episodes)` : '');
-          btn.innerHTML = `<span class="amt-topic-icon">${t.icon}</span><span class="amt-topic-name">${t.label}</span>`;
-          btn.addEventListener('click', () => {
-            input.value = t.query;
-            input.focus();
-            topicsContainer.style.display = 'none';
-            form.dispatchEvent(new Event('submit', { cancelable: true }));
+          const item = document.createElement('div');
+          item.className = 'amt-topic-item';
+
+          const starters = t.starters || [];
+          const startersHtml = starters.length ? `
+            <div class="amt-topic-starter-list">
+              ${starters.map(q => `<button type="button" class="amt-topic-starter-btn" data-q="${q.replace(/"/g,'&quot;')}">${q}</button>`).join('')}
+              <button type="button" class="amt-topic-starter-btn amt-topic-main-btn" data-q="${t.query.replace(/"/g,'&quot;')}">✦ ${t.query}</button>
+            </div>
+          ` : '';
+
+          item.innerHTML = `
+            <button type="button" class="amt-topic-btn" title="Explore ${t.label}${t.episode_count ? ` (${t.episode_count} episodes)` : ''}">
+              <span class="amt-topic-icon">${t.icon}</span>
+              <span class="amt-topic-name">${t.label}</span>
+              ${t.episode_count ? `<span style="font-size:0.75rem;opacity:0.45;margin-left:auto;padding-right:4px;">${t.episode_count}</span>` : ''}
+              <span class="amt-topic-expand-arrow">▶</span>
+            </button>
+            ${startersHtml}
+          `;
+
+          // Toggle expand on main button click
+          item.querySelector('.amt-topic-btn').addEventListener('click', () => {
+            const isOpen = item.classList.contains('amt-topic-open');
+            // Close all others
+            topicsList.querySelectorAll('.amt-topic-item.amt-topic-open').forEach(el => el.classList.remove('amt-topic-open'));
+            if (!isOpen) item.classList.add('amt-topic-open');
           });
-          topicsList.appendChild(btn);
+
+          // Starter question clicks
+          item.querySelectorAll('.amt-topic-starter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              input.value = btn.dataset.q;
+              input.focus();
+              topicsContainer.style.display = 'none';
+              form.dispatchEvent(new Event('submit', { cancelable: true }));
+            });
+          });
+
+          topicsList.appendChild(item);
         });
         topicsContainer.style.display = '';
       })
@@ -356,6 +384,10 @@
 
       const oldFeedback = document.getElementById('amt-feedback-section');
       if (oldFeedback) oldFeedback.remove();
+      const oldEmail = document.getElementById('amt-email-section');
+      if (oldEmail) oldEmail.remove();
+      const oldRelated = document.getElementById('amt-related-section');
+      if (oldRelated) oldRelated.remove();
 
       // Reveal response container with smooth fade-in (display:none → block then opacity transition)
       responseContainer.style.display = '';
@@ -593,10 +625,14 @@
           const quoteHtml = quoteText
             ? `<span class="citation-quote">"${quoteText}"</span>`
             : '';
+
+          const yearHtml = citation.episode_year
+            ? `<span class="citation-year">${citation.episode_year}</span>`
+            : '';
           
           link.innerHTML = `
             <div class="citation-info">
-              <span class="citation-title">${episodeTitle}</span>
+              <span class="citation-title">${episodeTitle}${yearHtml}</span>
               ${quoteHtml}
             </div>
             <span class="citation-time">▶ ${timeDisplay}</span>
@@ -612,12 +648,59 @@
             if (url) {
               showInlinePlayer(li, url, start, end, title);
             } else {
-              // Fallback: open in new tab if no audio URL
               window.open(this.href, '_blank');
             }
           });
 
           li.appendChild(link);
+
+          // "Preview 30s" button
+          if (audioUrl) {
+            const previewBtn = document.createElement('button');
+            previewBtn.type = 'button';
+            previewBtn.className = 'citation-preview-btn';
+            previewBtn.title = 'Preview 30 seconds';
+            previewBtn.innerHTML = '⏯ Preview 30s';
+            previewBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const existingPreview = li.querySelector('.amt-preview-audio');
+              if (existingPreview) {
+                existingPreview.pause();
+                existingPreview.remove();
+                previewBtn.innerHTML = '⏯ Preview 30s';
+                return;
+              }
+              const previewAudio = document.createElement('audio');
+              previewAudio.className = 'amt-preview-audio';
+              previewAudio.style.display = 'none';
+              previewAudio.src = audioUrl;
+              li.appendChild(previewAudio);
+              previewBtn.innerHTML = '⏹ Stop preview';
+              const clipStart = startSeconds || 0;
+              const clipEnd = clipStart + 30;
+              previewAudio.addEventListener('loadedmetadata', () => {
+                previewAudio.currentTime = clipStart;
+                previewAudio.play().catch(() => {});
+              });
+              if (previewAudio.readyState >= 1) {
+                previewAudio.currentTime = clipStart;
+                previewAudio.play().catch(() => {});
+              }
+              previewAudio.addEventListener('timeupdate', function stopAt() {
+                if (previewAudio.currentTime >= clipEnd) {
+                  previewAudio.pause();
+                  previewAudio.remove();
+                  previewBtn.innerHTML = '⏯ Preview 30s';
+                  previewAudio.removeEventListener('timeupdate', stopAt);
+                }
+              });
+              previewAudio.addEventListener('ended', () => {
+                previewAudio.remove();
+                previewBtn.innerHTML = '⏯ Preview 30s';
+              });
+            });
+            li.appendChild(previewBtn);
+          }
 
           // "Explore this episode" button — links to full episode page
           if (audioUrl) {
@@ -671,6 +754,19 @@
   // SSE Streaming Answer
   // ========================================
 
+  // ─── Conversation Memory ────────────────────────────────────
+  // Keep last 6 turns (3 questions + 3 answers) for follow-up context
+  let conversationContext = [];
+
+  function appendConversationTurn(question, answer) {
+    conversationContext.push({ role: 'user', content: question });
+    conversationContext.push({ role: 'assistant', content: answer.substring(0, 600) });
+    // Cap at 6 turns
+    if (conversationContext.length > 6) {
+      conversationContext = conversationContext.slice(-6);
+    }
+  }
+
   /**
    * Stream an answer via SSE (Server-Sent Events).
    * Falls back to the non-streaming /ask endpoint on error.
@@ -679,7 +775,7 @@
     const response = await fetch(`${API_BASE}/ask/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question })
+      body: JSON.stringify({ question, context: conversationContext.length ? conversationContext : undefined })
     });
 
     if (!response.ok) {
@@ -787,13 +883,19 @@
               latency_ms: event.latency_ms,
               cached: event.cached || false
             });
-            // Add share button and SEO schema after answer is complete
+            // Add share button, rating section, related questions, and SEO schema after answer is complete
             addShareButton(question, answerText);
+            addSaveToEmailButton(question, answerText);
+            addRatingSection(event.qa_log_id);
+            showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
 
             // Gamification: record the answered question
             onQuestionAnswered(question, window._amtLastTheme || null);
             window._amtLastTheme = null;
+
+            // Conversation memory: append this turn
+            appendConversationTurn(question, answerText);
 
             // Scroll to top of response so user reads from the beginning.
             // Small delay lets the DOM finish painting the depth indicator + share button.
@@ -830,9 +932,151 @@
     // Add share button and SEO schema
     const questionText = input.value.trim();
     addShareButton(questionText, answer);
+    addSaveToEmailButton(questionText, answer);
+    addRatingSection(null); // no qa_log_id in non-streaming fallback
     injectFAQSchema(questionText, answer);
 
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ========================================
+  // Save to Email
+  // ========================================
+
+  function addSaveToEmailButton(question, answer) {
+    const existing = document.getElementById('amt-email-section');
+    if (existing) existing.remove();
+    if (!question || !answer) return;
+
+    const shareSection = document.getElementById('amt-share-section');
+
+    const section = document.createElement('div');
+    section.id = 'amt-email-section';
+    section.className = 'amt-email-section';
+    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email">📧 Save to email</button>`;
+
+    if (shareSection && shareSection.parentNode) {
+      shareSection.parentNode.insertBefore(section, shareSection.nextSibling);
+    } else {
+      responseContainer.appendChild(section);
+    }
+
+    section.querySelector('.amt-email-btn').addEventListener('click', () => {
+      const subject = encodeURIComponent(`Mirror Talk: ${question.substring(0, 80)}`);
+      const body = encodeURIComponent(
+        `Question: ${question}\n\n` +
+        `Answer from Mirror Talk:\n${answer.substring(0, 1500)}\n\n` +
+        `— Answered by Ask Mirror Talk\nhttps://mirrortalk.com/ask-mirror-talk/`
+      );
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    });
+  }
+
+  // ========================================
+  // Related Questions ("Others also wondered…")
+  // ========================================
+
+  // Escape HTML entities for safe insertion into innerHTML
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function showRelatedQuestions(qaLogId) {
+    // Remove previous section if exists
+    const existing = document.getElementById('amt-related-section');
+    if (existing) existing.remove();
+    if (!qaLogId) return;
+
+    fetch(`${API_BASE}/api/related-questions?qa_log_id=${qaLogId}`)
+      .then(r => r.json())
+      .then(data => {
+        const questions = data.questions || [];
+        if (questions.length === 0) return;
+
+        const section = document.createElement('div');
+        section.id = 'amt-related-section';
+        section.className = 'amt-related-section';
+
+        const label = document.createElement('div');
+        label.className = 'amt-related-label';
+        label.textContent = 'Others also wondered…';
+        section.appendChild(label);
+
+        const list = document.createElement('div');
+        list.className = 'amt-related-list';
+        questions.forEach(q => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'amt-related-btn';
+          btn.textContent = q;  // textContent is XSS-safe
+          btn.addEventListener('click', () => {
+            input.value = q;
+            input.focus();
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
+          });
+          list.appendChild(btn);
+        });
+        section.appendChild(list);
+        responseContainer.appendChild(section);
+      })
+      .catch(() => {}); // silently fail
+  }
+
+  // ========================================
+  // Rating (Thumbs Up / Down)
+  // ========================================
+
+  function addRatingSection(qaLogId) {
+    const existing = document.getElementById('amt-feedback-section');
+    if (existing) existing.remove();
+    if (!qaLogId) return;
+
+    const section = document.createElement('div');
+    section.id = 'amt-feedback-section';
+    section.className = 'amt-feedback-section';
+    section.innerHTML = `
+      <span class="amt-feedback-label">Was this helpful?</span>
+      <button class="amt-feedback-btn amt-feedback-up" data-type="positive" title="Yes, helpful">👍</button>
+      <button class="amt-feedback-btn amt-feedback-down" data-type="negative" title="Not helpful">👎</button>
+      <span class="amt-feedback-thanks" style="display:none;">Thanks for the feedback!</span>
+    `;
+
+    responseContainer.appendChild(section);
+
+    section.querySelectorAll('.amt-feedback-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const type = btn.dataset.type;
+        section.querySelectorAll('.amt-feedback-btn').forEach(b => b.disabled = true);
+        btn.classList.add('amt-feedback-selected');
+        section.querySelector('.amt-feedback-thanks').style.display = '';
+
+        // Track sharer badge for upvotes
+        if (type === 'positive') {
+          try {
+            const s = loadStats();
+            s.sharesCount = (s.sharesCount || 0) + 1;
+            const newBadges = checkAndAwardBadges(s);
+            saveStats(s);
+            newBadges.forEach(b2 => showMilestoneToast(b2.emoji, `Badge unlocked: ${b2.name}`, b2.desc));
+          } catch (e) {}
+        }
+
+        try {
+          await fetch(`${API_BASE}/api/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qa_log_id: qaLogId, feedback_type: type })
+          });
+        } catch (e) {
+          console.warn('Feedback submission failed:', e);
+        }
+      });
+    });
   }
 
   // ========================================
@@ -1055,6 +1299,11 @@
       if (oldFeedback) oldFeedback.remove();
       const oldShare = document.getElementById('amt-share-section');
       if (oldShare) oldShare.remove();
+      const oldEmail = document.getElementById('amt-email-section');
+      if (oldEmail) oldEmail.remove();
+      const oldRelated = document.getElementById('amt-related-section');
+      if (oldRelated) oldRelated.remove();
+      conversationContext = []; // reset conversation thread
     }
   });
 
@@ -1070,15 +1319,7 @@
     } catch (e) { /* localStorage not available */ }
   }
 
-  // Save session after successful answer (hook into output rendering)
-  const originalSetLoading = setLoading;
-  // Watch for answer completion: override setLoading(false) to save session
-  const origFormHandler = form.onsubmit;
-
-  // Intercept: after successful stream or fallback, persist the Q&A
-  const _origDispatch = form.dispatchEvent.bind(form);
-
-  // Simple approach: MutationObserver on output to detect answer rendered
+  // Save session after successful answer — MutationObserver watches output for new content
   const sessionObserver = new MutationObserver(() => {
     const q = input.value.trim();
     const a = output.textContent.trim();
@@ -1088,14 +1329,67 @@
   });
   sessionObserver.observe(output, { childList: true, subtree: true, characterData: true });
 
-  // On page load, show a subtle "last session" prompt if within 24 hours
+  // On page load, show a contextual "continue your journey" hint
   try {
+    const stats = loadStats();
     const lastQ = localStorage.getItem('amt_last_question');
     const lastTime = parseInt(localStorage.getItem('amt_last_time') || '0');
     const hoursAgo = (Date.now() - lastTime) / (1000 * 60 * 60);
 
-    if (lastQ && hoursAgo < 24 && !input.value) {
-      // Show a subtle prompt to re-ask the last question
+    // Find an unexplored theme to suggest
+    const exploredThemes = stats.themesExplored || new Set();
+    const unexploredThemes = AMT_THEMES.filter(t => !exploredThemes.has(t));
+
+    if (!input.value && unexploredThemes.length > 0 && stats.totalQuestions >= 1) {
+      // Pick a pseudo-random unexplored theme based on day index for consistency
+      const dayIndex = new Date().toISOString().slice(0, 10).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      const theme = unexploredThemes[dayIndex % unexploredThemes.length];
+
+      // Find a matching starter question from QOTD pool or topic starters
+      const themeMap = {
+        'Self-worth': "How do I stop comparing myself to others?",
+        'Forgiveness': "What does it mean to truly forgive someone?",
+        'Inner peace': "How do I find peace when everything feels uncertain?",
+        'Purpose': "How do I find my purpose in life?",
+        'Surrender': "What does it look like to let go and surrender?",
+        'Leadership': "What makes a great leader?",
+        'Relationships': "What's the key to building healthy relationships?",
+        'Gratitude': "What role does gratitude play in overcoming hardship?",
+        'Boundaries': "How do I set boundaries without feeling guilty?",
+        'Healing': "How do I start the healing process?",
+        'Grief': "How do I deal with grief and loss?",
+        'Fear': "How can I overcome fear and self-doubt?",
+        'Parenting': "How do I raise kids who are emotionally resilient?",
+        'Growth': "What can I learn from failure?",
+        'Communication': "How do I have hard conversations without damaging the relationship?",
+        'Faith': "What role does faith play in personal growth?",
+        'Identity': "How do I discover my true identity?",
+        'Empowerment': "How do I find my voice when I've been silenced?",
+        'Transition': "How do I move forward after a major life change?",
+        'Community': "What does Mirror Talk teach about the power of community?",
+      };
+      const suggestedQ = themeMap[theme] || `What does Mirror Talk say about ${theme.toLowerCase()}?`;
+
+      const resumeHint = document.createElement('div');
+      resumeHint.className = 'amt-resume-hint';
+      resumeHint.innerHTML = `
+        <div class="amt-resume-hint-inner">
+          <span class="amt-resume-label">You haven't explored <strong>${theme}</strong> yet</span>
+          <button type="button" class="amt-resume-btn">
+            ${suggestedQ}
+          </button>
+        </div>
+      `;
+      form.insertBefore(resumeHint, form.firstChild);
+
+      resumeHint.querySelector('.amt-resume-btn').addEventListener('click', () => {
+        input.value = suggestedQ;
+        resumeHint.remove();
+        input.focus();
+        form.dispatchEvent(new Event('submit', { cancelable: true }));
+      });
+    } else if (lastQ && hoursAgo < 24 && !input.value && stats.totalQuestions === 0) {
+      // Fallback for users with no gamification data yet: show last question
       const resumeHint = document.createElement('div');
       resumeHint.className = 'amt-resume-hint';
       resumeHint.innerHTML = `
@@ -1884,6 +2178,127 @@
       } catch (e2) {}
     }
   });
+
+  // ========================================
+  // Onboarding Flow (first-visit 3-step guide)
+  // ========================================
+  (function initOnboarding() {
+    try {
+      if (localStorage.getItem('amt_onboarded')) return;
+    } catch (e) { return; }
+
+    const overlay = document.getElementById('amt-onboarding-overlay');
+    if (!overlay) return;
+
+    const steps = [
+      {
+        emoji: '🎙️',
+        heading: 'Welcome to Ask Mirror Talk',
+        body: 'Explore the wisdom in over 100 Mirror Talk podcast episodes — just ask a question in plain English.',
+        btnLabel: 'What can I ask? →',
+      },
+      {
+        emoji: '💡',
+        heading: 'Try questions like these',
+        body: 'Click any example to ask it right now:',
+        examples: [
+          'How do I deal with grief and loss?',
+          'What does Mirror Talk say about forgiveness?',
+          'How can I overcome fear and self-doubt?',
+        ],
+        btnLabel: 'Got it! →',
+      },
+      {
+        emoji: '🔥',
+        heading: 'Build your streak',
+        body: 'Come back daily to keep your streak alive, explore themes, and earn badges as you grow.',
+        btnLabel: 'Start exploring',
+      },
+    ];
+
+    let currentStep = 0;
+
+    function renderStep(idx) {
+      const step = steps[idx];
+      const dotsHtml = steps.map((_, i) =>
+        `<div class="amt-onboarding-dot${i === idx ? ' active' : ''}"></div>`
+      ).join('');
+
+      const examplesHtml = step.examples
+        ? `<div class="amt-onboarding-examples">${step.examples.map(q =>
+            `<button type="button" class="amt-onboarding-example" data-q="${q.replace(/"/g,'&quot;')}">${q}</button>`
+          ).join('')}</div>`
+        : '';
+
+      overlay.innerHTML = `
+        <div class="amt-onboarding-overlay">
+          <div class="amt-onboarding-card">
+            <div class="amt-onboarding-dots">${dotsHtml}</div>
+            <div style="font-size:2.5rem;margin-bottom:10px;">${step.emoji}</div>
+            <h2>${step.heading}</h2>
+            <p>${step.body}</p>
+            ${examplesHtml}
+            <button type="button" class="amt-onboarding-next">${step.btnLabel}</button>
+            <button type="button" class="amt-onboarding-skip">Skip intro</button>
+          </div>
+        </div>
+      `;
+      overlay.style.display = '';
+
+      overlay.querySelector('.amt-onboarding-next').addEventListener('click', () => {
+        if (currentStep < steps.length - 1) {
+          currentStep++;
+          renderStep(currentStep);
+        } else {
+          closeOnboarding();
+        }
+      });
+
+      overlay.querySelector('.amt-onboarding-skip').addEventListener('click', closeOnboarding);
+
+      overlay.querySelectorAll('.amt-onboarding-example').forEach(btn => {
+        btn.addEventListener('click', () => {
+          closeOnboarding();
+          input.value = btn.dataset.q;
+          input.focus();
+          form.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+      });
+    }
+
+    function closeOnboarding() {
+      overlay.style.display = 'none';
+      try { localStorage.setItem('amt_onboarded', '1'); } catch (e) {}
+    }
+
+    // Show after a short delay so the page renders first
+    setTimeout(() => renderStep(0), 800);
+  })();
+
+  // ========================================
+  // Dark Mode Toggle
+  // ========================================
+  (function initDarkMode() {
+    const toggleBtn = document.getElementById('amt-dark-mode-toggle');
+    if (!toggleBtn) return;
+
+    function applyMode(lightMode) {
+      document.body.classList.toggle('amt-light-mode', lightMode);
+      toggleBtn.textContent = lightMode ? '🌙' : '☀️';
+      toggleBtn.title = lightMode ? 'Switch to dark mode' : 'Switch to light mode';
+      try { localStorage.setItem('amt_light_mode', lightMode ? '1' : '0'); } catch (e) {}
+    }
+
+    // Restore saved preference
+    try {
+      const saved = localStorage.getItem('amt_light_mode');
+      if (saved === '1') applyMode(true);
+    } catch (e) {}
+
+    toggleBtn.addEventListener('click', () => {
+      applyMode(!document.body.classList.contains('amt-light-mode'));
+    });
+  })();
 
   // Initialise stats bar on page load
   try {

@@ -17,6 +17,7 @@ function ask_mirror_talk_shortcode() {
     ?>
     <div class="ask-mirror-talk">
         <h2>Ask Mirror Talk</h2>
+        <button type="button" id="amt-dark-mode-toggle" class="amt-dark-mode-toggle" title="Toggle light/dark mode" aria-label="Toggle dark mode">🌙</button>
         <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
             <div class="amt-stat amt-stat-streak">
                 <span class="amt-stat-icon">🔥</span>
@@ -64,6 +65,8 @@ function ask_mirror_talk_shortcode() {
             <div class="amt-followups-list"></div>
         </div>
     </div>
+    <!-- Onboarding overlay (rendered by JS on first visit) -->
+    <div id="amt-onboarding-overlay" style="display:none;"></div>
     <?php
     return ob_get_clean();
 }
@@ -76,7 +79,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.4.0'; // Gamification: streaks, badges, explorer, confetti
+    $version = '4.5.0'; // v4.5.0: Ratings, conversation memory, onboarding, topics expand, related Qs, archive, email, 30s preview, freshness, dark mode, journey hint
     
     // Core styles
     wp_enqueue_style(

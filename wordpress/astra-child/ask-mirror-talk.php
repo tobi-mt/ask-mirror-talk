@@ -17,7 +17,7 @@ function ask_mirror_talk_shortcode() {
     ?>
     <div class="ask-mirror-talk">
         <h2>Ask Mirror Talk</h2>
-        <button type="button" id="amt-dark-mode-toggle" class="amt-dark-mode-toggle" title="Toggle light/dark mode" aria-label="Toggle dark mode">🌙</button>
+        <button type="button" id="amt-dark-mode-toggle" class="amt-dark-mode-toggle" title="Toggle light/dark mode" aria-label="Toggle dark mode"><span class="amt-toggle-moon">🌙</span><span class="amt-toggle-streak" id="amt-toggle-streak"></span></button>
         <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
             <div class="amt-stat amt-stat-streak">
                 <span class="amt-stat-icon">🔥</span>

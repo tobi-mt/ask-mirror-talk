@@ -2209,24 +2209,35 @@
 .amt-dark-mode-toggle {
   position: fixed;
   bottom: 20px;
-  right: 20px;
+  left: 20px;
   z-index: 9999;
   background: rgba(46,42,36,0.9);
   border: 1.5px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  width: 42px;
+  border-radius: 20px;
+  min-width: 42px;
   height: 42px;
-  font-size: 1.2rem;
+  padding: 0 12px;
+  font-size: 1.1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   box-shadow: 0 3px 12px rgba(0,0,0,0.4);
   transition: transform 0.2s;
 }
 
 .amt-dark-mode-toggle:hover {
-  transform: scale(1.1);
+  transform: scale(1.05);
+}
+
+.amt-toggle-moon { line-height: 1; }
+
+.amt-toggle-streak {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f7c948;
+  letter-spacing: 0.01em;
 }
 
 /* Light mode overrides when .amt-light-mode is on body */

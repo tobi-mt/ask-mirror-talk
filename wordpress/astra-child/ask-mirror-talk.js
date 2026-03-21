@@ -2034,6 +2034,17 @@
     document.getElementById('amt-themes-value').textContent   = stats.themesExplored.size;
     document.getElementById('amt-badge-count').textContent    = stats.earnedBadges.size;
 
+    // Update streak count inside the dark-mode toggle pill
+    const toggleStreak = document.getElementById('amt-toggle-streak');
+    if (toggleStreak) {
+      if (stats.currentStreak >= 1) {
+        toggleStreak.textContent = '\uD83D\uDD25' + stats.currentStreak;
+        toggleStreak.style.display = '';
+      } else {
+        toggleStreak.style.display = 'none';
+      }
+    }
+
     // Pulse the streak icon when streak > 0
     const streakIcon = bar.querySelector('.amt-stat-streak .amt-stat-icon');
     if (streakIcon) {

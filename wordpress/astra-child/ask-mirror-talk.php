@@ -79,7 +79,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.7.3'; // v4.7.3: fix root widget color inheritance, remove dark-mode toggle blocking scroll-to-top
+    $version = '4.7.4'; // v4.7.4: fix timeHtml ReferenceError crashing citation rendering
     
     // Core styles
     wp_enqueue_style(

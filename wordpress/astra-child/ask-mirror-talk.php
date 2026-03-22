@@ -79,7 +79,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.7.2'; // v4.7.2: UX fixes — toast share btn, two-step feedback, error styling, explore links, SSE timeout, a11y, maxlength
+    $version = '4.7.3'; // v4.7.3: fix root widget color inheritance, remove dark-mode toggle blocking scroll-to-top
     
     // Core styles
     wp_enqueue_style(

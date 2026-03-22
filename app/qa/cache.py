@@ -316,9 +316,10 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
     if not rows:
         return 0
 
-    # Bulk-fetch episode titles and audio URLs — that's all we can reliably
-    # reconstruct from qa_logs. Timestamps are unknown so we omit them;
-    # the JS hides the timestamp badge when start_seconds = 0.
+    # Bulk-fetch the best representative chunk per episode.
+    # Pick the chunk with the longest text (most substantive) per episode,
+    # joined with episode metadata for the title/audio_url.
+    # Intro chunks tend to be short, so "longest text" naturally avoids them.
     all_ep_ids: set[int] = set()
     for _, _, ep_ids_str in rows:
         for raw in (ep_ids_str or "").split(","):
@@ -329,19 +330,35 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
     ep_map: dict[int, dict] = {}
     if all_ep_ids:
         try:
-            ep_rows = db.execute(sqla_text(
-                "SELECT id, title, audio_url, EXTRACT(YEAR FROM published_at)::int AS yr FROM episodes WHERE id = ANY(:ids)"
-            ), {"ids": list(all_ep_ids)}).fetchall()
+            ep_rows = db.execute(sqla_text("""
+                SELECT DISTINCT ON (c.episode_id)
+                    e.id,
+                    e.title,
+                    e.audio_url,
+                    EXTRACT(YEAR FROM e.published_at)::int AS yr,
+                    c.text,
+                    c.start_time,
+                    c.end_time
+                FROM chunks c
+                JOIN episodes e ON c.episode_id = e.id
+                WHERE e.id = ANY(:ids)
+                  AND c.text IS NOT NULL
+                  AND length(c.text) > 50
+                ORDER BY c.episode_id, length(c.text) DESC
+            """), {"ids": list(all_ep_ids)}).fetchall()
             ep_map = {
                 r[0]: {
                     "title": r[1] or "",
                     "audio_url": r[2] or "",
                     "year": int(r[3]) if r[3] else None,
+                    "text": r[4] or "",
+                    "start_time": float(r[5]) if r[5] is not None else 0.0,
+                    "end_time": float(r[6]) if r[6] is not None else 0.0,
                 }
                 for r in ep_rows
             }
         except Exception as exc:
-            logger.warning("Cache DB prewarm: failed to fetch episodes — %s", exc)
+            logger.warning("Cache DB prewarm: failed to fetch episode chunks — %s", exc)
 
     loaded = 0
     for question, answer, ep_ids_str in rows:
@@ -356,10 +373,14 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
                     "episode_title": ep_map[eid]["title"],
                     "episode_year": ep_map[eid]["year"],
                     "audio_url": ep_map[eid]["audio_url"],
-                    "episode_url": ep_map[eid]["audio_url"],
-                    "timestamp_start_seconds": 0,
-                    "timestamp_end_seconds": 0,
-                    "text": "",
+                    "episode_url": (
+                        f"{ep_map[eid]['audio_url']}#t={int(ep_map[eid]['start_time'])}"
+                        if ep_map[eid]["audio_url"] and ep_map[eid]["start_time"] > 0
+                        else ep_map[eid]["audio_url"]
+                    ),
+                    "timestamp_start_seconds": int(ep_map[eid]["start_time"]),
+                    "timestamp_end_seconds": int(ep_map[eid]["end_time"]),
+                    "text": ep_map[eid]["text"][:200],
                 }
                 for eid in ep_ids
                 if eid in ep_map

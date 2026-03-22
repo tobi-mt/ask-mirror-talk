@@ -79,7 +79,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.7.4'; // v4.7.4: fix timeHtml ReferenceError crashing citation rendering
+    $version = '4.7.5'; // v4.7.5: prewarm cache now stores real chunk quotes+timestamps
     
     // Core styles
     wp_enqueue_style(

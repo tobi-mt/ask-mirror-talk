@@ -617,7 +617,14 @@
         const timestampEnd = formatTimestamp(endSeconds);
         const audioUrl = citation.audio_url || '';
         const podcastUrl = citation.episode_url || (audioUrl && startSeconds ? `${audioUrl}#t=${startSeconds}` : audioUrl);
-        
+
+        const timeDisplay = startSeconds > 0
+          ? ((startSeconds !== endSeconds && timestampEnd)
+              ? `${timestampStart} – ${timestampEnd}`
+              : timestampStart)
+          : '';
+        const timeHtml = timeDisplay ? `<span class="citation-time">▶ ${timeDisplay}</span>` : '';
+
         if (podcastUrl) {
           const link = document.createElement("a");
           link.href = podcastUrl;
@@ -628,10 +635,6 @@
           link.setAttribute('data-audio-url', audioUrl);
           link.setAttribute('data-start', startSeconds);
           link.setAttribute('data-end', endSeconds);
-          
-          const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
-            ? `${timestampStart} – ${timestampEnd}` 
-            : timestampStart;
 
           // Build the quote snippet (truncated text already returned by API)
           const quoteText = citation.text || '';
@@ -733,13 +736,6 @@
             li.appendChild(exploreBtn);
           }
         } else {
-          const timeDisplay = startSeconds > 0
-            ? ((startSeconds !== endSeconds && timestampEnd)
-                ? `${timestampStart} – ${timestampEnd}`
-                : timestampStart)
-            : '';
-          const timeHtml = timeDisplay ? `<span class="citation-time">▶ ${timeDisplay}</span>` : '';
-
           const quoteText = citation.text || '';
           const quoteHtml = quoteText
             ? `<p class="citation-quote">"${quoteText}"</p>`

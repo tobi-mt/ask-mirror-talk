@@ -4,7 +4,7 @@
   "description": "Explore personal growth wisdom from the Mirror Talk podcast. Ask questions, discover insights, and listen to relevant episodes.",
   "start_url": "/ask-mirror-talk/?utm_source=pwa&utm_medium=homescreen",
   "display": "standalone",
-  "background_color": "#1a1209",
+  "background_color": "#943e08",
   "theme_color": "#2e2a24",
   "orientation": "portrait",
   "scope": "/",

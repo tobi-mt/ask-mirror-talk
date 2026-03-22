@@ -20,7 +20,7 @@ rm -f "$ZIP_NAME"
 
 # Create zip (exclude hidden files, .DS_Store, etc.)
 cd "$THEME_DIR"
-zip -r "../$ZIP_NAME" . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "*.md" -x "*.py"
+zip -r "../$ZIP_NAME" . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "*.md" -x "*.py" -x "icon_compare.png" -x "realsize_preview.png" -x "font_compare.png"
 cd ..
 
 echo "✓ Created: $ZIP_NAME"

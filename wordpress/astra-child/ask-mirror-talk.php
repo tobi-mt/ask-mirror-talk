@@ -163,7 +163,7 @@ function ask_mirror_talk_pwa_head() {
     <link rel="manifest" href="/manifest.json">
 
     <!-- Standard PWA meta tag (Android / Chrome) -->
-    <meta name="theme-color" content="#1a1209">
+    <meta name="theme-color" content="#943e08">
     <meta name="mobile-web-app-capable" content="yes">
 
     <!-- Apple PWA meta tags — makes "Add to Home Screen" launch as a standalone app -->

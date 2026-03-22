@@ -141,11 +141,17 @@
     }
   })();
 
-  // ─── Handle AUTO_SUBMIT from service worker (already-open tab) ─
+  // ─── Handle messages from service worker (already-open tab) ───
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
+        // QOTD notification clicked while app was open — auto-submit the question.
         autoSubmitQuestion(event.data.question);
+      } else if (event.data && event.data.type === 'NAVIGATE_TO_FORM') {
+        // Midday motivation notification clicked while app was open — scroll
+        // to the form and focus the input so the user can start typing.
+        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (input) input.focus();
       }
     });
   }
@@ -407,7 +413,8 @@
       responseContainer.classList.add('amt-loading-state');
       // rAF: let browser paint display:block first, then trigger opacity transition
       requestAnimationFrame(() => responseContainer.classList.add('amt-visible'));
-      responseContainer.querySelector('h3').textContent = 'Response';
+      const responseH3 = responseContainer.querySelector('h3');
+      if (responseH3) responseH3.textContent = 'Response';
 
       output.innerHTML = `
         <div class="amt-loading">
@@ -929,10 +936,10 @@
             // Conversation memory: append this turn
             appendConversationTurn(question, answerText);
 
-            // Scroll to top of response so user reads from the beginning.
-            // Small delay lets the DOM finish painting the depth indicator + share button.
+            // Scroll response into view only if it's not already visible.
+            // Using 'nearest' avoids yanking the user back if they've already scrolled down.
             setTimeout(() => {
-              responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 100);
           }
         } catch (parseErr) {
@@ -1276,13 +1283,6 @@
   const charCounter = document.getElementById('amt-char-counter');
 
   input.addEventListener('input', function() {
-    if (charCounter) {
-      const len = this.value.length;
-      charCounter.textContent = `${len} / 500`;
-      charCounter.classList.toggle('amt-char-counter-warn', len > 450);
-    }
-    // Update character counter
-    const charCounter = document.getElementById('amt-char-counter');
     if (charCounter) {
       const len = this.value.length;
       charCounter.textContent = `${len} / 500`;
@@ -1702,9 +1702,14 @@
         </div>
       </div>
       <div class="amt-notif-prefs" style="display:none;">
+        <button class="amt-notif-back" type="button" aria-label="Go back">← Back</button>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-qotd" checked>
           <span>✨ Daily Question of the Day</span>
+        </label>
+        <label class="amt-notif-pref">
+          <input type="checkbox" id="amt-notif-midday" checked>
+          <span>💡 Midday motivation boost</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-episodes" checked>
@@ -1731,15 +1736,22 @@
       banner.querySelector('.amt-notif-prefs').style.display = '';
     });
 
+    // "Back" — return to the initial enable/dismiss view
+    banner.querySelector('.amt-notif-back').addEventListener('click', () => {
+      banner.querySelector('.amt-notif-prefs').style.display = 'none';
+      banner.querySelector('.amt-notif-actions').style.display = '';
+    });
+
     // "Save & Enable" — request permission and subscribe
     banner.querySelector('.amt-notif-save').addEventListener('click', async () => {
       const qotd = document.getElementById('amt-notif-qotd').checked;
+      const midday = document.getElementById('amt-notif-midday').checked;
       const episodes = document.getElementById('amt-notif-episodes').checked;
 
       banner.querySelector('.amt-notif-save').textContent = 'Enabling…';
       banner.querySelector('.amt-notif-save').disabled = true;
 
-      const result = await subscribeToPush(qotd, episodes);
+      const result = await subscribeToPush(qotd, episodes, midday);
       if (result.success) {
         banner.innerHTML = `
           <div class="amt-notif-inner amt-notif-success">
@@ -1777,9 +1789,11 @@
       try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
     });
 
-    // Auto-dismiss after 20 seconds
+    // Auto-dismiss after 20 seconds, but not while the prefs panel is visible
     setTimeout(() => {
-      if (banner.parentNode && !banner.querySelector('.amt-notif-prefs[style=""]')) {
+      const prefs = banner.querySelector('.amt-notif-prefs');
+      const prefsVisible = prefs && prefs.style.display !== 'none';
+      if (banner.parentNode && !prefsVisible) {
         banner.classList.add('amt-notif-hiding');
         setTimeout(() => banner.remove(), 300);
       }
@@ -1857,7 +1871,7 @@
           keys: subJson.keys,
           notify_qotd: notifyQotd,
           notify_new_episodes: notifyEpisodes,
-          notify_midday: true,
+          notify_midday: notifyMidday,
           timezone: userTimezone,
           preferred_qotd_hour: 8,
         }),
@@ -2062,6 +2076,14 @@
     }
 
     bar.style.display = '';
+
+    // First-time hint: wobble the badge button so users discover it's tappable
+    const btn = document.getElementById('amt-badges-btn');
+    if (btn && !btn.dataset.hinted) {
+      btn.dataset.hinted = '1';
+      btn.classList.add('amt-badges-btn-hint');
+      btn.addEventListener('animationend', () => btn.classList.remove('amt-badges-btn-hint'), { once: true });
+    }
   }
 
   function renderBadgeShelf(stats) {

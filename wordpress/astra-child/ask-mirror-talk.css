@@ -1354,6 +1354,21 @@
     display: none;             /* Chrome, Safari */
   }
 
+  /* Fade hint showing more topics are off-screen to the right */
+  .amt-topics {
+    position: relative;
+  }
+  .amt-topics::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 100%;
+    background: linear-gradient(to right, transparent, #faf8f4 90%);
+    pointer-events: none;
+  }
+
   .amt-topic-btn {
     flex-shrink: 0;
     scroll-snap-align: start;
@@ -2175,6 +2190,22 @@
   cursor: pointer;
 }
 
+.amt-notif-back {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #6b665d;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0 0 4px;
+  margin-bottom: 2px;
+  transition: color 0.15s;
+}
+.amt-notif-back:hover {
+  color: #2e2a24;
+}
+
 .amt-notif-save {
   align-self: flex-start;
   background: #2e2a24;
@@ -2205,11 +2236,11 @@
 
 @keyframes amtSlideDown {
   from { opacity: 0; max-height: 0; transform: translateY(-8px); }
-  to { opacity: 1; max-height: 200px; transform: translateY(0); }
+  to { opacity: 1; max-height: 280px; transform: translateY(0); }
 }
 
 @keyframes amtSlideUp {
-  from { opacity: 1; max-height: 200px; }
+  from { opacity: 1; max-height: 280px; }
   to { opacity: 0; max-height: 0; margin: 0; padding: 0; overflow: hidden; }
 }
 
@@ -2229,6 +2260,10 @@
   .amt-notif-enable {
     flex: 1;
     padding: 10px 16px;
+  }
+
+  .amt-notif-back {
+    align-self: center;
   }
 
   .amt-notif-prefs {
@@ -2331,6 +2366,23 @@
 
 .amt-badges-btn:hover {
   background: rgba(255,255,255,0.2);
+}
+
+/* Wobble hint — plays twice when the stats bar first appears, then stops */
+@keyframes amtBadgeWobble {
+  0%          { transform: rotate(0deg)   scale(1); }
+  12%         { transform: rotate(-10deg) scale(1.15); }
+  25%         { transform: rotate(8deg)   scale(1.12); }
+  37%         { transform: rotate(-6deg)  scale(1.1); }
+  50%         { transform: rotate(4deg)   scale(1.05); }
+  62%         { transform: rotate(-2deg)  scale(1.02); }
+  75%,  100%  { transform: rotate(0deg)   scale(1); }
+}
+
+.amt-badges-btn-hint {
+  animation: amtBadgeWobble 0.65s ease-in-out 2;
+  animation-delay: 0.4s;
+  animation-fill-mode: both;
 }
 
 /* ── Badge shelf ── */

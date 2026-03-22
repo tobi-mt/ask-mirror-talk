@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v4.0.0';
+const CACHE_VERSION = 'amt-v4.8.0';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -249,18 +249,33 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If the Mirror Talk page is already open, post a message so it
-      // auto-submits immediately without a full page reload
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin)) {
-          if (question) {
-            client.postMessage({ type: 'AUTO_SUBMIT', question });
-          }
-          client.focus();
-          return;
+      // Prefer a client that already has the Ask Mirror Talk page open so we
+      // can post a message instead of doing a full reload.
+      const askClient = clientList.find(c => c.url.includes('/ask-mirror-talk'));
+
+      if (askClient) {
+        if (question) {
+          // QOTD: auto-submit the question in the open tab
+          askClient.postMessage({ type: 'AUTO_SUBMIT', question });
+        } else {
+          // Midday motivation: scroll the open page to the form so the user
+          // can start typing — no question to submit automatically.
+          askClient.postMessage({ type: 'NAVIGATE_TO_FORM' });
         }
+        askClient.focus();
+        return;
       }
-      // Otherwise open a fresh tab — the ?autoask= param will trigger auto-submit
+
+      // Ask Mirror Talk page is not open — check for any other window on
+      // this origin and navigate it, rather than opening a second tab.
+      const anyClient = clientList.find(c => c.url.startsWith(self.location.origin));
+      if (anyClient) {
+        return anyClient.navigate(targetUrl).then(navigatedClient => {
+          if (navigatedClient) navigatedClient.focus();
+        }).catch(() => clients.openWindow(targetUrl));
+      }
+
+      // Nothing open at all — open a fresh tab.
       return clients.openWindow(targetUrl);
     })
   );

@@ -629,7 +629,7 @@
           const yearHtml = citation.episode_year
             ? `<span class="citation-year">${citation.episode_year}</span>`
             : '';
-          
+
           link.innerHTML = `
             <div class="citation-info">
               <span class="citation-title">${episodeTitle}${yearHtml}</span>
@@ -670,6 +670,13 @@
                 previewBtn.innerHTML = '⏯ Preview 30s';
                 return;
               }
+              // Stop any preview playing in another citation item
+              document.querySelectorAll('.amt-preview-audio').forEach(otherAudio => {
+                otherAudio.pause();
+                const otherBtn = otherAudio.closest('.citation-item')?.querySelector('.citation-preview-btn');
+                if (otherBtn) otherBtn.innerHTML = '⏯ Preview 30s';
+                otherAudio.remove();
+              });
               const previewAudio = document.createElement('audio');
               previewAudio.className = 'amt-preview-audio';
               previewAudio.style.display = 'none';
@@ -722,9 +729,13 @@
             ? `<p class="citation-quote">"${quoteText}"</p>`
             : '';
 
+          const yearHtml = citation.episode_year
+            ? `<span class="citation-year">${citation.episode_year}</span>`
+            : '';
+
           li.innerHTML = `
             <div class="citation-info">
-              <span class="citation-title">${episodeTitle}</span>
+              <span class="citation-title">${episodeTitle}${yearHtml}</span>
               ${quoteHtml}
             </div>
             <span class="citation-time">${timeDisplay}</span>
@@ -965,7 +976,7 @@
       const subject = encodeURIComponent(`Mirror Talk: ${question.substring(0, 80)}`);
       const body = encodeURIComponent(
         `Question: ${question}\n\n` +
-        `Answer from Mirror Talk:\n${answer.substring(0, 1500)}\n\n` +
+        `Answer from Mirror Talk:\n${answer}\n\n` +
         `— Answered by Ask Mirror Talk\nhttps://mirrortalk.com/ask-mirror-talk/`
       );
       window.location.href = `mailto:?subject=${subject}&body=${body}`;
@@ -1092,7 +1103,7 @@
     shareSection.id = 'amt-share-section';
     shareSection.className = 'amt-share-section';
 
-    const shareText = `Q: ${question}\n\n${answer.substring(0, 200)}…\n\nAnswered by Ask Mirror Talk`;
+    const shareText = `Q: ${question}\n\n${answer}\n\nAnswered by Ask Mirror Talk`;
     const pageUrl = window.location.href;
 
     shareSection.innerHTML = `
@@ -1841,6 +1852,10 @@
 
       const subJson = subscription.toJSON();
 
+      // Capture the browser's IANA timezone so the server can deliver
+      // notifications at the right local time (e.g. 8 AM in the user's city).
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
       // Send subscription to our API
       const res = await fetch(`${API_BASE}/api/push/subscribe`, {
         method: 'POST',
@@ -1850,6 +1865,9 @@
           keys: subJson.keys,
           notify_qotd: notifyQotd,
           notify_new_episodes: notifyEpisodes,
+          notify_midday: true,
+          timezone: userTimezone,
+          preferred_qotd_hour: 8,
         }),
       });
 

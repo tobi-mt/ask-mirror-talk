@@ -22,8 +22,17 @@ builder = "dockerfile"
 #   Settings > Deploy > Start Command: python scripts/bulk_ingest.py --max-episodes 20 --no-confirm
 #   Settings > Variables > WHISPER_MODEL: tiny
 #
-# mirror-talk-qotd-cron service (optional, for daily push notifications):
+# mirror-talk-qotd-cron service (QOTD + midday motivation — runs every hour):
 #   Settings > Build > Dockerfile Path: Dockerfile.worker
-#   Settings > Deploy > Cron Schedule: 0 9 * * * (9 AM UTC daily)
+#   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
 #   Settings > Deploy > Start Command: python3 scripts/send_daily_qotd.py
 #   Settings > Variables: same DB + VAPID keys as the API service
+#   Note: Postgres filters to subscribers whose local hour == preferred_qotd_hour
+#         (default 8 AM). Each subscriber receives at most one QOTD per day.
+#
+# mirror-talk-midday-cron service (midday motivation — runs every hour):
+#   Settings > Build > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
+#   Settings > Deploy > Start Command: python3 scripts/send_midday_motivation.py
+#   Settings > Variables: same DB + VAPID keys as the API service
+#   Note: Sends to subscribers whose local hour is 12 (noon).

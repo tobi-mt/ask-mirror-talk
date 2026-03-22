@@ -2,16 +2,18 @@
 """
 Send Daily QOTD Push Notification.
 
-This script sends today's Question of the Day as a push notification
-to all subscribed users. Run it daily via cron or Railway scheduled job.
+This script sends the Question of the Day as a push notification to
+subscribers whose *local time* currently matches their preferred QOTD hour
+(default: 8 AM).  Run it **every hour** — Postgres handles the timezone
+filtering so each subscriber receives exactly one QOTD per calendar day.
 
 Usage:
   python3 scripts/send_daily_qotd.py
 
-Cron example (9 AM UTC daily):
-  0 9 * * * cd /app && python3 scripts/send_daily_qotd.py
+Cron example (every hour):
+  0 * * * * cd /app && python3 scripts/send_daily_qotd.py
 
-Railway cron: Add as a scheduled service with: python3 scripts/send_daily_qotd.py
+Railway cron: Set schedule to "0 * * * *" (hourly), start command above.
 """
 
 import sys

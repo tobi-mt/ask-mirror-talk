@@ -416,12 +416,16 @@ class PushSubscriptionRequest(BaseModel):
     keys: dict  # {"p256dh": "...", "auth": "..."}
     notify_qotd: bool = True
     notify_new_episodes: bool = True
+    notify_midday: bool = True
+    timezone: str = "UTC"          # IANA timezone, e.g. "America/New_York"
+    preferred_qotd_hour: int = 8   # local hour (0-23) for QOTD delivery
 
 
 class PushPreferencesRequest(BaseModel):
     endpoint: str
     notify_qotd: bool = True
     notify_new_episodes: bool = True
+    notify_midday: bool = True
 
 
 @app.get("/api/push/vapid-key")
@@ -451,13 +455,20 @@ def push_subscribe(
         raise HTTPException(status_code=400, detail="Missing p256dh or auth key")
 
     try:
+        # Sanitise timezone: reject obviously invalid values (basic allowlist check)
+        tz = payload.timezone if payload.timezone and len(payload.timezone) <= 100 else "UTC"
+        # Clamp preferred hour to 0-23
+        qotd_hour = max(0, min(23, payload.preferred_qotd_hour))
+
         # Upsert: insert or update on conflict
         db.execute(
             text("""
                 INSERT INTO push_subscriptions (endpoint, p256dh_key, auth_key, user_ip,
                                                  active, notify_qotd, notify_new_episodes,
+                                                 notify_midday, timezone, preferred_qotd_hour,
                                                  created_at, updated_at)
-                VALUES (:endpoint, :p256dh, :auth, :ip, true, :qotd, :episodes, NOW(), NOW())
+                VALUES (:endpoint, :p256dh, :auth, :ip, true, :qotd, :episodes,
+                        :midday, :tz, :qotd_hour, NOW(), NOW())
                 ON CONFLICT (endpoint)
                 DO UPDATE SET
                     p256dh_key = :p256dh,
@@ -466,6 +477,9 @@ def push_subscribe(
                     active = true,
                     notify_qotd = :qotd,
                     notify_new_episodes = :episodes,
+                    notify_midday = :midday,
+                    timezone = :tz,
+                    preferred_qotd_hour = :qotd_hour,
                     updated_at = NOW()
             """),
             {
@@ -475,6 +489,9 @@ def push_subscribe(
                 "ip": request.client.host,
                 "qotd": payload.notify_qotd,
                 "episodes": payload.notify_new_episodes,
+                "midday": payload.notify_midday,
+                "tz": tz,
+                "qotd_hour": qotd_hour,
             },
         )
         db.commit()

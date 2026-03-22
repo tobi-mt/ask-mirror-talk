@@ -262,34 +262,47 @@ _REFILL_BATCH_SIZE = 20
 
 def send_qotd_notification(db: Session) -> dict:
     """
-    Send an individualised, no-repeat QOTD push notification to each subscriber.
+    Send an individualised, no-repeat QOTD push notification to each subscriber
+    whose *local time* currently matches their ``preferred_qotd_hour``.
 
-    Questions come from the push_qotd_questions DB table (seeded from the static
-    list; expanded by AI generation). Each subscriber gets the next question in
-    the pool they haven't received yet.  When any subscriber is within
-    _REFILL_THRESHOLD questions of exhausting the pool, a new AI-generated batch
-    is appended automatically before sends begin — so the pool never runs dry and
-    questions are never repeated.
+    Run this function every hour (cron: ``0 * * * *``).  Postgres converts
+    NOW() to each subscriber's stored IANA timezone, so only subscribers for
+    whom it is currently their preferred morning hour receive a notification.
+    Each subscriber gets at most one QOTD per calendar day (in *their* timezone).
+
+    Questions come from the push_qotd_questions DB table.  Each subscriber gets
+    the next question in the pool they haven't received yet.  A refill batch is
+    generated automatically when the pool headroom drops below the threshold.
     """
     from urllib.parse import quote
 
     # Ensure the DB pool is seeded (no-op if already populated)
     _ensure_pool_seeded(db)
 
-    # Fetch all active QOTD subscribers
+    # Fetch active QOTD subscribers whose local hour == preferred_qotd_hour
+    # AND who have NOT already received a QOTD today (in their own timezone).
     rows = db.execute(
         text("""
-            SELECT id, endpoint, p256dh_key, auth_key
-            FROM push_subscriptions
-            WHERE active = true AND notify_qotd = true
+            SELECT id, endpoint, p256dh_key, auth_key, COALESCE(timezone, 'UTC') AS timezone
+            FROM push_subscriptions w
+            WHERE active = true
+              AND notify_qotd = true
+              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  = w.preferred_qotd_hour
+              AND NOT EXISTS (
+                  SELECT 1 FROM push_qotd_history h
+                  WHERE h.subscription_id = w.id
+                    AND (h.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                        = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+              )
         """)
     ).fetchall()
 
     if not rows:
-        logger.info("No active QOTD subscribers")
+        logger.info("No QOTD subscribers due for delivery at this hour")
         return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
 
-    logger.info("Sending individualised QOTD to %d subscribers", len(rows))
+    logger.info("Sending individualised QOTD to %d subscribers (timezone-filtered)", len(rows))
 
     # ── Proactive refill check ──────────────────────────────────────────────
     # Find the subscriber who has seen the most questions (furthest along), then
@@ -327,7 +340,7 @@ def send_qotd_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth = row
+        sub_id, endpoint, p256dh, auth, _tz = row
 
         # Which questions has this subscriber already received?
         seen_rows = db.execute(
@@ -422,6 +435,128 @@ def send_qotd_notification(db: Session) -> dict:
         "total_subscribers": len(rows),
     }
     logger.info("Individualised QOTD result: %s", result_summary)
+    return result_summary
+
+
+# ── MIDDAY MOTIVATION ────────────────────────────────────────────────────────
+
+_MOTIVATION_MESSAGES = [
+    ("🌟 You're further than you think", "Progress is rarely linear. Every step you've taken today counts — keep going."),
+    ("💛 Midday check-in", "Pause. Breathe. You are doing better than your inner critic is letting you believe."),
+    ("🌿 Refuel your purpose", "The afternoon is yours. One intentional moment can shift the energy of your whole day."),
+    ("🔥 Keep the fire going", "Half the day done — you've already chosen to show up. That's worth celebrating."),
+    ("🕊️ Grace in the middle", "Give yourself the same grace you'd offer a good friend. You're right on time."),
+    ("💪 Stronger than yesterday", "Every challenge you've faced has shaped the resilience you're walking in right now."),
+    ("🌊 Find your flow", "Take 60 seconds to reset. Close your eyes, breathe, and remember your 'why'."),
+    ("✨ Midday wisdom", "Clarity often comes not from doing more, but from pausing long enough to listen."),
+    ("🎯 Stay the course", "Doubt is normal. Courage is not the absence of doubt — it's moving forward anyway."),
+    ("🙏 Grateful heart, open mind", "Name one thing you're grateful for right now. Gratitude rewires how you see the rest of your day."),
+    ("🌈 You are enough", "Right here, right now — not the future version of you. The you reading this is enough."),
+    ("💬 Speak kindly to yourself", "Your self-talk shapes your reality. Choose words today that build you up."),
+    ("🏃 Momentum is your friend", "Small consistent actions compound into extraordinary results. Keep moving."),
+    ("🤝 Lean on community", "You were not designed to do life alone. Who can you encourage or lean on today?"),
+    ("🌅 Afternoon renewal", "The best part of your day can still be ahead. Set one meaningful intention right now."),
+]
+
+
+def send_midday_motivation_notification(db: Session) -> dict:
+    """
+    Send a short motivational push notification to subscribers at their local noon.
+
+    Run this function every hour (same cron as QOTD: ``0 * * * *``).  Postgres
+    filters to subscribers whose current local hour is 12 and who haven't
+    received a motivation message today (in their own timezone).
+    """
+    today = datetime.now(timezone.utc)
+
+    # Subscribers whose local time is noon AND who haven't been motivated today
+    rows = db.execute(
+        text("""
+            SELECT id, endpoint, p256dh_key, auth_key, COALESCE(timezone, 'UTC') AS timezone
+            FROM push_subscriptions w
+            WHERE active = true
+              AND notify_midday = true
+              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 12
+              AND NOT EXISTS (
+                  SELECT 1 FROM push_motivation_history h
+                  WHERE h.subscription_id = w.id
+                    AND (h.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                        = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+              )
+        """)
+    ).fetchall()
+
+    if not rows:
+        logger.info("No midday motivation subscribers due at this hour")
+        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+
+    logger.info("Sending midday motivation to %d subscribers", len(rows))
+
+    # Rotate message daily so it varies
+    title, body = _MOTIVATION_MESSAGES[today.toordinal() % len(_MOTIVATION_MESSAGES)]
+
+    url = (
+        "/ask-mirror-talk/"
+        f"?utm_source=push&utm_medium=midday&utm_campaign={today.date().isoformat()}"
+        "#ask-mirror-talk-form"
+    )
+
+    sent = 0
+    failed = 0
+    expired_ids: list[int] = []
+
+    for row in rows:
+        sub_id, endpoint, p256dh, auth, _tz = row
+
+        subscription_info = {
+            "endpoint": endpoint,
+            "keys": {"p256dh": p256dh, "auth": auth},
+        }
+
+        result = send_push_notification(
+            subscription_info=subscription_info,
+            title=title,
+            body=body,
+            url=url,
+            tag=f"midday-{today.date().isoformat()}",
+            data={"date": today.date().isoformat(), "type": "midday_motivation"},
+            actions=[
+                {"action": "ask", "title": "💬 Ask Mirror Talk", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+                {"action": "dismiss", "title": "Thanks 🙏", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+            ],
+            vibrate=[100, 50, 100],
+            require_interaction=False,
+        )
+
+        if result == "sent":
+            sent += 1
+            db.execute(
+                text("INSERT INTO push_motivation_history (subscription_id, sent_at) VALUES (:sid, NOW())"),
+                {"sid": sub_id},
+            )
+        elif result == "expired":
+            expired_ids.append(sub_id)
+            failed += 1
+        else:
+            failed += 1
+
+    if expired_ids:
+        db.execute(
+            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
+            {"ids": expired_ids},
+        )
+
+    db.commit()
+    if expired_ids:
+        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    result_summary = {
+        "sent": sent,
+        "failed": failed,
+        "expired": len(expired_ids),
+        "total_subscribers": len(rows),
+    }
+    logger.info("Midday motivation result: %s", result_summary)
     return result_summary
 
 

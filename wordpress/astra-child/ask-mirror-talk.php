@@ -34,7 +34,9 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-stat-label">/ 20 topics</span>
             </div>
             <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
+            <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
         </div>
+        <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
         <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
@@ -79,7 +81,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.8.0'; // v4.8.0: notification click fix, midday opt-in, charCounter TDZ fix, badge wobble hint, UX polish
+    $version = '4.9.1'; // v4.9.1: correct install/notification guidance for non-Safari iOS browsers (Edge, Chrome, Firefox)
     
     // Core styles
     wp_enqueue_style(

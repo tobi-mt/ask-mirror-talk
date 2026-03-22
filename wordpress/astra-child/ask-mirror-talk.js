@@ -1497,15 +1497,60 @@
     setTimeout(() => showNotificationOptIn(), 2000);
   });
 
-  // ── iOS Safari fallback ──
+  // ── iOS install hint ──
   // Safari doesn't fire 'beforeinstallprompt', so show a manual instruction banner.
+  // Other iOS browsers (Edge, Chrome, Firefox) can't install PWAs at all — guide them to Safari.
   (function showIOSInstallHint() {
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
     const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                          window.navigator.standalone === true;
 
-    if (!isIOS || !isSafari || isStandalone) return;
+    if (!isIOS || isStandalone) return;
+
+    // Non-Safari iOS browser (Edge, Chrome, Firefox on iOS): show a switch-to-Safari nudge.
+    if (!isSafari) {
+      try {
+        if (sessionStorage.getItem('amt_install_dismissed')) return;
+        if (localStorage.getItem('amt_ios_install_dismissed')) return;
+      } catch (e) {}
+      setTimeout(() => {
+        const widget = document.querySelector('.ask-mirror-talk');
+        if (!widget) return;
+        const existing = document.getElementById('amt-install-banner');
+        if (existing) return; // don't stack on top of another banner
+        const banner = document.createElement('div');
+        banner.id = 'amt-install-banner';
+        banner.className = 'amt-install-banner amt-ios-install';
+        banner.innerHTML = `
+          <div class="amt-install-inner">
+            <div class="amt-install-text">
+              <strong>📲 Install Mirror Talk for the best experience</strong>
+              <span>Open this page in <strong>Safari</strong> to add it to your home screen and enable notifications — your current browser doesn't support PWA installation on iOS.</span>
+            </div>
+            <div class="amt-install-actions">
+              <button class="amt-install-dismiss" type="button" aria-label="Dismiss">✕</button>
+            </div>
+          </div>
+        `;
+        widget.insertBefore(banner, widget.firstChild);
+        banner.querySelector('.amt-install-dismiss').addEventListener('click', () => {
+          banner.classList.add('amt-install-hiding');
+          setTimeout(() => banner.remove(), 300);
+          try {
+            sessionStorage.setItem('amt_install_dismissed', '1');
+            localStorage.setItem('amt_ios_install_dismissed', '1');
+          } catch (e) {}
+        });
+        setTimeout(() => {
+          if (banner.parentNode) {
+            banner.classList.add('amt-install-hiding');
+            setTimeout(() => banner.remove(), 300);
+          }
+        }, 20000);
+      }, 3000);
+      return; // don't fall through to the Safari instructions
+    }
 
     // Don't show if dismissed
     try {
@@ -1564,8 +1609,65 @@
    */
   function showNotificationOptIn() {
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
+    const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                          window.navigator.standalone === true;
+
+    // Non-Safari iOS browser (Edge, Chrome, Firefox on iOS) not in standalone:
+    // PWA installation — and therefore push notifications — requires Safari on iOS.
+    // Show a targeted message so users aren't shown wrong instructions.
+    if (isIOS && !isSafari && !isStandalone) {
+      try {
+        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+      } catch (e) {}
+
+      const existing = document.getElementById('amt-notif-optin');
+      if (existing) existing.remove();
+
+      const banner = document.createElement('div');
+      banner.id = 'amt-notif-optin';
+      banner.className = 'amt-notif-optin';
+      banner.innerHTML = `
+        <div class="amt-notif-inner">
+          <div class="amt-notif-text">
+            <strong>🔔 Notifications need Safari on iOS</strong>
+            <span>Push notifications require the app to be installed as a PWA, which only works via <strong>Safari</strong> on iPhone and iPad. Open this page in Safari, then tap <strong>Share ⎋ → Add to Home Screen</strong>.</span>
+          </div>
+          <div class="amt-notif-actions">
+            <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
+          </div>
+        </div>
+      `;
+
+      const widget = document.querySelector('.ask-mirror-talk');
+      const heading = widget ? widget.querySelector('h2') : null;
+      if (heading && heading.nextSibling) {
+        widget.insertBefore(banner, heading.nextSibling);
+      } else if (widget) {
+        widget.appendChild(banner);
+      }
+
+      banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
+        banner.classList.add('amt-notif-hiding');
+        setTimeout(() => banner.remove(), 300);
+        try {
+          sessionStorage.setItem('amt_notif_dismissed', '1');
+          const count = parseInt(localStorage.getItem('amt_notif_dismiss_count') || '0', 10) + 1;
+          localStorage.setItem('amt_notif_dismiss_count', String(count));
+          if (count >= 2) localStorage.setItem('amt_notif_dismissed_permanent', '1');
+        } catch (e) {}
+      });
+
+      setTimeout(() => {
+        if (banner.parentNode) {
+          banner.classList.add('amt-notif-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 20000);
+
+      return;
+    }
 
     // iOS Safari (not added to home screen): Push API is not available.
     // Show a banner explaining they need to install the PWA first.
@@ -1786,7 +1888,15 @@
     banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
       banner.classList.add('amt-notif-hiding');
       setTimeout(() => banner.remove(), 300);
-      try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
+      try {
+        sessionStorage.setItem('amt_notif_dismissed', '1');
+        // After 2 dismissals, stop showing the banner permanently
+        const count = parseInt(localStorage.getItem('amt_notif_dismiss_count') || '0', 10) + 1;
+        localStorage.setItem('amt_notif_dismiss_count', String(count));
+        if (count >= 2) {
+          localStorage.setItem('amt_notif_dismissed_permanent', '1');
+        }
+      } catch (e) {}
     });
 
     // Auto-dismiss after 20 seconds, but not while the prefs panel is visible
@@ -1821,7 +1931,7 @@
    * Subscribe the browser to push notifications.
    * Returns { success: boolean, reason?: string }
    */
-  async function subscribeToPush(notifyQotd = true, notifyEpisodes = true) {
+  async function subscribeToPush(notifyQotd = true, notifyEpisodes = true, notifyMidday = true) {
     try {
       // Check for private browsing early
       if (isPrivateBrowsing()) {
@@ -1879,7 +1989,12 @@
 
       if (res.ok) {
         console.log('[Push] Subscription registered successfully');
-        try { localStorage.setItem('amt_push_subscribed', '1'); } catch (e) {}
+        try {
+          localStorage.setItem('amt_push_subscribed', '1');
+          // Reveal the management bell in the stats bar
+          const bellBtn = document.getElementById('amt-notif-manage-btn');
+          if (bellBtn) bellBtn.style.display = '';
+        } catch (e) {}
         return { success: true };
       } else {
         console.warn('[Push] Server rejected subscription:', res.status);
@@ -1909,6 +2024,187 @@
     }
     return outputArray;
   }
+
+  /**
+   * Unsubscribe the current browser from push notifications.
+   * Calls the backend and clears the local subscription flag.
+   */
+  async function unsubscribeFromPush() {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await fetch(`${API_BASE}/api/push/unsubscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+      }
+    } catch (err) {
+      console.warn('[Push] Unsubscribe error:', err);
+    } finally {
+      try {
+        localStorage.removeItem('amt_push_subscribed');
+        localStorage.removeItem('amt_notif_dismiss_count');
+        localStorage.removeItem('amt_notif_dismissed_permanent');
+      } catch (e) {}
+    }
+  }
+
+  /**
+   * Update push preferences on the server.
+   * Returns true on success.
+   */
+  async function updatePushPreferences(qotd, midday, episodes) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) return false;
+      const res = await fetch(`${API_BASE}/api/push/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: subscription.endpoint,
+          notify_qotd: qotd,
+          notify_midday: midday,
+          notify_new_episodes: episodes,
+        }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('[Push] Preference update error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Toggle the notification management panel open/closed.
+   */
+  function toggleNotificationManagePanel() {
+    const btn = document.getElementById('amt-notif-manage-btn');
+    const panel = document.getElementById('amt-notif-manage-panel');
+    if (!btn || !panel) return;
+
+    const isOpen = panel.style.display !== 'none';
+    if (isOpen) {
+      panel.style.display = 'none';
+      btn.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    btn.setAttribute('aria-expanded', 'true');
+    renderNotificationPrefsPanel(panel);
+    panel.style.display = '';
+  }
+
+  function renderNotificationPrefsPanel(panel) {
+    panel.innerHTML = `
+      <p class="amt-nmp-heading">🔔 Notification settings</p>
+      <div class="amt-nmp-prefs">
+        <label class="amt-nmp-pref">
+          <input type="checkbox" id="amt-nmp-qotd" checked>
+          <span>☀️ Question of the Day <em class="amt-nmp-pref-desc">Daily morning nudge at 8 AM</em></span>
+        </label>
+        <label class="amt-nmp-pref">
+          <input type="checkbox" id="amt-nmp-midday" checked>
+          <span>🌤 Midday Motivation <em class="amt-nmp-pref-desc">A brief encouragement at noon</em></span>
+        </label>
+        <label class="amt-nmp-pref">
+          <input type="checkbox" id="amt-nmp-episodes" checked>
+          <span>🎙️ New Episode Alerts <em class="amt-nmp-pref-desc">When a new podcast episode is added</em></span>
+        </label>
+      </div>
+      <div class="amt-nmp-actions">
+        <button type="button" class="amt-nmp-save" id="amt-nmp-save-btn">Save preferences</button>
+        <button type="button" class="amt-nmp-unsub" id="amt-nmp-unsub-btn">Unsubscribe</button>
+      </div>
+    `;
+
+    const saveBtn = panel.querySelector('#amt-nmp-save-btn');
+    const unsubBtn = panel.querySelector('#amt-nmp-unsub-btn');
+
+    saveBtn.addEventListener('click', async () => {
+      const qotd     = panel.querySelector('#amt-nmp-qotd').checked;
+      const midday   = panel.querySelector('#amt-nmp-midday').checked;
+      const episodes = panel.querySelector('#amt-nmp-episodes').checked;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      const ok = await updatePushPreferences(qotd, midday, episodes);
+      if (ok) {
+        saveBtn.textContent = '✅ Saved';
+        setTimeout(() => {
+          panel.style.display = 'none';
+          document.getElementById('amt-notif-manage-btn').setAttribute('aria-expanded', 'false');
+        }, 1200);
+      } else {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save preferences';
+        const actions = panel.querySelector('.amt-nmp-actions');
+        const err = document.createElement('span');
+        err.style.cssText = 'font-size:13px;color:#c0392b;';
+        err.textContent = 'Could not save — please try again.';
+        actions.appendChild(err);
+        setTimeout(() => err.remove(), 4000);
+      }
+    });
+
+    unsubBtn.addEventListener('click', () => {
+      // Show the soft-retain step
+      panel.innerHTML = `
+        <div class="amt-nmp-retain">
+          <p class="amt-nmp-retain-heading">Before you go…</p>
+          <p class="amt-nmp-retain-body">Your daily morning question is a gentle nudge — one notification a day, no spam ever. Want to keep just that?</p>
+          <div class="amt-nmp-retain-actions">
+            <button type="button" class="amt-nmp-keep-qotd" id="amt-nmp-keep-qotd-btn">Keep just the daily question</button>
+            <button type="button" class="amt-nmp-confirm-unsub" id="amt-nmp-confirm-unsub-btn">No thanks, unsubscribe</button>
+          </div>
+        </div>
+      `;
+
+      panel.querySelector('#amt-nmp-keep-qotd-btn').addEventListener('click', async () => {
+        const ok = await updatePushPreferences(true, false, false);
+        const retain = panel.querySelector('.amt-nmp-retain');
+        retain.innerHTML = ok
+          ? '<p class="amt-nmp-success-msg">✅ Done — you\'ll only get your daily question.</p>'
+          : '<p class="amt-nmp-unsub-msg">Something went wrong. Please try again later.</p>';
+        setTimeout(() => {
+          panel.style.display = 'none';
+          document.getElementById('amt-notif-manage-btn').setAttribute('aria-expanded', 'false');
+        }, 2500);
+      });
+
+      panel.querySelector('#amt-nmp-confirm-unsub-btn').addEventListener('click', async () => {
+        const btn = panel.querySelector('#amt-nmp-confirm-unsub-btn');
+        btn.disabled = true;
+        btn.textContent = 'Unsubscribing…';
+        await unsubscribeFromPush();
+        const retain = panel.querySelector('.amt-nmp-retain');
+        retain.innerHTML = '<p class="amt-nmp-unsub-msg">You\'ve been unsubscribed. You can always re-enable notifications from the settings bell.</p>';
+        // Hide the bell button — no longer subscribed
+        const bellBtn = document.getElementById('amt-notif-manage-btn');
+        setTimeout(() => {
+          panel.style.display = 'none';
+          if (bellBtn) {
+            bellBtn.style.display = 'none';
+            bellBtn.setAttribute('aria-expanded', 'false');
+          }
+        }, 3000);
+      });
+    });
+  }
+
+  // ─── Wire up the notification management bell button ──────────────────────
+  (function initNotifManageBtn() {
+    const btn = document.getElementById('amt-notif-manage-btn');
+    if (!btn) return;
+    try {
+      if (localStorage.getItem('amt_push_subscribed')) {
+        btn.style.display = '';
+      }
+    } catch (e) {}
+    btn.addEventListener('click', toggleNotificationManagePanel);
+  })();
 
   // Show notification opt-in after a delay.
   // For returning visitors: show after 5 seconds.

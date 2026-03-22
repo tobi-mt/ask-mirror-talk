@@ -563,6 +563,7 @@ def update_push_preferences(
                 UPDATE push_subscriptions
                 SET notify_qotd = :qotd,
                     notify_new_episodes = :episodes,
+                    notify_midday = :midday,
                     updated_at = NOW()
                 WHERE endpoint = :endpoint AND active = true
             """),
@@ -570,6 +571,7 @@ def update_push_preferences(
                 "endpoint": payload.endpoint,
                 "qotd": payload.notify_qotd,
                 "episodes": payload.notify_new_episodes,
+                "midday": payload.notify_midday,
             },
         )
         db.commit()

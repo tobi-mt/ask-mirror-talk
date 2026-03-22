@@ -2277,6 +2277,195 @@
 }
 
 /* ========================================
+   Notification Management Button & Panel
+   ======================================== */
+
+/* Bell button in stats bar */
+.amt-notif-manage-btn {
+  background: none;
+  border: 1px solid #d4cfc5;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #6b665d;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.amt-notif-manage-btn:hover {
+  background: rgba(0,0,0,0.04);
+  border-color: #a09a8f;
+}
+.amt-notif-manage-btn[aria-expanded="true"] {
+  background: #f0ede8;
+  border-color: #a09a8f;
+}
+
+/* Management panel */
+.amt-notif-manage-panel {
+  margin: 4px 0 12px;
+  background: #faf8f4;
+  border: 1px solid #d4cfc5;
+  border-radius: 12px;
+  padding: 16px 20px;
+  animation: amtSlideDown 0.2s ease-out;
+}
+.amt-notif-manage-panel .amt-nmp-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e2a24;
+  margin: 0 0 12px;
+}
+.amt-notif-manage-panel .amt-nmp-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.amt-notif-manage-panel .amt-nmp-pref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #2e2a24;
+  cursor: pointer;
+}
+.amt-notif-manage-panel .amt-nmp-pref input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #2e2a24;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.amt-notif-manage-panel .amt-nmp-pref-desc {
+  font-size: 12px;
+  color: #6b665d;
+  display: block;
+}
+.amt-notif-manage-panel .amt-nmp-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.amt-notif-manage-panel .amt-nmp-save {
+  background: #2e2a24;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.amt-notif-manage-panel .amt-nmp-save:hover {
+  background: #3d3731;
+}
+.amt-notif-manage-panel .amt-nmp-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.amt-notif-manage-panel .amt-nmp-unsub {
+  background: none;
+  border: none;
+  color: #9e9387;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+.amt-notif-manage-panel .amt-nmp-unsub:hover {
+  color: #c0392b;
+}
+
+/* Retain step */
+.amt-nmp-retain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.amt-nmp-retain-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e2a24;
+  margin: 0;
+}
+.amt-nmp-retain-body {
+  font-size: 13px;
+  color: #6b665d;
+  margin: 0;
+  line-height: 1.5;
+}
+.amt-nmp-retain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.amt-nmp-keep-qotd {
+  background: #2e2a24;
+  color: #fff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+.amt-nmp-keep-qotd:hover {
+  background: #3d3731;
+}
+.amt-nmp-confirm-unsub {
+  background: none;
+  border: 1px solid #c4bfb5;
+  color: #6b665d;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.amt-nmp-confirm-unsub:hover {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+.amt-nmp-success-msg {
+  font-size: 14px;
+  color: #2e7d32;
+  font-weight: 600;
+}
+.amt-nmp-unsub-msg {
+  font-size: 14px;
+  color: #6b665d;
+}
+
+@media (max-width: 600px) {
+  .amt-notif-manage-panel {
+    padding: 14px 14px;
+  }
+  .amt-nmp-retain-actions {
+    flex-direction: column;
+  }
+  .amt-nmp-keep-qotd,
+  .amt-nmp-confirm-unsub {
+    width: 100%;
+    text-align: center;
+  }
+  .amt-notif-manage-panel .amt-nmp-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ========================================
    Print Styles
    ======================================== */
 @media print {

@@ -965,6 +965,7 @@ def send_new_episode_notification(
         actions=actions,
         vibrate=vibrate,
         require_interaction=False,  # Allow auto-dismiss after viewing
+        preference_column="notify_new_episodes",
     )
 
 
@@ -980,26 +981,33 @@ def _broadcast_notification(
     vibrate: list[int] | None = None,
     require_interaction: bool = False,
     image: str | None = None,
+    preference_column: str | None = None,
 ) -> dict:
     """
     Send a premium notification to all active push subscribers.
     Automatically cleans up expired subscriptions.
-    
-    Enhanced with full support for:
-    - Action buttons
-    - Custom vibration patterns
-    - Images
-    - Interaction requirements
-    - Rich data payloads
+
+    Args:
+        preference_column: Optional column name to filter by (e.g. 'notify_new_episodes').
+                           Must be one of the allowed preference columns.
     """
-    # Fetch all active subscriptions
-    rows = db.execute(
-        text("""
+    _ALLOWED_PREF_COLUMNS = {"notify_new_episodes", "notify_qotd", "notify_midday"}
+
+    if preference_column and preference_column in _ALLOWED_PREF_COLUMNS:
+        query = text(f"""
+            SELECT id, endpoint, p256dh_key, auth_key
+            FROM push_subscriptions
+            WHERE active = true AND {preference_column} = true
+        """)  # nosec: column name validated against allowlist above
+    else:
+        query = text("""
             SELECT id, endpoint, p256dh_key, auth_key
             FROM push_subscriptions
             WHERE active = true
         """)
-    ).fetchall()
+
+    # Fetch all matching active subscriptions
+    rows = db.execute(query).fetchall()
 
     if not rows:
         logger.info("No active push subscribers for %s notification", notification_type)

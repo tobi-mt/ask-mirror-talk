@@ -130,6 +130,23 @@ class PushSubscription(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
+class PushMotivationMessage(Base):
+    """Pool of midday motivation messages — seeded from static list, expanded by AI.
+
+    Generic messages are shared across all subscribers (source='static'|'generated').
+    Personalized messages (source='personalized') are generated on-the-fly from a
+    subscriber's recent qa_logs questions and are also stored here for history tracking.
+    """
+    __tablename__ = "push_motivation_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    theme: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="static")  # 'static' | 'generated' | 'personalized'
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class PushQotdHistory(Base):
     """Track which QOTD questions have been sent to each push subscriber.
 

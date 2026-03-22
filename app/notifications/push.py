@@ -358,8 +358,8 @@ def send_qotd_notification(db: Session) -> dict:
             continue
 
         qotd = next_qotd
-        title = f"{qotd['emoji']} {qotd['hook']}"
-        body = f"{qotd['question']} Tap to discover wisdom from Mirror Talk."
+        title = f"{qotd['emoji']} {qotd['theme']}"
+        body = f"{qotd['question']} Mirror Talk has explored this deeply — the answer might surprise you."
 
         actions = [
             {
@@ -440,39 +440,226 @@ def send_qotd_notification(db: Session) -> dict:
 
 # ── MIDDAY MOTIVATION ────────────────────────────────────────────────────────
 
+_MOTIVATION_REFILL_THRESHOLD = 10
+_MOTIVATION_REFILL_BATCH_SIZE = 20
+
+# Static seed list — used only to populate push_motivation_messages on first run.
 _MOTIVATION_MESSAGES = [
-    ("🌟 You're further than you think", "Progress is rarely linear. Every step you've taken today counts — keep going."),
-    ("💛 Midday check-in", "Pause. Breathe. You are doing better than your inner critic is letting you believe."),
-    ("🌿 Refuel your purpose", "The afternoon is yours. One intentional moment can shift the energy of your whole day."),
-    ("🔥 Keep the fire going", "Half the day done — you've already chosen to show up. That's worth celebrating."),
-    ("🕊️ Grace in the middle", "Give yourself the same grace you'd offer a good friend. You're right on time."),
-    ("💪 Stronger than yesterday", "Every challenge you've faced has shaped the resilience you're walking in right now."),
-    ("🌊 Find your flow", "Take 60 seconds to reset. Close your eyes, breathe, and remember your 'why'."),
-    ("✨ Midday wisdom", "Clarity often comes not from doing more, but from pausing long enough to listen."),
-    ("🎯 Stay the course", "Doubt is normal. Courage is not the absence of doubt — it's moving forward anyway."),
-    ("🙏 Grateful heart, open mind", "Name one thing you're grateful for right now. Gratitude rewires how you see the rest of your day."),
-    ("🌈 You are enough", "Right here, right now — not the future version of you. The you reading this is enough."),
-    ("💬 Speak kindly to yourself", "Your self-talk shapes your reality. Choose words today that build you up."),
-    ("🏃 Momentum is your friend", "Small consistent actions compound into extraordinary results. Keep moving."),
-    ("🤝 Lean on community", "You were not designed to do life alone. Who can you encourage or lean on today?"),
-    ("🌅 Afternoon renewal", "The best part of your day can still be ahead. Set one meaningful intention right now."),
+    ("🌟 You've come so far",
+     "Progress rarely looks like you expect — but every step has been real. Ask Mirror Talk what keeping going actually means for where you are today."),
+    ("💛 You're doing better",
+     "That voice telling you you're behind? It's not telling the truth. Ask Mirror Talk how to see what you've actually built — even on the quiet days."),
+    ("🌿 One moment matters",
+     "The afternoon isn't lost — one intentional pause can shift everything that follows. Ask Mirror Talk: what do you actually need right now?"),
+    ("🔥 You showed up today",
+     "Half the day done, and you're still here. That's not small — that's the whole thing. Ask Mirror Talk what showing up really means when it's hard."),
+    ("🕊️ Be easy on yourself",
+     "You'd give a struggling friend grace without hesitation. You deserve the same. Ask Mirror Talk how to offer yourself that same kindness today."),
+    ("💪 You were built for this",
+     "Every hard thing you've faced has been quietly shaping your resilience. Ask Mirror Talk what that strength is teaching you right now."),
+    ("🌊 Breathe. Reset. Rise.",
+     "Sixty seconds of stillness can recalibrate the whole afternoon. Ask Mirror Talk to help you remember your why before the day takes over again."),
+    ("✨ Pause before you push",
+     "Clarity isn't found in doing more — it lives in the space between. Ask Mirror Talk what you'd hear if you slowed down long enough to listen."),
+    ("🎯 Keep going anyway",
+     "Doubt is the shadow that follows every meaningful pursuit. Ask Mirror Talk how courage shows up in the moments when confidence doesn't."),
+    ("🙏 Gratitude rewires you",
+     "Name one thing you're grateful for right now — not later, now. Ask Mirror Talk how gratitude can reframe even the hardest parts of your day."),
+    ("🌈 Right now is enough",
+     "Not the future version of you — the one reading this. Ask Mirror Talk what it really means to stop waiting to be ready and just be here."),
+    ("💬 Talk kindly to yourself",
+     "The words you repeat to yourself daily are quietly shaping your reality. Ask Mirror Talk how to start rewriting the ones that hold you back."),
+    ("🏃 Small steps compound",
+     "You don't need a breakthrough today — just one more honest step. Ask Mirror Talk what quiet, consistent progress actually looks like for you."),
+    ("🤝 You're not alone",
+     "You were never meant to carry all of this by yourself. Ask Mirror Talk who you could lean on — or how to be that person for someone else."),
+    ("🌅 Best part still ahead",
+     "The afternoon is unwritten. One clear intention set right now can change how the rest of your day feels. Ask Mirror Talk what that intention should be."),
 ]
+
+
+def _load_motivation_pool_from_db(db: Session) -> list[dict]:
+    """Return all generic motivation messages from the DB ordered by id."""
+    rows = db.execute(
+        text("SELECT id, title, body FROM push_motivation_messages WHERE source != 'personalized' ORDER BY id")
+    ).fetchall()
+    return [{"id": r[0], "title": r[1], "body": r[2]} for r in rows]
+
+
+def _ensure_motivation_pool_seeded(db: Session) -> None:
+    """Seed push_motivation_messages from the static list if the table is empty."""
+    count = db.execute(text("SELECT COUNT(*) FROM push_motivation_messages WHERE source = 'static'")).scalar()
+    if count == 0:
+        logger.info("Seeding motivation pool from static list (%d messages)", len(_MOTIVATION_MESSAGES))
+        for title, body in _MOTIVATION_MESSAGES:
+            db.execute(
+                text("INSERT INTO push_motivation_messages (title, body, source) VALUES (:t, :b, 'static')"),
+                {"t": title, "b": body},
+            )
+        db.commit()
+        logger.info("✓ Motivation pool seeded")
+
+
+def generate_motivation_batch(db: Session, n: int = 20) -> int:
+    """
+    Generate n new generic midday motivation messages via GPT and append them to
+    push_motivation_messages.  Grounded in real episode themes so messages stay
+    relevant to Mirror Talk's content.  Duplicate title detection prevents repeats.
+
+    Returns the number of messages actually inserted.
+    """
+    import os
+    from openai import OpenAI
+
+    api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+    if not api_key:
+        logger.warning("Cannot generate motivation batch: OPENAI_API_KEY not set")
+        return 0
+
+    episode_rows = db.execute(
+        text("SELECT title FROM episodes ORDER BY published_at DESC LIMIT 15")
+    ).fetchall()
+    episode_titles = [r[0] for r in episode_rows]
+
+    existing_rows = db.execute(text("SELECT title FROM push_motivation_messages WHERE source != 'personalized'")).fetchall()
+    existing_titles = {r[0].strip().lower() for r in existing_rows}
+
+    prompt = f"""You are writing midday motivational push notifications for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
+
+Recent Mirror Talk episodes include:
+{chr(10).join(f"- {t}" for t in episode_titles[:10])}
+
+Generate exactly {n} unique midday motivation messages. Each message is sent at noon to give someone a meaningful boost to carry them through the afternoon.
+
+Rules:
+- Title: 3–5 words max, punchy and warm (e.g. "You've come so far", "Pause before you push")
+- Title must NOT contain "Mirror Talk"
+- Body: 1–2 sentences. Start with an emotionally resonant observation, then invite them to go deeper (ending with "Ask Mirror Talk [specific question]")
+- Body should feel personal, not generic — like a wise friend speaking directly to them
+- Vary themes: self-worth, resilience, rest, purpose, relationships, gratitude, courage, growth, faith
+- Do NOT repeat any of these existing titles: {", ".join(list(existing_titles)[:20])}
+
+Respond with a JSON array of objects with keys: "title" (string), "body" (string), "theme" (string), "emoji" (single emoji to prepend to title).
+
+Example: {{"title": "You've come so far", "body": "Progress rarely looks like you expect — but every step has been real. Ask Mirror Talk what keeping going actually means for where you are today.", "theme": "Resilience", "emoji": "🌟"}}
+
+Return only the JSON array, no other text."""
+
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+            max_tokens=3000,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        import json as _json
+        messages = _json.loads(raw.strip())
+    except Exception as e:
+        logger.error("Motivation batch generation failed: %s", e, exc_info=True)
+        return 0
+
+    inserted = 0
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        raw_title = str(m.get("title", "")).strip()
+        body = str(m.get("body", "")).strip()
+        emoji = str(m.get("emoji", "✨")).strip()
+        theme = str(m.get("theme", "")).strip()
+        if not raw_title or not body:
+            continue
+        full_title = f"{emoji} {raw_title}"
+        if full_title.lower() in existing_titles or raw_title.lower() in existing_titles:
+            continue
+        db.execute(
+            text("INSERT INTO push_motivation_messages (title, body, theme, source) VALUES (:t, :b, :th, 'generated')"),
+            {"t": full_title, "b": body, "th": theme[:100]},
+        )
+        existing_titles.add(full_title.lower())
+        inserted += 1
+
+    if inserted:
+        db.commit()
+        logger.info("✓ Generated and inserted %d new motivation messages", inserted)
+    return inserted
+
+
+def _generate_personalized_motivation(questions: list[str]) -> tuple[str, str] | None:
+    """
+    Generate a single (title, body) midday message tailored to a subscriber's
+    recent questions.  Called per-subscriber when qa_logs history is available.
+    Returns None if generation fails (caller should fall back to pool).
+    """
+    import os
+    from openai import OpenAI
+
+    api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+    if not api_key:
+        return None
+
+    recent = "\n".join(f"- {q}" for q in questions[:5])
+    prompt = f"""A Mirror Talk listener recently asked these questions:
+{recent}
+
+Write ONE midday motivational push notification that speaks directly to the emotional themes behind their questions — without referencing the specific questions literally. It should feel uncannily relevant, like the message was written just for them.
+
+Rules:
+- Title: 3–5 words max, warm and direct. No "Mirror Talk" in the title.
+- Body: 1–2 sentences. Start with a grounded emotional insight that resonates with their themes, then end with "Ask Mirror Talk [a specific, relevant follow-up question]."
+- The message should feel like a wise friend noticed what they've been wrestling with.
+
+Respond with a single JSON object with keys: "title", "body", "emoji" (single emoji for title), "theme" (one word).
+Return only the JSON object, no other text."""
+
+    client = OpenAI(api_key=api_key)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.85,
+            max_tokens=300,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        import json as _json
+        data = _json.loads(raw.strip())
+        title = f"{data.get('emoji', '✨')} {data['title']}".strip()
+        body = data["body"].strip()
+        if title and body:
+            return title, body
+    except Exception as e:
+        logger.warning("Personalized motivation generation failed: %s", e)
+    return None
 
 
 def send_midday_motivation_notification(db: Session) -> dict:
     """
-    Send a short motivational push notification to subscribers at their local noon.
+    Send a midday motivation push to subscribers at their local noon.
 
-    Run this function every hour (same cron as QOTD: ``0 * * * *``).  Postgres
-    filters to subscribers whose current local hour is 12 and who haven't
-    received a motivation message today (in their own timezone).
+    Message selection (in priority order per subscriber):
+    1. Personalized — GPT-generated against their last 14 days of qa_logs questions.
+    2. Pool (generic) — next unseen message from push_motivation_messages, auto-refilled
+       by AI when headroom drops below _MOTIVATION_REFILL_THRESHOLD.
+
+    Run hourly (cron: ``0 * * * *``), same as QOTD.
     """
-    today = datetime.now(timezone.utc)
+    _ensure_motivation_pool_seeded(db)
 
-    # Subscribers whose local time is noon AND who haven't been motivated today
     rows = db.execute(
         text("""
-            SELECT id, endpoint, p256dh_key, auth_key, COALESCE(timezone, 'UTC') AS timezone
+            SELECT id, endpoint, p256dh_key, auth_key,
+                   COALESCE(user_ip, '') AS user_ip,
+                   COALESCE(timezone, 'UTC') AS timezone
             FROM push_subscriptions w
             WHERE active = true
               AND notify_midday = true
@@ -492,9 +679,37 @@ def send_midday_motivation_notification(db: Session) -> dict:
 
     logger.info("Sending midday motivation to %d subscribers", len(rows))
 
-    # Rotate message daily so it varies
-    title, body = _MOTIVATION_MESSAGES[today.toordinal() % len(_MOTIVATION_MESSAGES)]
+    # ── Proactive pool refill ───────────────────────────────────────────────
+    pool = _load_motivation_pool_from_db(db)
+    pool_ids = [m["id"] for m in pool]
+    pool_by_id = {m["id"]: m for m in pool}
 
+    pool_size = len(pool)
+    max_seen = db.execute(
+        text("""
+            SELECT COALESCE(MAX(seen_count), 0)
+            FROM (
+                SELECT COUNT(*) AS seen_count
+                FROM push_motivation_history
+                WHERE subscription_id = ANY(:sids)
+                  AND message_id IS NOT NULL
+                GROUP BY subscription_id
+            ) sub
+        """),
+        {"sids": [r[0] for r in rows]},
+    ).scalar() or 0
+
+    if pool_size - max_seen < _MOTIVATION_REFILL_THRESHOLD:
+        logger.info(
+            "Motivation pool headroom %d < threshold %d — generating %d new messages",
+            pool_size - max_seen, _MOTIVATION_REFILL_THRESHOLD, _MOTIVATION_REFILL_BATCH_SIZE,
+        )
+        generate_motivation_batch(db, n=_MOTIVATION_REFILL_BATCH_SIZE)
+        pool = _load_motivation_pool_from_db(db)
+        pool_ids = [m["id"] for m in pool]
+        pool_by_id = {m["id"]: m for m in pool}
+
+    today = datetime.now(timezone.utc)
     url = (
         "/ask-mirror-talk/"
         f"?utm_source=push&utm_medium=midday&utm_campaign={today.date().isoformat()}"
@@ -506,12 +721,60 @@ def send_midday_motivation_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth, _tz = row
+        sub_id, endpoint, p256dh, auth, user_ip, _tz = row
 
-        subscription_info = {
-            "endpoint": endpoint,
-            "keys": {"p256dh": p256dh, "auth": auth},
-        }
+        title: str | None = None
+        body: str | None = None
+        msg_id: int | None = None
+
+        # ── 1. Try personalization ──────────────────────────────────────────
+        if user_ip:
+            recent = db.execute(
+                text("""
+                    SELECT question FROM qa_logs
+                    WHERE user_ip = :ip
+                      AND created_at >= NOW() - INTERVAL '14 days'
+                    ORDER BY created_at DESC
+                    LIMIT 5
+                """),
+                {"ip": user_ip},
+            ).fetchall()
+            if recent:
+                questions = [r[0] for r in recent]
+                personalized = _generate_personalized_motivation(questions)
+                if personalized:
+                    title, body = personalized
+                    # Store in pool so history can reference it by ID
+                    msg_id = db.execute(
+                        text("""
+                            INSERT INTO push_motivation_messages (title, body, source)
+                            VALUES (:t, :b, 'personalized') RETURNING id
+                        """),
+                        {"t": title, "b": body},
+                    ).scalar()
+                    db.flush()
+                    logger.debug("Subscriber %d → personalized motivation (msg %d)", sub_id, msg_id)
+
+        # ── 2. Fall back to shared pool ─────────────────────────────────────
+        if title is None:
+            seen_ids = {
+                r[0] for r in db.execute(
+                    text("SELECT message_id FROM push_motivation_history WHERE subscription_id = :sid AND message_id IS NOT NULL"),
+                    {"sid": sub_id},
+                ).fetchall()
+            }
+            next_msg = next((pool_by_id[mid] for mid in pool_ids if mid not in seen_ids), None)
+            if next_msg is None:
+                # All messages seen — restart from beginning
+                next_msg = pool_by_id[pool_ids[0]] if pool_ids else None
+            if next_msg is None:
+                logger.warning("Subscriber %d: motivation pool is empty — skipping", sub_id)
+                continue
+            title = next_msg["title"]
+            body = next_msg["body"]
+            msg_id = next_msg["id"]
+
+        subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
 
         result = send_push_notification(
             subscription_info=subscription_info,
@@ -531,8 +794,8 @@ def send_midday_motivation_notification(db: Session) -> dict:
         if result == "sent":
             sent += 1
             db.execute(
-                text("INSERT INTO push_motivation_history (subscription_id, sent_at) VALUES (:sid, NOW())"),
-                {"sid": sub_id},
+                text("INSERT INTO push_motivation_history (subscription_id, sent_at, message_id) VALUES (:sid, NOW(), :mid)"),
+                {"sid": sub_id, "mid": msg_id},
             )
         elif result == "expired":
             expired_ids.append(sub_id)

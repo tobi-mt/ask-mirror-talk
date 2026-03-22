@@ -622,7 +622,7 @@
           const link = document.createElement("a");
           link.href = podcastUrl;
           link.className = "citation-link";
-          link.title = `Listen from ${timestampStart}`;
+          link.title = startSeconds > 0 ? `Listen from ${timestampStart}` : episodeTitle;
           link.setAttribute('data-episode-id', citation.episode_id);
           link.setAttribute('data-timestamp', startSeconds);
           link.setAttribute('data-audio-url', audioUrl);
@@ -648,7 +648,7 @@
               <span class="citation-title">${episodeTitle}${yearHtml}</span>
               ${quoteHtml}
             </div>
-            <span class="citation-time">▶ ${timeDisplay}</span>
+            ${timeHtml}
           `;
 
           // Intercept click for inline playback
@@ -733,9 +733,12 @@
             li.appendChild(exploreBtn);
           }
         } else {
-          const timeDisplay = (startSeconds !== endSeconds && timestampEnd) 
-            ? `${timestampStart} – ${timestampEnd}` 
-            : timestampStart;
+          const timeDisplay = startSeconds > 0
+            ? ((startSeconds !== endSeconds && timestampEnd)
+                ? `${timestampStart} – ${timestampEnd}`
+                : timestampStart)
+            : '';
+          const timeHtml = timeDisplay ? `<span class="citation-time">▶ ${timeDisplay}</span>` : '';
 
           const quoteText = citation.text || '';
           const quoteHtml = quoteText
@@ -751,7 +754,7 @@
               <span class="citation-title">${episodeTitle}${yearHtml}</span>
               ${quoteHtml}
             </div>
-            <span class="citation-time">${timeDisplay}</span>
+            ${timeHtml}
           `;
         }
         

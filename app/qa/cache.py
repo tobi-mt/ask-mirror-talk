@@ -316,7 +316,9 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
     if not rows:
         return 0
 
-    # Collect all referenced episode IDs so we can bulk-fetch chunk data.
+    # Bulk-fetch episode titles and audio URLs — that's all we can reliably
+    # reconstruct from qa_logs. Timestamps are unknown so we omit them;
+    # the JS hides the timestamp badge when start_seconds = 0.
     all_ep_ids: set[int] = set()
     for _, _, ep_ids_str in rows:
         for raw in (ep_ids_str or "").split(","):
@@ -324,52 +326,22 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
             if raw.isdigit():
                 all_ep_ids.add(int(raw))
 
-    # Fetch one representative chunk per episode (earliest non-zero start_time).
-    # This gives us real timestamps, quote text, and audio URLs — the same
-    # fields that _build_citations() produces for live answers.
-    citation_map: dict[int, dict] = {}
+    ep_map: dict[int, dict] = {}
     if all_ep_ids:
         try:
-            chunk_rows = db.execute(sqla_text("""
-                SELECT DISTINCT ON (c.episode_id)
-                    c.episode_id,
-                    c.start_time,
-                    c.end_time,
-                    c.text,
-                    e.title,
-                    e.audio_url,
-                    EXTRACT(YEAR FROM e.published_at)::int AS published_year
-                FROM chunks c
-                JOIN episodes e ON e.id = c.episode_id
-                WHERE c.episode_id = ANY(:ids)
-                ORDER BY c.episode_id, c.start_time
-            """), {"ids": list(all_ep_ids)}).fetchall()
-
-            from datetime import timedelta
-
-            def _fmt_ts(secs: float) -> str:
-                return str(timedelta(seconds=int(secs)))
-
-            for row in chunk_rows:
-                ep_id, start_t, end_t, text, title, audio_url, year = row
-                start_s = int(start_t) if start_t else 0
-                end_s = int(end_t) if end_t else start_s + 30
-                audio_url = audio_url or ""
-                ep_url = f"{audio_url}#t={start_s}" if audio_url else ""
-                citation_map[ep_id] = {
-                    "episode_id": ep_id,
-                    "episode_title": title or "",
-                    "episode_year": int(year) if year else None,
-                    "timestamp_start": _fmt_ts(start_s),
-                    "timestamp_end": _fmt_ts(end_s),
-                    "timestamp_start_seconds": start_s,
-                    "timestamp_end_seconds": end_s,
-                    "audio_url": audio_url,
-                    "episode_url": ep_url,
-                    "text": (text or "")[:200],
+            ep_rows = db.execute(sqla_text(
+                "SELECT id, title, audio_url, EXTRACT(YEAR FROM published_at)::int AS yr FROM episodes WHERE id = ANY(:ids)"
+            ), {"ids": list(all_ep_ids)}).fetchall()
+            ep_map = {
+                r[0]: {
+                    "title": r[1] or "",
+                    "audio_url": r[2] or "",
+                    "year": int(r[3]) if r[3] else None,
                 }
+                for r in ep_rows
+            }
         except Exception as exc:
-            logger.warning("Cache DB prewarm: failed to fetch chunks — %s", exc)
+            logger.warning("Cache DB prewarm: failed to fetch episodes — %s", exc)
 
     loaded = 0
     for question, answer, ep_ids_str in rows:
@@ -379,9 +351,18 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
                 if x.strip().isdigit()
             ]
             citations = [
-                citation_map[eid]
+                {
+                    "episode_id": eid,
+                    "episode_title": ep_map[eid]["title"],
+                    "episode_year": ep_map[eid]["year"],
+                    "audio_url": ep_map[eid]["audio_url"],
+                    "episode_url": ep_map[eid]["audio_url"],
+                    "timestamp_start_seconds": 0,
+                    "timestamp_end_seconds": 0,
+                    "text": "",
+                }
                 for eid in ep_ids
-                if eid in citation_map
+                if eid in ep_map
             ]
             norm_q = normalize_question(question)
             embedding = embed_text(norm_q)

@@ -58,13 +58,24 @@ def create_chunks(db: Session, episode_id: int, chunks: list[dict]):
     db.commit()
 
 
-def log_qa(db: Session, question: str, answer: str, episode_ids: list[int], latency_ms: int, user_ip: str):
+def log_qa(
+    db: Session,
+    question: str,
+    answer: str,
+    episode_ids: list[int],
+    latency_ms: int,
+    user_ip: str,
+    is_cached: bool = False,
+    is_answered: bool = True,
+):
     log = models.QALog(
         question=question,
         answer=answer,
         episode_ids=",".join(str(eid) for eid in episode_ids),
         latency_ms=latency_ms,
         user_ip=user_ip,
+        is_cached=is_cached,
+        is_answered=is_answered,
     )
     db.add(log)
     db.commit()

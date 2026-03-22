@@ -61,6 +61,23 @@ async def _prewarm_cache():
 
     logger.info("🔥 Starting cache pre-warm...")
 
+    from app.qa.cache import get_answer_cache, prewarm_from_db_history
+
+    cache = get_answer_cache()
+
+    # ── Phase 1: restore top user questions from DB (no OpenAI cost) ──
+    logger.info("  📚 Loading historical user questions from DB...")
+    SessionLocal = get_session_local()
+    hist_db = SessionLocal()
+    try:
+        n = prewarm_from_db_history(cache, hist_db, limit=40)
+        logger.info("  ✓ DB history prewarm: %d entries loaded", n)
+    except Exception as e:
+        logger.warning("  ✗ DB history prewarm failed: %s", e)
+    finally:
+        hist_db.close()
+
+    # ── Phase 2: prewarm QOTD + topic queries via full answer pipeline ──
     # Collect unique questions: all QOTD + all topic queries
     questions: list[str] = []
     for entry in _QOTD_POOL:
@@ -72,7 +89,6 @@ async def _prewarm_cache():
 
     from app.qa.service import answer_question
 
-    SessionLocal = get_session_local()
     warmed = 0
     failed = 0
 
@@ -715,6 +731,12 @@ def submit_feedback(
     # Validate rating if provided
     if payload.rating is not None and (payload.rating < 1 or payload.rating > 5):
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    # Sanitise comment: plain text only, capped at 500 chars
+    comment = payload.comment
+    if comment is not None:
+        import re as _re
+        comment = _re.sub(r'<[^>]+>', '', comment).strip()[:500] or None
     
     try:
         log_user_feedback(
@@ -723,7 +745,7 @@ def submit_feedback(
             feedback_type=payload.feedback_type,
             user_ip=request.client.host,
             rating=payload.rating,
-            comment=payload.comment
+            comment=comment
         )
         return {"status": "ok"}
     except Exception as e:
@@ -995,14 +1017,60 @@ def get_analytics_summary(
             
             ctr = (total_clicks / total_citations * 100) if total_citations > 0 else 0
         except Exception:
+            db.rollback()
             ctr = None  # Table might not exist yet
-        
+
+        # Feedback stats (if table exists)
+        try:
+            feedback_rows = db.execute(
+                text("""
+                    SELECT feedback_type, COUNT(*) as cnt
+                    FROM user_feedback uf
+                    JOIN qa_logs q ON q.id = uf.qa_log_id
+                    WHERE q.created_at >= :cutoff
+                    GROUP BY feedback_type
+                """),
+                {"cutoff": cutoff}
+            ).fetchall()
+            feedback_counts = {row[0]: row[1] for row in feedback_rows}
+            positive = feedback_counts.get("positive", 0)
+            negative = feedback_counts.get("negative", 0)
+            total_feedback = positive + negative + feedback_counts.get("neutral", 0)
+            satisfaction_pct = round(positive / (positive + negative) * 100, 1) if (positive + negative) > 0 else None
+        except Exception:
+            db.rollback()
+            positive = negative = total_feedback = 0
+            satisfaction_pct = None
+
+        # Unanswered / cache stats (new columns — graceful fallback if migration not yet run)
+        try:
+            unanswered = db.execute(
+                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE"),
+                {"cutoff": cutoff}
+            ).scalar() or 0
+            cached_count = db.execute(
+                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE"),
+                {"cutoff": cutoff}
+            ).scalar() or 0
+        except Exception:
+            db.rollback()
+            unanswered = None
+            cached_count = None
+
         return {
             "period_days": days,
             "total_questions": total_questions or 0,
             "unique_users": unique_users or 0,
             "avg_latency_ms": round(avg_latency, 2) if avg_latency else 0,
             "citation_ctr_percent": round(ctr, 2) if ctr is not None else None,
+            "feedback": {
+                "positive": positive,
+                "negative": negative,
+                "total": total_feedback,
+                "satisfaction_percent": satisfaction_pct,
+            },
+            "unanswered_questions": unanswered,
+            "cached_questions": cached_count,
             "top_questions": [{"question": q[0], "count": q[1]} for q in top_questions],
             "most_cited_episodes": [
                 {"id": e[0], "title": e[1], "citations": e[2]} 
@@ -1185,6 +1253,54 @@ def admin_dashboard(
         text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff"),
         {"cutoff": cutoff}
     ).scalar() or 0
+
+    # Feedback stats (graceful if table absent)
+    try:
+        feedback_rows = db.execute(
+            text("""
+                SELECT feedback_type, COUNT(*) as cnt
+                FROM user_feedback uf
+                JOIN qa_logs q ON q.id = uf.qa_log_id
+                WHERE q.created_at >= :cutoff
+                GROUP BY feedback_type
+            """),
+            {"cutoff": cutoff}
+        ).fetchall()
+        feedback_counts = {row[0]: row[1] for row in feedback_rows}
+        fb_positive = feedback_counts.get("positive", 0)
+        fb_negative = feedback_counts.get("negative", 0)
+        fb_total = sum(feedback_counts.values())
+        fb_pct = round(fb_positive / (fb_positive + fb_negative) * 100) if (fb_positive + fb_negative) > 0 else None
+    except Exception:
+        db.rollback()
+        fb_positive = fb_negative = fb_total = 0
+        fb_pct = None
+
+    # Unanswered / cache stats (graceful if columns absent)
+    try:
+        unanswered_count = db.execute(
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE"),
+            {"cutoff": cutoff}
+        ).scalar() or 0
+        cached_count = db.execute(
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE"),
+            {"cutoff": cutoff}
+        ).scalar() or 0
+        top_unanswered = db.execute(
+            text("""
+                SELECT question, COUNT(*) as cnt
+                FROM qa_logs
+                WHERE created_at >= :cutoff AND is_answered = FALSE
+                GROUP BY question
+                ORDER BY cnt DESC
+                LIMIT 10
+            """),
+            {"cutoff": cutoff}
+        ).fetchall()
+    except Exception:
+        db.rollback()
+        unanswered_count = cached_count = None
+        top_unanswered = []
     
     # Top cited episodes
     top_episodes = db.execute(
@@ -1232,6 +1348,47 @@ def admin_dashboard(
         f"<tr><td>{e[0]}</td><td>{e[1][:100]}</td><td>{e[2]}</td></tr>"
         for e in top_episodes
     )
+
+    unanswered_rows = "".join(
+        f"<tr><td>{u[0][:120]}</td><td>{u[1]}</td></tr>"
+        for u in top_unanswered
+    )
+
+    # Build stat cards for feedback / cache / unanswered
+    feedback_card = ""
+    if fb_total > 0:
+        pct_display = f"{fb_pct}%" if fb_pct is not None else "n/a"
+        feedback_card = f"""
+        <div class="stat-card">
+          <h3>User Satisfaction</h3>
+          <div class="value">{pct_display}</div>
+          <div class="label">👍 {fb_positive} &nbsp; 👎 {fb_negative} &nbsp; ({fb_total} total)</div>
+        </div>"""
+    unanswered_card = ""
+    if unanswered_count is not None:
+        cache_pct = round(cached_count / total_questions * 100) if total_questions else 0
+        unanswered_card = f"""
+        <div class="stat-card">
+          <h3>Unanswered</h3>
+          <div class="value">{unanswered_count}</div>
+          <div class="label">No matching episodes found</div>
+        </div>
+        <div class="stat-card">
+          <h3>Cache Hits</h3>
+          <div class="value">{cache_pct}%</div>
+          <div class="label">{cached_count} of {total_questions} served from cache</div>
+        </div>"""
+
+    unanswered_section = ""
+    if top_unanswered:
+        unanswered_section = f"""
+          <div class="section">
+            <h2>❓ Top Unanswered Questions (7 days)</h2>
+            <table>
+              <thead><tr><th>Question</th><th>Asked</th></tr></thead>
+              <tbody>{unanswered_rows}</tbody>
+            </table>
+          </div>"""
 
     html = f"""
     <html>
@@ -1291,6 +1448,8 @@ def admin_dashboard(
               <div class="value">{int(avg_latency)}ms</div>
               <div class="label">Answer latency</div>
             </div>
+            {feedback_card}
+            {unanswered_card}
           </div>
           
           <div class="section">
@@ -1300,6 +1459,8 @@ def admin_dashboard(
               <tbody>{top_episodes_rows if top_episodes else '<tr><td colspan="3">No data yet</td></tr>'}</tbody>
             </table>
           </div>
+
+          {unanswered_section}
           
           <div class="section">
             <h2>💬 Recent Questions</h2>

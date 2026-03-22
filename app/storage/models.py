@@ -87,6 +87,8 @@ class QALog(Base):
     episode_ids: Mapped[str] = mapped_column(String(500))
     latency_ms: Mapped[int] = mapped_column(Integer)
     user_ip: Mapped[str] = mapped_column(String(100))
+    is_cached: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_answered: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class CitationClick(Base):

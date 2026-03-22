@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v3.5.0
+ * Analytics Add-on for Ask Mirror Talk Widget v4.6.0
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -19,7 +19,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v3.5.0 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v4.6.0 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -214,34 +214,75 @@
             return;
         }
         
-        // Create feedback section
+        // Create feedback section — two-step: initial thumbs, then negative detail
         const feedbackHTML = `
             <div id="amt-feedback-section" class="amt-feedback-section">
-                <div class="amt-feedback-question">
-                    Was this answer helpful?
+                <div class="amt-feedback-step amt-feedback-step-initial">
+                    <span class="amt-feedback-question">Was this answer helpful?</span>
+                    <div class="amt-feedback-buttons">
+                        <button class="amt-feedback-btn amt-feedback-positive" data-type="positive">
+                            👍 Yes, helpful
+                        </button>
+                        <button class="amt-feedback-btn amt-feedback-negative" data-type="negative">
+                            👎 Not quite
+                        </button>
+                    </div>
                 </div>
-                <div class="amt-feedback-buttons">
-                    <button class="amt-feedback-btn amt-feedback-positive" data-type="positive">
-                        👍 Yes, helpful
-                    </button>
-                    <button class="amt-feedback-btn amt-feedback-negative" data-type="negative">
-                        👎 Not helpful
-                    </button>
+
+                <div class="amt-feedback-step amt-feedback-step-detail" style="display:none;">
+                    <p class="amt-feedback-question" style="margin-bottom:8px;">What went wrong?</p>
+                    <div class="amt-feedback-chips">
+                        <button class="amt-chip" data-reason="Too vague">Too vague</button>
+                        <button class="amt-chip" data-reason="Wrong topic">Wrong topic</button>
+                        <button class="amt-chip" data-reason="Needs more depth">Needs more depth</button>
+                        <button class="amt-chip" data-reason="Other">Other</button>
+                    </div>
+                    <textarea class="amt-feedback-comment" placeholder="Anything else? (optional)" rows="2" maxlength="500"></textarea>
+                    <div style="margin-top:6px;">
+                        <button class="amt-feedback-submit">Submit feedback</button>
+                        <button class="amt-feedback-skip">Skip</button>
+                    </div>
                 </div>
-                <div class="amt-feedback-thanks">
-                    ✅ Thank you for your feedback!
-                </div>
+
+                <div class="amt-feedback-thanks" style="display:none;"></div>
             </div>
         `;
         
         citationsContainer.insertAdjacentHTML('beforeend', feedbackHTML);
         
-        // Add click handlers
-        document.querySelectorAll('.amt-feedback-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const feedbackType = this.dataset.type;
-                submitFeedback(feedbackType);
+        const section = document.getElementById('amt-feedback-section');
+        let selectedReason = null;
+        
+        // ── Thumbs handlers ──────────────────────────────────────────────
+        section.querySelector('.amt-feedback-positive').addEventListener('click', function() {
+            submitFeedback('positive', null, null);
+        });
+        
+        section.querySelector('.amt-feedback-negative').addEventListener('click', function() {
+            section.querySelector('.amt-feedback-step-initial').style.display = 'none';
+            section.querySelector('.amt-feedback-step-detail').style.display = 'block';
+        });
+        
+        // ── Chip selection ───────────────────────────────────────────────
+        section.querySelectorAll('.amt-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                section.querySelectorAll('.amt-chip').forEach(c => c.classList.remove('amt-chip-selected'));
+                this.classList.add('amt-chip-selected');
+                selectedReason = this.dataset.reason;
             });
+        });
+        
+        // ── Submit / Skip ────────────────────────────────────────────────
+        section.querySelector('.amt-feedback-submit').addEventListener('click', function() {
+            const comment = [
+                selectedReason,
+                section.querySelector('.amt-feedback-comment').value.trim()
+            ].filter(Boolean).join(' — ') || null;
+            submitFeedback('negative', 1, comment);
+        });
+        
+        section.querySelector('.amt-feedback-skip').addEventListener('click', function() {
+            submitFeedback('negative', 1, null);
         });
         
         console.log('✅ Feedback buttons added');
@@ -250,36 +291,41 @@
     /**
      * Submit user feedback
      */
-    async function submitFeedback(feedbackType) {
+    async function submitFeedback(feedbackType, rating, comment) {
+        const section = document.getElementById('amt-feedback-section');
+
+        // Hide all steps, show thanks immediately for perceived speed
+        if (section) {
+            section.querySelectorAll('.amt-feedback-step').forEach(s => s.style.display = 'none');
+            const thanks = section.querySelector('.amt-feedback-thanks');
+            if (thanks) {
+                thanks.style.display = 'block';
+                thanks.textContent = feedbackType === 'positive'
+                    ? '✅ Glad it helped!'
+                    : '✅ Thanks — your feedback helps us improve.';
+            }
+        }
+
         if (!currentQALogId) {
             console.warn('⚠️ No QA log ID available for feedback');
             return;
         }
         
         try {
+            const payload = {
+                qa_log_id: currentQALogId,
+                feedback_type: feedbackType,
+                rating: rating !== null ? rating : (feedbackType === 'positive' ? 5 : 1),
+            };
+            if (comment) payload.comment = comment;
+
             await originalFetch(`${API_BASE_URL}/api/feedback`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    qa_log_id: currentQALogId,
-                    feedback_type: feedbackType,
-                    rating: feedbackType === 'positive' ? 5 : 1
-                })
+                body: JSON.stringify(payload)
             });
             
-            console.log('✅ Feedback submitted:', feedbackType);
-            
-            // Show thank you message
-            const buttonsDiv = document.querySelector('.amt-feedback-buttons');
-            const thanksDiv = document.querySelector('.amt-feedback-thanks');
-            
-            if (buttonsDiv) buttonsDiv.style.display = 'none';
-            if (thanksDiv) {
-                thanksDiv.style.display = 'block';
-                thanksDiv.textContent = feedbackType === 'positive' 
-                    ? '✅ Thank you! Glad we could help.' 
-                    : '✅ Thank you for your feedback. We\'ll work to improve.';
-            }
+            console.log('✅ Feedback submitted:', feedbackType, comment ? `(${comment})` : '');
             
         } catch (error) {
             console.error('❌ Feedback submission failed:', error);

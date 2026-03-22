@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v4.5.0 loaded');
+  console.log('Ask Mirror Talk Widget v4.6.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1073,7 +1073,7 @@
             s.sharesCount = (s.sharesCount || 0) + 1;
             const newBadges = checkAndAwardBadges(s);
             saveStats(s);
-            newBadges.forEach(b2 => showMilestoneToast(b2.emoji, `Badge unlocked: ${b2.name}`, b2.desc));
+            newBadges.forEach(b2 => showMilestoneToast(b2.emoji, `Badge unlocked: ${b2.name}`, b2.desc, b2));
           } catch (e) {}
         }
 
@@ -2083,7 +2083,33 @@
       el.className = 'amt-badge' + (earned ? ' amt-badge-earned' : ' amt-badge-locked');
       el.title = earned ? badge.name + ': ' + badge.desc : badge.desc + ' (locked)';
       el.innerHTML = `<span class="amt-badge-emoji">${badge.emoji}</span><span class="amt-badge-name">${badge.name}</span>`;
+      if (earned) {
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'amt-badge-share-btn';
+        shareBtn.title = 'Share this badge';
+        shareBtn.textContent = '📤';
+        shareBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          shareMilestone(badge, 'badge');
+        });
+        el.appendChild(shareBtn);
+      }
       shelf.appendChild(el);
+    }
+
+    // Add a "Share my progress" button at the bottom of the shelf
+    const progressBtn = document.createElement('button');
+    progressBtn.className = 'amt-share-progress-btn';
+    progressBtn.innerHTML = '📊 Share my progress';
+    progressBtn.addEventListener('click', () => shareMilestone(null, 'progress'));
+    shelf.appendChild(progressBtn);
+
+    if (stats.currentStreak >= 3) {
+      const streakBtn = document.createElement('button');
+      streakBtn.className = 'amt-share-progress-btn';
+      streakBtn.innerHTML = `🔥 Share my ${stats.currentStreak}-day streak`;
+      streakBtn.addEventListener('click', () => shareMilestone(null, 'streak'));
+      shelf.appendChild(streakBtn);
     }
   }
 
@@ -2130,13 +2156,30 @@
     requestAnimationFrame(draw);
   }
 
-  function showMilestoneToast(emoji, headline, sub) {
+  function showMilestoneToast(emoji, headline, sub, badge) {
     const toast = document.getElementById('amt-milestone-toast');
     if (!toast) return;
     toast.innerHTML = `<span class="amt-toast-emoji">${emoji}</span><div><strong>${headline}</strong><span>${sub}</span></div>`;
     toast.style.display = '';
     toast.classList.add('amt-toast-in');
     launchConfetti();
+
+    // Add share button for badge toasts after a short delay
+    if (badge) {
+      setTimeout(() => {
+        if (!toast.querySelector('.amt-toast-share-btn')) {
+          const shareBtn = document.createElement('button');
+          shareBtn.className = 'amt-toast-share-btn';
+          shareBtn.textContent = '📤 Share';
+          shareBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            shareMilestone(badge, 'badge');
+          });
+          toast.appendChild(shareBtn);
+        }
+      }, 800);
+    }
+
     setTimeout(() => {
       toast.classList.remove('amt-toast-in');
       toast.classList.add('amt-toast-out');
@@ -2166,7 +2209,7 @@
     // New badge toasts (queue sequentially)
     newBadges.forEach((badge, i) => {
       setTimeout(() => {
-        showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc);
+        showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge);
       }, i * 4200);
     });
   }
@@ -2190,7 +2233,7 @@
         s.citationsClicked = (s.citationsClicked || 0) + 1;
         const newBadges = checkAndAwardBadges(s);
         saveStats(s);
-        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc));
+        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
       } catch (e2) {}
     }
   });
@@ -2203,7 +2246,7 @@
         s.sharesCount = (s.sharesCount || 0) + 1;
         const newBadges = checkAndAwardBadges(s);
         saveStats(s);
-        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc));
+        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
       } catch (e2) {}
     }
   });
@@ -2336,5 +2379,298 @@
       renderStatsBar(initStats);
     }
   } catch (e) {}
+
+  // ========================================
+  // Social Share Card (Canvas → PNG)
+  // ========================================
+
+  /**
+   * Draw a branded 1200×630 share card on a canvas and return it as a PNG dataURL.
+   * @param {Object} badge  — one entry from AMT_BADGES (may be null for a streak card)
+   * @param {Object} stats  — current gamification stats
+   * @param {string} type   — 'badge' | 'streak' | 'progress'
+   */
+  function buildShareCard(badge, stats, type) {
+    const W = 1200, H = 630;
+    const canvas = document.createElement('canvas');
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // ── Background gradient ──
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0,   '#1a1410');
+    grad.addColorStop(0.5, '#2d2318');
+    grad.addColorStop(1,   '#1a1410');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // ── Subtle grain texture overlay ──
+    ctx.fillStyle = 'rgba(255,255,255,0.015)';
+    for (let i = 0; i < 4000; i++) {
+      ctx.fillRect(
+        Math.random() * W,
+        Math.random() * H,
+        Math.random() < 0.5 ? 1 : 2,
+        1
+      );
+    }
+
+    // ── Gold accent border ──
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(20, 20, W - 40, H - 40);
+
+    // ── Inner corner accents ──
+    const accentLen = 40;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(201,168,76,0.4)';
+    [[24, 24], [W - 24 - accentLen, 24], [24, H - 24 - accentLen], [W - 24 - accentLen, H - 24 - accentLen]].forEach(([x, y]) => {
+      ctx.strokeRect(x, y, accentLen, accentLen);
+    });
+
+    // ── Branding ──
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#c9a84c';
+    ctx.font = 'bold 22px Georgia, serif';
+    ctx.fillText('MIRROR TALK', W / 2, 80);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '14px Georgia, serif';
+    ctx.fillText('askmirror.talk', W / 2, 105);
+
+    if (type === 'badge' && badge) {
+      // ── Big emoji ──
+      ctx.font = '120px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(badge.emoji, W / 2, 310);
+
+      // ── Badge name ──
+      ctx.fillStyle = '#f5e6c8';
+      ctx.font = 'bold 56px Georgia, serif';
+      ctx.fillText(badge.name, W / 2, 390);
+
+      // ── Subtitle ──
+      ctx.fillStyle = 'rgba(245,230,200,0.65)';
+      ctx.font = '26px Georgia, serif';
+      ctx.fillText(badge.desc, W / 2, 438);
+
+      // ── Unlocked pill ──
+      const pillW = 240, pillH = 40, pillX = (W - pillW) / 2, pillY = 468;
+      ctx.fillStyle = 'rgba(201,168,76,0.18)';
+      _roundRect(ctx, pillX, pillY, pillW, pillH, 20);
+      ctx.fill();
+      ctx.strokeStyle = '#c9a84c';
+      ctx.lineWidth = 1.5;
+      _roundRect(ctx, pillX, pillY, pillW, pillH, 20);
+      ctx.stroke();
+      ctx.fillStyle = '#c9a84c';
+      ctx.font = 'bold 16px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('✨  BADGE UNLOCKED', W / 2, pillY + 26);
+
+    } else if (type === 'streak') {
+      ctx.font = '120px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔥', W / 2, 310);
+
+      ctx.fillStyle = '#f7c948';
+      ctx.font = `bold 100px Georgia, serif`;
+      ctx.fillText(`${stats.currentStreak}`, W / 2, 415);
+
+      ctx.fillStyle = '#f5e6c8';
+      ctx.font = 'bold 40px Georgia, serif';
+      ctx.fillText('DAY STREAK', W / 2, 467);
+
+      ctx.fillStyle = 'rgba(245,230,200,0.55)';
+      ctx.font = '24px Georgia, serif';
+      ctx.fillText('Keep the wisdom flowing 🌊', W / 2, 510);
+
+    } else {
+      // ── Progress card ──
+      ctx.font = '90px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🌱', W / 2, 285);
+
+      ctx.fillStyle = '#f5e6c8';
+      ctx.font = 'bold 40px Georgia, serif';
+      ctx.fillText('My Mirror Talk Journey', W / 2, 355);
+
+      const cols = [
+        { label: 'Questions', value: stats.totalQuestions },
+        { label: 'Day Streak', value: stats.currentStreak },
+        { label: 'Themes',    value: stats.themesExplored.size },
+        { label: 'Badges',    value: stats.earnedBadges.size },
+      ];
+      const cellW = 220, startX = (W - cols.length * cellW) / 2;
+      cols.forEach((col, i) => {
+        const cx = startX + i * cellW + cellW / 2;
+        const cy = 420;
+        ctx.fillStyle = 'rgba(201,168,76,0.12)';
+        _roundRect(ctx, cx - 90, cy - 55, 180, 110, 12);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(201,168,76,0.35)';
+        ctx.lineWidth = 1;
+        _roundRect(ctx, cx - 90, cy - 55, 180, 110, 12);
+        ctx.stroke();
+        ctx.fillStyle = '#f7c948';
+        ctx.font = 'bold 44px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(col.value), cx, cy + 10);
+        ctx.fillStyle = 'rgba(245,230,200,0.55)';
+        ctx.font = '18px Georgia, serif';
+        ctx.fillText(col.label, cx, cy + 40);
+      });
+    }
+
+    // ── Footer CTA ──
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = '18px Georgia, serif';
+    ctx.fillText('Ask your own questions at askmirror.talk', W / 2, H - 38);
+
+    return canvas.toDataURL('image/png');
+  }
+
+  /** Helper: draw a rounded rectangle path (no fill/stroke — caller does that). */
+  function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  /**
+   * Show the share-card modal with platform buttons.
+   * @param {string} dataUrl  — PNG data URL from buildShareCard()
+   * @param {string} caption  — short text caption for text-based shares
+   */
+  function showShareModal(dataUrl, caption) {
+    // Remove any existing modal
+    const existing = document.getElementById('amt-share-card-modal');
+    if (existing) existing.remove();
+
+    const pageUrl = window.location.href;
+    const encodedCaption = encodeURIComponent(caption + '\n\n' + pageUrl);
+    const encodedUrl     = encodeURIComponent(pageUrl);
+
+    const modal = document.createElement('div');
+    modal.id = 'amt-share-card-modal';
+    modal.className = 'amt-share-card-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', 'Share your badge');
+
+    modal.innerHTML = `
+      <div class="amt-scm-backdrop"></div>
+      <div class="amt-scm-panel">
+        <button class="amt-scm-close" aria-label="Close">&times;</button>
+        <h3 class="amt-scm-title">Share your achievement 🎉</h3>
+        <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
+        <p class="amt-scm-hint">Save the image below, then share it anywhere!</p>
+        <div class="amt-scm-buttons">
+          <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="mirror-talk-achievement.png">
+            ⬇️ Download image
+          </a>
+          <a class="amt-scm-btn amt-scm-twitter"
+             href="https://twitter.com/intent/tweet?text=${encodedCaption}"
+             target="_blank" rel="noopener noreferrer">
+            𝕏 Twitter / X
+          </a>
+          <a class="amt-scm-btn amt-scm-facebook"
+             href="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodeURIComponent(caption)}"
+             target="_blank" rel="noopener noreferrer">
+            📘 Facebook
+          </a>
+          <a class="amt-scm-btn amt-scm-whatsapp"
+             href="https://wa.me/?text=${encodedCaption}"
+             target="_blank" rel="noopener noreferrer">
+            💬 WhatsApp
+          </a>
+          <button class="amt-scm-btn amt-scm-instagram">
+            📸 Instagram
+          </button>
+          <button class="amt-scm-btn amt-scm-copy">
+            📋 Copy link
+          </button>
+        </div>
+        <p class="amt-scm-ig-note" style="display:none;">
+          Image downloaded! Open Instagram and add it to your story or post.
+        </p>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    // Trigger fade-in on next frame
+    requestAnimationFrame(() => modal.classList.add('amt-scm-visible'));
+
+    // ── Close handlers ──
+    const close = () => {
+      modal.classList.remove('amt-scm-visible');
+      setTimeout(() => modal.remove(), 300);
+    };
+    modal.querySelector('.amt-scm-close').addEventListener('click', close);
+    modal.querySelector('.amt-scm-backdrop').addEventListener('click', close);
+    document.addEventListener('keydown', function escHandler(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    });
+
+    // ── Instagram: download + show instructions ──
+    modal.querySelector('.amt-scm-instagram').addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = 'mirror-talk-achievement.png';
+      a.click();
+      modal.querySelector('.amt-scm-ig-note').style.display = '';
+    });
+
+    // ── Copy link ──
+    modal.querySelector('.amt-scm-copy').addEventListener('click', async function() {
+      try {
+        await navigator.clipboard.writeText(caption + '\n\n' + pageUrl);
+        this.textContent = '✅ Copied!';
+        setTimeout(() => { this.textContent = '📋 Copy link'; }, 2500);
+      } catch (e) {
+        this.textContent = '⚠️ Copy failed';
+      }
+    });
+
+    // Track share in gamification stats
+    try {
+      const s = loadStats();
+      s.sharesCount = (s.sharesCount || 0) + 1;
+      const newBadges = checkAndAwardBadges(s);
+      saveStats(s);
+      newBadges.forEach(b => showMilestoneToast(b.emoji, `Badge unlocked: ${b.name}`, b.desc));
+    } catch (e2) {}
+  }
+
+  /**
+   * Public entry-point: build card and open modal.
+   * @param {Object|null} badge  — from AMT_BADGES, or null
+   * @param {'badge'|'streak'|'progress'} type
+   */
+  function shareMilestone(badge, type) {
+    const stats = loadStats();
+    const dataUrl = buildShareCard(badge, stats, type);
+    const caption = type === 'badge'
+      ? `I just unlocked the "${badge.name}" badge on Mirror Talk! ${badge.emoji} ${badge.desc}`
+      : type === 'streak'
+      ? `🔥 ${stats.currentStreak}-day streak on Mirror Talk — asking questions, growing daily.`
+      : `🌱 My Mirror Talk journey: ${stats.totalQuestions} questions · ${stats.currentStreak}-day streak · ${stats.earnedBadges.size} badges earned.`;
+    showShareModal(dataUrl, caption);
+  }
+
+  // ── Wire share button into milestone toast ──
+  // The toast now sprouts a "Share" button 1 s after appearing.
+  const _origShowMilestoneToast = showMilestoneToast;
+  // Override to attach a share button for badge toasts
+  window._amtShareMilestone = shareMilestone; // expose for badge shelf buttons
 
 })();

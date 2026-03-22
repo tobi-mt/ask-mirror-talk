@@ -277,6 +277,96 @@ class AnswerCache:
                 logger.warning("Failed to clear Redis cache: %s", exc)
 
 
+def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
+    """
+    Load the most-asked historical user questions into the cache without
+    making any OpenAI calls.  Re-embeds each question locally (fast), then
+    stores the saved answer + reconstructed citation list from qa_logs so
+    those answers survive app restarts instantly.
+
+    Returns the number of entries successfully loaded.
+    """
+    from sqlalchemy import text as sqla_text
+    from app.indexing.embeddings import embed_text
+
+    try:
+        # Pick the single most-recent answer for the top N most-asked questions.
+        # Skip rows that had no answer (is_answered = FALSE) and empty episode_ids.
+        rows = db.execute(sqla_text("""
+            SELECT q.question, q.answer, q.episode_ids
+            FROM qa_logs q
+            INNER JOIN (
+                SELECT question,
+                       COUNT(*)  AS cnt,
+                       MAX(id)   AS latest_id
+                FROM qa_logs
+                WHERE (is_answered = TRUE OR is_answered IS NULL)
+                  AND episode_ids IS NOT NULL
+                  AND episode_ids != ''
+                GROUP BY question
+                ORDER BY cnt DESC
+                LIMIT :lim
+            ) freq ON q.id = freq.latest_id
+            ORDER BY freq.cnt DESC
+        """), {"lim": limit}).fetchall()
+    except Exception as exc:
+        logger.warning("Cache DB prewarm: failed to query qa_logs — %s", exc)
+        return 0
+
+    if not rows:
+        return 0
+
+    # Bulk-fetch episode titles / audio URLs for all referenced episodes
+    all_ep_ids: set[int] = set()
+    for _, _, ep_ids_str in rows:
+        for raw in (ep_ids_str or "").split(","):
+            raw = raw.strip()
+            if raw.isdigit():
+                all_ep_ids.add(int(raw))
+
+    ep_map: dict[int, dict] = {}
+    if all_ep_ids:
+        try:
+            ep_rows = db.execute(sqla_text(
+                "SELECT id, title, audio_url FROM episodes WHERE id = ANY(:ids)"
+            ), {"ids": list(all_ep_ids)}).fetchall()
+            ep_map = {r[0]: {"title": r[1], "audio_url": r[2] or ""} for r in ep_rows}
+        except Exception as exc:
+            logger.warning("Cache DB prewarm: failed to fetch episodes — %s", exc)
+
+    loaded = 0
+    for question, answer, ep_ids_str in rows:
+        try:
+            ep_ids = [
+                int(x.strip()) for x in (ep_ids_str or "").split(",")
+                if x.strip().isdigit()
+            ]
+            citations = [
+                {
+                    "episode_id": eid,
+                    "episode_title": ep_map.get(eid, {}).get("title", ""),
+                    "audio_url": ep_map.get(eid, {}).get("audio_url", ""),
+                    "start_time": None,
+                }
+                for eid in ep_ids
+                if eid in ep_map
+            ]
+            norm_q = normalize_question(question)
+            embedding = embed_text(norm_q)
+            cache.put(norm_q, embedding, {
+                "question": question,
+                "answer": answer,
+                "citations": citations,
+                "follow_up_questions": [],
+            })
+            loaded += 1
+        except Exception as exc:
+            logger.warning("Cache DB prewarm: failed for '%.50s' — %s", question, exc)
+
+    logger.info("Cache DB prewarm: loaded %d / %d historical entries", loaded, len(rows))
+    return loaded
+
+
 # Global singleton
 _answer_cache: AnswerCache | None = None
 

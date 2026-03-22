@@ -34,13 +34,16 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         # Log the cached response too
+        cached_citations = cached_response.get("citations", [])
         qa_log = log_qa(
             db,
             question=question,
             answer=cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in cached_response.get("citations", [])],
+            episode_ids=[c["episode_id"] for c in cached_citations],
             latency_ms=latency_ms,
             user_ip=user_ip,
+            is_cached=True,
+            is_answered=len(cached_citations) > 0,
         )
         cached_response["latency_ms"] = latency_ms
         cached_response["qa_log_id"] = qa_log.id
@@ -135,6 +138,8 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
             episode_ids=[c["episode_id"] for c in response["citations"]],
             latency_ms=latency_ms,
             user_ip=user_ip,
+            is_cached=False,
+            is_answered=len(response["citations"]) > 0,
         )
         qa_log_id = qa_log.id
     except Exception as e:
@@ -188,13 +193,16 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
     cached_response = cache.get(norm_q, query_embedding)
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
+        _cached_citations = cached_response.get("citations", [])
         qa_log = log_qa(
             db,
             question=question,
             answer=cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in cached_response.get("citations", [])],
+            episode_ids=[c["episode_id"] for c in _cached_citations],
             latency_ms=latency_ms,
             user_ip=user_ip,
+            is_cached=True,
+            is_answered=len(_cached_citations) > 0,
         )
         # Stream the full cached answer as a single chunk for instant display
         cached_episode_count = len({c["episode_id"] for c in cached_response.get("citations", []) if c.get("episode_id")})
@@ -305,6 +313,8 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
             episode_ids=[c["episode_id"] for c in citations],
             latency_ms=latency_ms,
             user_ip=user_ip,
+            is_cached=False,
+            is_answered=len(citations) > 0,
         )
         qa_log_id = qa_log.id
     except Exception as e:

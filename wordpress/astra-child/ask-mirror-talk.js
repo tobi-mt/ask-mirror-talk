@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v4.6.0 loaded');
+  console.log('Ask Mirror Talk Widget v4.7.2 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -59,6 +59,11 @@
       // Pre-existing content (e.g. cached answer visible on page load) — show immediately.
       responseContainer.classList.add('amt-visible');
     }
+  }
+  // Screen readers announced streaming content progressively
+  if (output) {
+    output.setAttribute('aria-live', 'polite');
+    output.setAttribute('aria-atomic', 'false');
   }
   // Citations: CSS default is display:none so the h3 heading doesn't create blank space.
 
@@ -219,11 +224,19 @@
           `;
 
           // Toggle expand on main button click
-          item.querySelector('.amt-topic-btn').addEventListener('click', () => {
+          const topicBtn = item.querySelector('.amt-topic-btn');
+          topicBtn.setAttribute('aria-expanded', 'false');
+          topicBtn.addEventListener('click', () => {
             const isOpen = item.classList.contains('amt-topic-open');
             // Close all others
-            topicsList.querySelectorAll('.amt-topic-item.amt-topic-open').forEach(el => el.classList.remove('amt-topic-open'));
-            if (!isOpen) item.classList.add('amt-topic-open');
+            topicsList.querySelectorAll('.amt-topic-item.amt-topic-open').forEach(el => {
+              el.classList.remove('amt-topic-open');
+              el.querySelector('.amt-topic-btn').setAttribute('aria-expanded', 'false');
+            });
+            if (!isOpen) {
+              item.classList.add('amt-topic-open');
+              topicBtn.setAttribute('aria-expanded', 'true');
+            }
           });
 
           // Starter question clicks
@@ -445,7 +458,7 @@
     responseContainer.style.display = '';
     requestAnimationFrame(() => responseContainer.classList.add('amt-visible'));
     responseContainer.classList.remove('amt-streaming', 'amt-loading-state');
-    output.classList.add('error');
+    responseContainer.classList.add('error');
     output.innerHTML = `<p><strong>⚠️ ${message}</strong></p>`;
     citations.innerHTML = "";
     citationsContainer.style.display = "none";
@@ -710,9 +723,9 @@
           }
 
           // "Explore this episode" button — links to full episode page
-          if (audioUrl) {
+          if (podcastUrl) {
             const exploreBtn = document.createElement("a");
-            exploreBtn.href = audioUrl;
+            exploreBtn.href = podcastUrl;
             exploreBtn.target = "_blank";
             exploreBtn.rel = "noopener noreferrer";
             exploreBtn.className = "citation-explore";
@@ -783,11 +796,20 @@
    * Falls back to the non-streaming /ask endpoint on error.
    */
   async function askStreaming(question) {
-    const response = await fetch(`${API_BASE}/ask/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, context: conversationContext.length ? conversationContext : undefined })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/ask/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, context: conversationContext.length ? conversationContext : undefined }),
+        signal: controller.signal
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      throw fetchErr;
+    }
 
     if (!response.ok) {
       throw new Error(`Stream request failed: ${response.status}`);
@@ -800,7 +822,8 @@
 
     // Clear error state and prepare for streaming — keep loading dots visible
     // until the first chunk of answer text arrives
-    output.classList.remove('error', 'amt-complete');
+    output.classList.remove('amt-complete');
+    responseContainer.classList.remove('error');
     responseContainer.classList.add('amt-streaming');
     lastDepthMessage = '';
 
@@ -894,10 +917,9 @@
               latency_ms: event.latency_ms,
               cached: event.cached || false
             });
-            // Add share button, rating section, related questions, and SEO schema after answer is complete
+            // Add share button, related questions, and SEO schema after answer is complete
             addShareButton(question, answerText);
             addSaveToEmailButton(question, answerText);
-            addRatingSection(event.qa_log_id);
             showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
 
@@ -919,14 +941,13 @@
         }
       }
     }
-
+    clearTimeout(timeoutId);
     return answerText;
   }
 
   // Show answer (used for non-streaming fallback)
   function showAnswer(answer, citationsList, followUpQuestions) {
-    output.classList.remove('error');
-    responseContainer.classList.remove('amt-streaming');
+    responseContainer.classList.remove('error', 'amt-streaming');
     
     let formattedAnswer = formatMarkdownToHtml(answer);
     const paragraphs = formattedAnswer.split('\n\n').filter(p => p.trim());
@@ -944,7 +965,6 @@
     const questionText = input.value.trim();
     addShareButton(questionText, answer);
     addSaveToEmailButton(questionText, answer);
-    addRatingSection(null); // no qa_log_id in non-streaming fallback
     injectFAQSchema(questionText, answer);
 
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1040,56 +1060,6 @@
 
   // ========================================
   // Rating (Thumbs Up / Down)
-  // ========================================
-
-  function addRatingSection(qaLogId) {
-    const existing = document.getElementById('amt-feedback-section');
-    if (existing) existing.remove();
-    if (!qaLogId) return;
-
-    const section = document.createElement('div');
-    section.id = 'amt-feedback-section';
-    section.className = 'amt-feedback-section';
-    section.innerHTML = `
-      <span class="amt-feedback-label">Was this helpful?</span>
-      <button class="amt-feedback-btn amt-feedback-up" data-type="positive" title="Yes, helpful">👍</button>
-      <button class="amt-feedback-btn amt-feedback-down" data-type="negative" title="Not helpful">👎</button>
-      <span class="amt-feedback-thanks" style="display:none;">Thanks for the feedback!</span>
-    `;
-
-    responseContainer.appendChild(section);
-
-    section.querySelectorAll('.amt-feedback-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const type = btn.dataset.type;
-        section.querySelectorAll('.amt-feedback-btn').forEach(b => b.disabled = true);
-        btn.classList.add('amt-feedback-selected');
-        section.querySelector('.amt-feedback-thanks').style.display = '';
-
-        // Track sharer badge for upvotes
-        if (type === 'positive') {
-          try {
-            const s = loadStats();
-            s.sharesCount = (s.sharesCount || 0) + 1;
-            const newBadges = checkAndAwardBadges(s);
-            saveStats(s);
-            newBadges.forEach(b2 => showMilestoneToast(b2.emoji, `Badge unlocked: ${b2.name}`, b2.desc, b2));
-          } catch (e) {}
-        }
-
-        try {
-          await fetch(`${API_BASE}/api/feedback`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ qa_log_id: qaLogId, feedback_type: type })
-          });
-        } catch (e) {
-          console.warn('Feedback submission failed:', e);
-        }
-      });
-    });
-  }
-
   // ========================================
   // Share Button
   // ========================================
@@ -1296,7 +1266,23 @@
     this.setAttribute('placeholder', 'Ask a question...');
   });
 
+  // Ctrl/Cmd+Enter keyboard shortcut to submit
+  input.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    }
+  });
+
   input.addEventListener('input', function() {
+    // Update character counter
+    const charCounter = document.getElementById('amt-char-counter');
+    if (charCounter) {
+      const len = this.value.length;
+      charCounter.textContent = `${len} / 500`;
+      charCounter.classList.toggle('amt-char-counter-warn', len > 450);
+    }
+
     if (this.value.trim() === '') {
       output.innerHTML = '';
       citations.innerHTML = '';
@@ -2436,7 +2422,7 @@
     ctx.fillText('MIRROR TALK', W / 2, 80);
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.font = '14px Georgia, serif';
-    ctx.fillText('askmirror.talk', W / 2, 105);
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 105);
 
     if (type === 'badge' && badge) {
       // ── Big emoji ──
@@ -2526,7 +2512,7 @@
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.font = '18px Georgia, serif';
-    ctx.fillText('Ask your own questions at askmirror.talk', W / 2, H - 38);
+    ctx.fillText('Ask your own questions at mirrortalkpodcast.com/ask-mirror-talk', W / 2, H - 38);
 
     return canvas.toDataURL('image/png');
   }
@@ -2551,14 +2537,48 @@
    * @param {string} dataUrl  — PNG data URL from buildShareCard()
    * @param {string} caption  — short text caption for text-based shares
    */
+  /**
+   * Convert a data URL to a File object (for Web Share API).
+   */
+  async function _dataUrlToFile(dataUrl, filename) {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: 'image/png' });
+  }
+
+  /**
+   * Trigger image download programmatically.
+   */
+  function _downloadImage(dataUrl) {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'mirror-talk-achievement.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   function showShareModal(dataUrl, caption) {
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
     if (existing) existing.remove();
 
-    const pageUrl = window.location.href;
-    const encodedCaption = encodeURIComponent(caption + '\n\n' + pageUrl);
-    const encodedUrl     = encodeURIComponent(pageUrl);
+    const pageUrl = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+    const shareText = caption + '\n\n' + pageUrl;
+    const encodedText = encodeURIComponent(shareText);
+    const encodedUrl  = encodeURIComponent(pageUrl);
+
+    // Detect Web Share API with file support (best path — native OS share sheet)
+    const canNativeShare = !!(navigator.canShare);
+
+    const nativeShareBtn = canNativeShare
+      ? `<button class="amt-scm-btn amt-scm-native" id="amt-scm-native-btn">
+           📲 Share with image
+         </button>`
+      : '';
+    const divider = canNativeShare
+      ? `<div class="amt-scm-divider"><span>or share to a specific platform</span></div>`
+      : '';
 
     const modal = document.createElement('div');
     modal.id = 'amt-share-card-modal';
@@ -2573,44 +2593,47 @@
         <button class="amt-scm-close" aria-label="Close">&times;</button>
         <h3 class="amt-scm-title">Share your achievement 🎉</h3>
         <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
-        <p class="amt-scm-hint">Save the image below, then share it anywhere!</p>
+        <p class="amt-scm-hint">Platform buttons download the image first — then attach it to your post.</p>
         <div class="amt-scm-buttons">
+          ${nativeShareBtn}
           <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="mirror-talk-achievement.png">
             ⬇️ Download image
           </a>
-          <a class="amt-scm-btn amt-scm-twitter"
-             href="https://twitter.com/intent/tweet?text=${encodedCaption}"
-             target="_blank" rel="noopener noreferrer">
+          ${divider}
+          <button class="amt-scm-btn amt-scm-twitter" data-url="https://twitter.com/intent/tweet?text=${encodedText}">
             𝕏 Twitter / X
-          </a>
-          <a class="amt-scm-btn amt-scm-facebook"
-             href="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodeURIComponent(caption)}"
-             target="_blank" rel="noopener noreferrer">
+          </button>
+          <button class="amt-scm-btn amt-scm-facebook" data-url="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}">
             📘 Facebook
-          </a>
-          <a class="amt-scm-btn amt-scm-whatsapp"
-             href="https://wa.me/?text=${encodedCaption}"
-             target="_blank" rel="noopener noreferrer">
+          </button>
+          <button class="amt-scm-btn amt-scm-whatsapp" data-url="https://wa.me/?text=${encodedText}">
             💬 WhatsApp
-          </a>
+          </button>
           <button class="amt-scm-btn amt-scm-instagram">
             📸 Instagram
           </button>
           <button class="amt-scm-btn amt-scm-copy">
-            📋 Copy link
+            📋 Copy text
           </button>
         </div>
-        <p class="amt-scm-ig-note" style="display:none;">
-          Image downloaded! Open Instagram and add it to your story or post.
-        </p>
+        <p class="amt-scm-platform-note" style="display:none;"></p>
       </div>
     `;
 
     document.body.appendChild(modal);
-    // Trigger fade-in on next frame
     requestAnimationFrame(() => modal.classList.add('amt-scm-visible'));
 
-    // ── Close handlers ──
+    const note = modal.querySelector('.amt-scm-platform-note');
+
+    // ── Helper: download image then open platform URL ──────────────────
+    function downloadThenOpen(platformUrl, platformNote) {
+      _downloadImage(dataUrl);
+      note.textContent = platformNote;
+      note.style.display = '';
+      setTimeout(() => window.open(platformUrl, '_blank', 'noopener,noreferrer'), 400);
+    }
+
+    // ── Close handlers ──────────────────────────────────────────────────
     const close = () => {
       modal.classList.remove('amt-scm-visible');
       setTimeout(() => modal.remove(), 300);
@@ -2621,21 +2644,65 @@
       if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
     });
 
-    // ── Instagram: download + show instructions ──
-    modal.querySelector('.amt-scm-instagram').addEventListener('click', () => {
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = 'mirror-talk-achievement.png';
-      a.click();
-      modal.querySelector('.amt-scm-ig-note').style.display = '';
+    // ── Native share (Web Share API with file) ───────────────────────────
+    if (canNativeShare) {
+      modal.querySelector('#amt-scm-native-btn').addEventListener('click', async function() {
+        try {
+          const file = await _dataUrlToFile(dataUrl, 'mirror-talk-achievement.png');
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text: caption, url: pageUrl });
+          } else {
+            // canShare exists but files not supported — fall back to text-only share
+            await navigator.share({ text: shareText });
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            // Fallback to download
+            _downloadImage(dataUrl);
+            note.textContent = '📥 Image saved — paste it into your app of choice.';
+            note.style.display = '';
+          }
+        }
+      });
+    }
+
+    // ── Twitter / X ───────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-twitter').addEventListener('click', function() {
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! Attach it to your tweet — Twitter doesn\'t support auto-upload from web.'
+      );
     });
 
-    // ── Copy link ──
+    // ── Facebook ──────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-facebook').addEventListener('click', function() {
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! On Facebook, create a post and upload the downloaded image.'
+      );
+    });
+
+    // ── WhatsApp ──────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-whatsapp').addEventListener('click', function() {
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! In WhatsApp, tap the attachment icon to add it to your message.'
+      );
+    });
+
+    // ── Instagram ─────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-instagram').addEventListener('click', () => {
+      _downloadImage(dataUrl);
+      note.textContent = '📥 Image saved! Open Instagram, tap + and choose your downloaded image for a post or story.';
+      note.style.display = '';
+    });
+
+    // ── Copy text ─────────────────────────────────────────────────────────
     modal.querySelector('.amt-scm-copy').addEventListener('click', async function() {
       try {
-        await navigator.clipboard.writeText(caption + '\n\n' + pageUrl);
+        await navigator.clipboard.writeText(shareText);
         this.textContent = '✅ Copied!';
-        setTimeout(() => { this.textContent = '📋 Copy link'; }, 2500);
+        setTimeout(() => { this.textContent = '📋 Copy text'; }, 2500);
       } catch (e) {
         this.textContent = '⚠️ Copy failed';
       }

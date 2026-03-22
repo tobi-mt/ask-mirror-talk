@@ -49,7 +49,8 @@ function ask_mirror_talk_shortcode() {
         </div>
         <form id="ask-mirror-talk-form">
             <label for="ask-mirror-talk-input">What’s on your heart?</label>
-            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask a question..." autocomplete="off" autocapitalize="sentences"></textarea>
+            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask a question..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
+            <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
             <button type="submit" id="ask-mirror-talk-submit">Ask</button>
         </form>
         <div class="ask-mirror-talk-response">
@@ -79,7 +80,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.5.0'; // v4.5.0: Ratings, conversation memory, onboarding, topics expand, related Qs, archive, email, 30s preview, freshness, dark mode, journey hint
+    $version = '4.7.2'; // v4.7.2: UX fixes — toast share btn, two-step feedback, error styling, explore links, SSE timeout, a11y, maxlength
     
     // Core styles
     wp_enqueue_style(

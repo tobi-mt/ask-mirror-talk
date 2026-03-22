@@ -1274,7 +1274,14 @@
     }
   });
 
+  const charCounter = document.getElementById('amt-char-counter');
+
   input.addEventListener('input', function() {
+    if (charCounter) {
+      const len = this.value.length;
+      charCounter.textContent = `${len} / 500`;
+      charCounter.classList.toggle('amt-char-counter-warn', len > 450);
+    }
     // Update character counter
     const charCounter = document.getElementById('amt-char-counter');
     if (charCounter) {

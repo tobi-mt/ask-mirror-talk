@@ -83,9 +83,9 @@
           <div class="amt-qotd-inner">
             <div class="amt-qotd-header">
               <span class="amt-qotd-badge">✨ Question of the Day</span>
-              <span class="amt-qotd-theme">${data.theme || ''}</span>
+              <span class="amt-qotd-theme">${escapeHtml(data.theme || '')}</span>
             </div>
-            <p class="amt-qotd-text">"${data.question}"</p>
+            <p class="amt-qotd-text">"${escapeHtml(data.question)}"</p>
             <button type="button" class="amt-qotd-ask">Ask this →</button>
           </div>
         `;
@@ -123,7 +123,9 @@
   // ─── Handle ?autoask= URL param (notification click → new tab) ─
   (function checkAutoAsk() {
     const params = new URLSearchParams(window.location.search);
-    const question = params.get('autoask');
+    const raw = params.get('autoask');
+    // Cap length before any processing to prevent oversized input
+    const question = raw ? raw.slice(0, 500) : null;
     if (question) {
       // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
       const cleanUrl = window.location.pathname +
@@ -220,9 +222,9 @@
           ` : '';
 
           item.innerHTML = `
-            <button type="button" class="amt-topic-btn" title="Explore ${t.label}${t.episode_count ? ` (${t.episode_count} episodes)` : ''}">
+            <button type="button" class="amt-topic-btn" title="Explore ${escapeHtml(t.label)}${t.episode_count ? ` (${t.episode_count} episodes)` : ''}">
               <span class="amt-topic-icon">${t.icon}</span>
-              <span class="amt-topic-name">${t.label}</span>
+              <span class="amt-topic-name">${escapeHtml(t.label)}</span>
               ${t.episode_count ? `<span style="font-size:0.75rem;opacity:0.45;margin-left:auto;padding-right:4px;">${t.episode_count}</span>` : ''}
               <span class="amt-topic-expand-arrow">▶</span>
             </button>
@@ -501,7 +503,7 @@
           <span class="amt-player-title">🎧 Now Playing</span>
           <button class="amt-player-close" title="Close player" aria-label="Close player">✕</button>
         </div>
-        <div class="amt-player-episode">${episodeTitle}</div>
+        <div class="amt-player-episode">${escapeHtml(episodeTitle)}</div>
         <audio class="amt-audio" controls preload="auto">
           <source src="${audioUrl}" type="audio/mpeg">
           Your browser does not support audio playback.
@@ -646,16 +648,16 @@
           // Build the quote snippet (truncated text already returned by API)
           const quoteText = citation.text || '';
           const quoteHtml = quoteText
-            ? `<span class="citation-quote">"${quoteText}"</span>`
+            ? `<span class="citation-quote">"${escapeHtml(quoteText)}"</span>`
             : '';
 
           const yearHtml = citation.episode_year
-            ? `<span class="citation-year">${citation.episode_year}</span>`
+            ? `<span class="citation-year">${escapeHtml(String(citation.episode_year))}</span>`
             : '';
 
           link.innerHTML = `
             <div class="citation-info">
-              <span class="citation-title">${episodeTitle}${yearHtml}</span>
+              <span class="citation-title">${escapeHtml(episodeTitle)}${yearHtml}</span>
               ${quoteHtml}
             </div>
             ${timeHtml}
@@ -745,16 +747,16 @@
         } else {
           const quoteText = citation.text || '';
           const quoteHtml = quoteText
-            ? `<p class="citation-quote">"${quoteText}"</p>`
+            ? `<p class="citation-quote">"${escapeHtml(quoteText)}"</p>`
             : '';
 
           const yearHtml = citation.episode_year
-            ? `<span class="citation-year">${citation.episode_year}</span>`
+            ? `<span class="citation-year">${escapeHtml(String(citation.episode_year))}</span>`
             : '';
 
           li.innerHTML = `
             <div class="citation-info">
-              <span class="citation-title">${episodeTitle}${yearHtml}</span>
+              <span class="citation-title">${escapeHtml(episodeTitle)}${yearHtml}</span>
               ${quoteHtml}
             </div>
             ${timeHtml}
@@ -2240,6 +2242,8 @@
     { id: 'deep_diver',   emoji: '⚡', name: 'Deep Diver',          desc: 'Clicked a podcast citation',             check: s => s.citationsClicked >= 1 },
     { id: 'sharer',       emoji: '📤', name: 'Sharer',              desc: 'Shared an insight',                      check: s => s.sharesCount >= 1 },
     { id: 'night_owl',    emoji: '🌙', name: 'Night Owl',           desc: 'Asked a question after 10pm',            check: s => s.nightOwl },
+    { id: 'wisdom_seeker',emoji: '📖', name: 'Wisdom Seeker',       desc: 'Asked 25 questions',                     check: s => s.totalQuestions >= 25 },
+    { id: 'deep_session', emoji: '🌊', name: 'Deep Session',        desc: 'Asked 3 questions in a single day',      check: s => (s.dailyQuestions || 0) >= 3 },
     { id: 'completionist',emoji: '🏆', name: 'Completionist',       desc: 'Explored all 20 topics',                 check: s => s.themesExplored.size >= 20 },
   ];
 
@@ -2272,6 +2276,8 @@
       citationsClicked: 0,
       sharesCount:      0,
       nightOwl:         false,
+      dailyQuestions:   0,      // questions asked on lastSessionDate
+      lastSessionDate:  null,   // 'YYYY-MM-DD' — tracks which day dailyQuestions counts
     };
   }
 
@@ -2289,7 +2295,7 @@
     return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
   }
 
-  function recordQuestion(stats, themeHint) {
+  function recordQuestion(stats, themeHint, questionText) {
     const today = todayStr();
     const last  = stats.lastActiveDate;
 
@@ -2313,16 +2319,24 @@
 
     stats.totalQuestions += 1;
 
+    // Per-day question count — resets when the date changes
+    if (stats.lastSessionDate !== today) {
+      stats.dailyQuestions  = 1;
+      stats.lastSessionDate = today;
+    } else {
+      stats.dailyQuestions = (stats.dailyQuestions || 0) + 1;
+    }
+
     // Night owl check (22:00–23:59)
     const hour = new Date().getHours();
     if (hour >= 22) stats.nightOwl = true;
 
-    // Theme tracking — try to match from the question text
+    // Theme tracking — prefer the server-supplied hint, then keyword-scan the
+    // actual question text (bug fix: was scanning themeHint instead of questionText)
     if (themeHint) {
       stats.themesExplored.add(themeHint);
     } else {
-      // Simple keyword → theme mapping for organic questions
-      const q = (themeHint || '').toLowerCase();
+      const q = (questionText || '').toLowerCase();
       for (const theme of AMT_THEMES) {
         if (q.includes(theme.toLowerCase())) {
           stats.themesExplored.add(theme);
@@ -2500,27 +2514,59 @@
     }, 3500);
   }
 
-  const STREAK_MILESTONES = new Set([3, 7, 14, 30, 60, 100]);
+  const STREAK_MILESTONES    = new Set([3, 7, 14, 30, 60, 100]);
+  const DAILY_DEPTH_MILESTONES = new Set([3, 5, 10]); // questions-per-day celebrations
+
+  // Map daily question count to a celebratory message
+  function dailyDepthToast(count) {
+    if (count === 3)  return { emoji: '🌊', headline: 'Deep session!',      sub: '3 questions today — you\'re really exploring.' };
+    if (count === 5)  return { emoji: '🔮', headline: 'On a roll!',          sub: '5 questions in one sitting — incredible focus.' };
+    if (count === 10) return { emoji: '🚀', headline: 'Unstoppable today!', sub: '10 questions in a day — that\'s dedication.' };
+    return null;
+  }
 
   function onQuestionAnswered(questionText, themeHint) {
     let stats = loadStats();
-    const prevStreak = stats.currentStreak;
+    const prevStreak       = stats.currentStreak;
+    const prevDailyCount   = stats.dailyQuestions || 0;
 
-    stats = recordQuestion(stats, themeHint);
+    stats = recordQuestion(stats, themeHint, questionText);
     const newBadges = checkAndAwardBadges(stats);
     saveStats(stats);
     renderStatsBar(stats);
+
+    // Toggle the questions-active glow when ≥ 3 questions asked today
+    const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');
+    if (questionsIcon) {
+      questionsIcon.classList.toggle('amt-questions-active', stats.dailyQuestions >= 3);
+    }
 
     // Streak milestone toast
     if (stats.currentStreak !== prevStreak && STREAK_MILESTONES.has(stats.currentStreak)) {
       showMilestoneToast('🔥', `${stats.currentStreak}-day streak!`, 'Keep the wisdom flowing.');
     }
 
-    // New badge toasts (queue sequentially)
+    // Daily-depth milestone toast (fires only on the exact crossing, not every question after)
+    if (
+      stats.dailyQuestions !== prevDailyCount &&
+      DAILY_DEPTH_MILESTONES.has(stats.dailyQuestions)
+    ) {
+      const toastData = dailyDepthToast(stats.dailyQuestions);
+      if (toastData) {
+        const delay = STREAK_MILESTONES.has(stats.currentStreak) ? 4200 : 0;
+        setTimeout(() => showMilestoneToast(toastData.emoji, toastData.headline, toastData.sub), delay);
+      }
+    }
+
+    // New badge toasts (queue sequentially after any other toasts)
+    const baseDelay = (
+      (STREAK_MILESTONES.has(stats.currentStreak) && stats.currentStreak !== prevStreak ? 4200 : 0) +
+      (DAILY_DEPTH_MILESTONES.has(stats.dailyQuestions) && stats.dailyQuestions !== prevDailyCount ? 4200 : 0)
+    );
     newBadges.forEach((badge, i) => {
       setTimeout(() => {
         showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge);
-      }, i * 4200);
+      }, baseDelay + i * 4200);
     });
   }
 
@@ -2687,6 +2733,12 @@
     const initStats = loadStats();
     if (initStats.totalQuestions > 0) {
       renderStatsBar(initStats);
+      // Restore daily-depth glow if the user already hit ≥ 3 questions today
+      const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');
+      const isToday = initStats.lastSessionDate === todayStr();
+      if (questionsIcon && isToday && (initStats.dailyQuestions || 0) >= 3) {
+        questionsIcon.classList.add('amt-questions-active');
+      }
     }
   } catch (e) {}
 

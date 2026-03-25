@@ -2525,6 +2525,16 @@
   50%       { transform: scale(1.25); filter: drop-shadow(0 0 6px #f7c948); }
 }
 
+/* Glow when ≥ 3 questions asked today */
+.amt-questions-active {
+  animation: questionsPulse 2s ease-in-out infinite;
+}
+
+@keyframes questionsPulse {
+  0%, 100% { filter: drop-shadow(0 0 0px #e884c8); }
+  50%       { filter: drop-shadow(0 0 7px #e884c8); transform: scale(1.1); }
+}
+
 .amt-stat-value {
   font-weight: 700;
   font-size: 1rem;

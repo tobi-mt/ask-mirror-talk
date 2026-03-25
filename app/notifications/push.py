@@ -8,7 +8,9 @@ Uses the Web Push protocol with VAPID authentication.
 import base64
 import json
 import logging
+import re
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from pywebpush import webpush, WebPushException
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -274,8 +276,6 @@ def send_qotd_notification(db: Session) -> dict:
     the next question in the pool they haven't received yet.  A refill batch is
     generated automatically when the pool headroom drops below the threshold.
     """
-    from urllib.parse import quote
-
     # Ensure the DB pool is seeded (no-op if already populated)
     _ensure_pool_seeded(db)
 
@@ -642,6 +642,21 @@ Return only the JSON object, no other text."""
     return None
 
 
+def _extract_question_from_body(body: str) -> str | None:
+    """Extract the 'Ask Mirror Talk <question>' suggestion embedded in a motivation body.
+
+    Motivation bodies are authored to end with a call-to-action of the form:
+    '...Ask Mirror Talk <question text>."
+    Extracting that question lets us include it in the notification data so
+    the SW can auto-submit it when the user taps the notification.
+    """
+    match = re.search(r'[Aa]sk Mirror Talk (.+?)[\.!?]*\s*$', body)
+    if match:
+        q = match.group(1).strip().rstrip('.!?')
+        return (q[0].upper() + q[1:]) if q else None
+    return None
+
+
 def send_midday_motivation_notification(db: Session) -> dict:
     """
     Send a midday motivation push to subscribers at their local noon.
@@ -874,21 +889,33 @@ _QOTD_POOL = [
 
 def send_streak_protection_notification(db: Session) -> dict:
     """
-    Send a streak-protection push to active subscribers who have NOT yet
-    asked a question today (as far as the server can tell via utm params).
+    Send a streak-protection nudge to subscribers at their local 20:00 (8 PM).
 
-    Because streaks are tracked client-side in localStorage, the server
-    cannot know the exact streak length per user. Instead we send a
-    motivational nudge at a configured hour (e.g. 20:00 local) to any
-    subscriber who hasn't already received a QOTD response today.
-    Keyed by the tag 'streak-{date}' so it replaces itself if sent twice.
+    Runs hourly (same as QOTD/midday). The SQL filter ensures each subscriber
+    is targeted only during the one hour their local clock reads 20:xx, so
+    users in different timezones receive the nudge at a sensible evening hour
+    rather than all at the same UTC instant.
+
+    Keyed by tag 'streak-{date}' so duplicate sends within the same local day
+    replace each other silently.
     """
     today = datetime.now(timezone.utc).date()
-    url = (
-        f"/ask-mirror-talk/"
-        f"?utm_source=push&utm_medium=streak&utm_campaign={today.isoformat()}"
-        f"#ask-mirror-talk-form"
-    )
+
+    # Only target subscribers whose local clock is at 20:00 (8 PM)
+    rows = db.execute(
+        text("""
+            SELECT id, endpoint, p256dh_key, auth_key
+            FROM push_subscriptions
+            WHERE active = true
+              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(timezone, 'UTC'))) = 20
+        """)
+    ).fetchall()
+
+    if not rows:
+        logger.info("No streak-protection subscribers due at this hour")
+        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+
+    logger.info("Sending streak-protection notification to %d subscribers", len(rows))
 
     streak_messages = [
         ("🔥 Don't break your streak!", "Keep the wisdom flowing — one question keeps it alive."),
@@ -896,24 +923,61 @@ def send_streak_protection_notification(db: Session) -> dict:
         ("💪 Stay consistent!", "A moment of reflection today keeps your streak alive."),
         ("✨ Your wisdom awaits", "Take 60 seconds to ask Mirror Talk something meaningful."),
     ]
-    # Rotate message based on day so it doesn't feel repetitive
     title, body = streak_messages[today.toordinal() % len(streak_messages)]
 
-    return _broadcast_notification(
-        db=db,
-        title=title,
-        body=body,
-        url=url,
-        tag=f"streak-{today.isoformat()}",
-        notification_type="streak_protection",
-        data={"date": today.isoformat()},
-        actions=[
-            {"action": "ask", "title": "💬 Ask Now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
-            {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
-        ],
-        vibrate=[100, 50, 100],
-        require_interaction=False,
+    url = (
+        f"/ask-mirror-talk/"
+        f"?utm_source=push&utm_medium=streak&utm_campaign={today.isoformat()}"
+        f"#ask-mirror-talk-form"
     )
+    tag = f"streak-{today.isoformat()}"
+    actions = [
+        {"action": "ask", "title": "💬 Ask Now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+        {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+    ]
+
+    sent = 0
+    failed = 0
+    expired_ids: list[int] = []
+
+    for row in rows:
+        sub_id, endpoint, p256dh, auth = row
+        subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
+        result = send_push_notification(
+            subscription_info=subscription_info,
+            title=title,
+            body=body,
+            url=url,
+            tag=tag,
+            data={"date": today.isoformat()},
+            actions=actions,
+            vibrate=[100, 50, 100],
+            require_interaction=False,
+        )
+        if result == "sent":
+            sent += 1
+        elif result == "expired":
+            expired_ids.append(sub_id)
+            failed += 1
+        else:
+            failed += 1
+
+    if expired_ids:
+        db.execute(
+            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
+            {"ids": expired_ids},
+        )
+        db.commit()
+        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    result_summary = {
+        "sent": sent,
+        "failed": failed,
+        "expired": len(expired_ids),
+        "total_subscribers": len(rows),
+    }
+    logger.info("Streak protection result: %s", result_summary)
+    return result_summary
 
 
 def send_new_episode_notification(

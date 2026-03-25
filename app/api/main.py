@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import html
 
 from fastapi import FastAPI, Depends, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -191,15 +192,19 @@ def ask_options():
 
 @app.post("/ask")
 def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
-    _enforce_rate_limit(request.client.host)
+    ip = _get_client_ip(request)
+    _enforce_rate_limit(ip)
 
-    if not payload.question.strip():
+    question = payload.question.strip()
+    if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+    if len(question) > 500:
+        raise HTTPException(status_code=400, detail="Question must be 500 characters or fewer")
 
     # Lazy import to avoid loading ML models at startup
     from app.qa.service import answer_question
     
-    response = answer_question(db, payload.question.strip(), user_ip=request.client.host)
+    response = answer_question(db, question, user_ip=ip)
     return response
 
 
@@ -214,15 +219,19 @@ def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_
       - {"type": "follow_up", "questions": [...]} — suggested follow-up questions
       - {"type": "done", "qa_log_id": ..., "latency_ms": ...} — completion signal
     """
-    _enforce_rate_limit(request.client.host)
+    ip = _get_client_ip(request)
+    _enforce_rate_limit(ip)
 
-    if not payload.question.strip():
+    question = payload.question.strip()
+    if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+    if len(question) > 500:
+        raise HTTPException(status_code=400, detail="Question must be 500 characters or fewer")
 
     from app.qa.service import answer_question_stream
 
     return StreamingResponse(
-        answer_question_stream(db, payload.question.strip(), user_ip=request.client.host, context=payload.context or []),
+        answer_question_stream(db, question, user_ip=ip, context=payload.context or []),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -502,7 +511,7 @@ def push_subscribe(
                 "endpoint": payload.endpoint,
                 "p256dh": p256dh,
                 "auth": auth,
-                "ip": request.client.host,
+                "ip": _get_client_ip(request),
                 "qotd": payload.notify_qotd,
                 "episodes": payload.notify_new_episodes,
                 "midday": payload.notify_midday,
@@ -516,7 +525,7 @@ def push_subscribe(
             text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true")
         ).scalar()
 
-        logger.info("Push subscription registered from %s (total active: %d)", request.client.host, subscriber_count)
+        logger.info("Push subscription registered from %s (total active: %d)", _get_client_ip(request), subscriber_count)
         return {"status": "subscribed", "total_subscribers": subscriber_count}
 
     except Exception as e:
@@ -542,7 +551,7 @@ def push_unsubscribe(
             {"endpoint": endpoint},
         )
         db.commit()
-        logger.info("Push subscription deactivated from %s", request.client.host)
+        logger.info("Push subscription deactivated from %s", _get_client_ip(request))
         return {"status": "unsubscribed"}
     except Exception as e:
         db.rollback()
@@ -630,6 +639,23 @@ def send_new_episode_push(
     return result
 
 
+@app.post("/api/push/send-midday")
+def send_midday_push(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin endpoint: Send midday motivation push notification to opted-in subscribers.
+    Protected by admin auth.
+    """
+    _admin_auth(credentials, request)
+
+    from app.notifications.push import send_midday_motivation_notification
+    result = send_midday_motivation_notification(db)
+    return result
+
+
 @app.get("/api/push/stats")
 def get_push_stats(
     request: Request,
@@ -676,7 +702,12 @@ def _run_ingestion_bg() -> None:
 
 
 @app.post("/ingest")
-def ingest(background_tasks: BackgroundTasks):
+def ingest(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+):
+    _admin_auth(credentials, request)
     background_tasks.add_task(_run_ingestion_bg)
     return {"status": "accepted"}
 
@@ -708,7 +739,7 @@ def track_citation_click(
             db,
             qa_log_id=payload.qa_log_id,
             episode_id=payload.episode_id,
-            user_ip=request.client.host,
+            user_ip=_get_client_ip(request),
             timestamp=payload.timestamp
         )
         return {"status": "ok"}
@@ -745,7 +776,7 @@ def submit_feedback(
             db,
             qa_log_id=payload.qa_log_id,
             feedback_type=payload.feedback_type,
-            user_ip=request.client.host,
+            user_ip=_get_client_ip(request),
             rating=payload.rating,
             comment=comment
         )
@@ -943,8 +974,12 @@ def status(db: Session = Depends(get_db)):
 @app.get("/api/analytics/summary")
 def get_analytics_summary(
     days: int = 7,
-    db: Session = Depends(get_db)
+    request: Request = None,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
 ):
+    _admin_auth(credentials, request)
+    days = max(1, min(days, 365))
     """Get analytics summary for the last N days"""
     from datetime import datetime, timedelta, timezone
     
@@ -1184,6 +1219,16 @@ def get_episode_analytics(db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=str(e2))
 
 
+def _get_client_ip(request: Request) -> str:
+    """Return the real client IP, honouring X-Forwarded-For when present."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
 def _enforce_rate_limit(ip: str):
     now = time.time()
     window = 60
@@ -1192,7 +1237,10 @@ def _enforce_rate_limit(ip: str):
     if len(bucket) >= settings.rate_limit_per_minute:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     bucket.append(now)
-    _rate_limit_bucket[ip] = bucket
+    if bucket:
+        _rate_limit_bucket[ip] = bucket
+    elif ip in _rate_limit_bucket:
+        del _rate_limit_bucket[ip]
 
 
 def _ip_allowed(ip: str) -> bool:
@@ -1218,7 +1266,7 @@ def _ip_allowed(ip: str) -> bool:
 def _admin_auth(credentials: HTTPBasicCredentials | None, request: Request):
     if not settings.admin_enabled:
         raise HTTPException(status_code=404, detail="Not found")
-    if not _ip_allowed(request.client.host):
+    if not _ip_allowed(_get_client_ip(request)):
         raise HTTPException(status_code=403, detail="Forbidden")
     if credentials is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -1338,21 +1386,21 @@ def admin_dashboard(
     ).all()
 
     runs_rows = "".join(
-        f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2] or ''}</td><td>{r[3]}</td><td>{r[4][:100]}</td></tr>"
+        f"<tr><td>{html.escape(str(r[0]))}</td><td>{html.escape(str(r[1]))}</td><td>{html.escape(str(r[2] or ''))}</td><td>{html.escape(str(r[3]))}</td><td>{html.escape(str(r[4])[:100])}</td></tr>"
         for r in runs
     )
     logs_rows = "".join(
-        f"<tr><td>{l[0]}</td><td>{l[1]}</td><td>{l[2][:100]}</td><td>{l[3]}</td><td>{l[4]}</td></tr>"
+        f"<tr><td>{html.escape(str(l[0]))}</td><td>{html.escape(str(l[1]))}</td><td>{html.escape(str(l[2])[:100])}</td><td>{html.escape(str(l[3]))}</td><td>{html.escape(str(l[4]))}</td></tr>"
         for l in logs
     )
     
     top_episodes_rows = "".join(
-        f"<tr><td>{e[0]}</td><td>{e[1][:100]}</td><td>{e[2]}</td></tr>"
+        f"<tr><td>{html.escape(str(e[0]))}</td><td>{html.escape(str(e[1])[:100])}</td><td>{html.escape(str(e[2]))}</td></tr>"
         for e in top_episodes
     )
 
     unanswered_rows = "".join(
-        f"<tr><td>{u[0][:120]}</td><td>{u[1]}</td></tr>"
+        f"<tr><td>{html.escape(str(u[0])[:120])}</td><td>{html.escape(str(u[1]))}</td></tr>"
         for u in top_unanswered
     )
 

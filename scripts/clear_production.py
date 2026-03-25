@@ -20,7 +20,7 @@ def clear_data():
         db.execute(text("DELETE FROM chunks"))
         db.execute(text("DELETE FROM transcripts"))
         db.execute(text("DELETE FROM episodes"))
-        db.execute(text("DELETE FROM ingestion_runs"))
+        db.execute(text("DELETE FROM ingest_runs"))
         db.commit()
         
         print("✓ All data cleared!")

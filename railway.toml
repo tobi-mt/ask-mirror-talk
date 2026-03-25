@@ -36,3 +36,11 @@ builder = "dockerfile"
 #   Settings > Deploy > Start Command: python3 scripts/send_midday_motivation.py
 #   Settings > Variables: same DB + VAPID keys as the API service
 #   Note: Sends to subscribers whose local hour is 12 (noon).
+#
+# mirror-talk-streak-cron service (streak-protection nudge — runs every hour):
+#   Settings > Build > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
+#   Settings > Deploy > Start Command: python3 scripts/send_streak_protection.py
+#   Settings > Variables: same DB + VAPID keys as the API service
+#   Note: Sends to subscribers whose local hour is 20 (8 PM). Encourages users
+#         who haven't asked a question today to keep their streak alive.

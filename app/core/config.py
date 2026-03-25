@@ -118,5 +118,16 @@ class Settings(BaseSettings):
             v = v.replace("\\n", "\n")
         return v
 
+    @field_validator("admin_password")
+    @classmethod
+    def warn_default_admin_password(cls, v: str) -> str:
+        import logging
+        if v == "change-me":
+            logging.getLogger(__name__).warning(
+                "⚠️  admin_password is set to the default 'change-me'. "
+                "Set ADMIN_PASSWORD in your environment before deploying."
+            )
+        return v
+
 
 settings = Settings()

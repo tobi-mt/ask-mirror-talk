@@ -81,7 +81,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.9.1'; // v4.9.1: correct install/notification guidance for non-Safari iOS browsers (Edge, Chrome, Firefox)
+    $version = '4.9.4'; // v4.9.4: security hardening — XSS fixes, /ingest auth, analytics auth, rate-limit memory leak, SW cache sync
     
     // Core styles
     wp_enqueue_style(

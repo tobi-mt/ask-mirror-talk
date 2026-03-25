@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+# Use Amazon ECR Public mirror of python:3.11-slim to avoid Docker Hub auth outages.
+# ECR Public Gallery never requires authentication and has no rate limits.
+FROM public.ecr.aws/docker/library/python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

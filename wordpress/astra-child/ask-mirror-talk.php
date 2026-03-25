@@ -81,7 +81,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.9.4'; // v4.9.4: security hardening — XSS fixes, /ingest auth, analytics auth, rate-limit memory leak, SW cache sync
+    $version = '4.9.5'; // v4.9.5: fix notification click auto-submit when app already open (navigate() replaces lost postMessage)
     
     // Core styles
     wp_enqueue_style(

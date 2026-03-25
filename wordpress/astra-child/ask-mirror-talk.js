@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v4.7.5 loaded');
+  console.log('Ask Mirror Talk Widget v4.9.5 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -109,6 +109,9 @@
   // Used by both the URL ?autoask= path and the SW postMessage path.
   function autoSubmitQuestion(question) {
     if (!question || !form) return;
+    // Don't fire a second concurrent request if one is already in-flight
+    // (guards the postMessage fallback path for old iOS Safari < 15.4).
+    if (submitBtn && submitBtn.disabled) return;
     input.value = question;
     // Hide the QOTD card so the answer takes centre stage
     if (qotdContainer) qotdContainer.style.display = 'none';
@@ -128,8 +131,11 @@
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
       // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
+      const remainingParams = params.toString()
+        .replace(/autoask=[^&]*&?/, '')
+        .replace(/&$/, '');
       const cleanUrl = window.location.pathname +
-        (params.toString().replace(/autoask=[^&]*&?/, '').replace(/&$/, '').replace(/^\?$/, '') || '') +
+        (remainingParams ? `?${remainingParams}` : '') +
         window.location.hash;
       history.replaceState(null, '', cleanUrl || window.location.pathname);
 

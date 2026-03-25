@@ -791,13 +791,27 @@ def send_midday_motivation_notification(db: Session) -> dict:
 
         subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
 
+        # Try to extract a question from the body (messages authored with
+        # "Ask Mirror Talk <question>" CTAs).  When present, pack it into
+        # data.question and bake it into the notification URL as ?autoask=
+        # so the SW can auto-submit it whether the tab is open or not.
+        extracted_q = _extract_question_from_body(body or "")
+        notify_data: dict = {"date": today.date().isoformat(), "type": "midday_motivation"}
+        notify_url = url
+        if extracted_q:
+            notify_data["question"] = extracted_q
+            clean = url.split('#')[0].rstrip('&?')
+            sep = '&' if '?' in clean else '?'
+            hash_part = '#ask-mirror-talk-form'
+            notify_url = f"{clean}{sep}autoask={quote(extracted_q)}{hash_part}"
+
         result = send_push_notification(
             subscription_info=subscription_info,
             title=title,
             body=body,
-            url=url,
+            url=notify_url,
             tag=f"midday-{today.date().isoformat()}",
-            data={"date": today.date().isoformat(), "type": "midday_motivation"},
+            data=notify_data,
             actions=[
                 {"action": "ask", "title": "💬 Ask Mirror Talk", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
                 {"action": "dismiss", "title": "Thanks 🙏", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},

@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v4.9.3';
+const CACHE_VERSION = 'amt-v4.9.5';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -232,50 +232,54 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  // For "answer" action or plain notification body tap:
-  // Build a URL with ?autoask= so the widget immediately submits the
-  // question without any extra tap. The question comes from notification.data
-  // which is always set by send_qotd_notification().
+  // Build the target URL with ?autoask= when we have a question.
+  // Strip any hash from baseUrl before appending params, then restore hash.
   const question = data?.question;
+  const hashIdx = baseUrl.indexOf('#');
+  const hash = hashIdx !== -1 ? baseUrl.slice(hashIdx) : '#ask-mirror-talk-form';
+  const base = hashIdx !== -1 ? baseUrl.slice(0, hashIdx) : baseUrl;
   let targetUrl = baseUrl;
   if (question) {
-    // Remove any existing hash, append autoask param, restore hash
-    const hashIdx = targetUrl.indexOf('#');
-    const hash = hashIdx !== -1 ? targetUrl.slice(hashIdx) : '#ask-mirror-talk-form';
-    const base = hashIdx !== -1 ? targetUrl.slice(0, hashIdx) : targetUrl;
-    const separator = base.includes('?') ? '&' : '?';
-    targetUrl = `${base}${separator}autoask=${encodeURIComponent(question)}${hash}`;
+    // Build a clean URL — strip any existing autoask param first, then append fresh one
+    const cleanBase = base.replace(/([?&])autoask=[^&]*/g, '').replace(/[?&]$/, '');
+    const sep = cleanBase.includes('?') ? '&' : '?';
+    targetUrl = `${cleanBase}${sep}autoask=${encodeURIComponent(question)}${hash}`;
   }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Prefer a client that already has the Ask Mirror Talk page open so we
-      // can post a message instead of doing a full reload.
-      const askClient = clientList.find(c => c.url.includes('/ask-mirror-talk'));
+      // Prefer a client already on the exact notification page; fall back to any
+      // same-origin window so we can reuse an existing tab instead of stacking new ones.
+      const normalise = u => u.split('?')[0].split('#')[0].replace(/\/$/, '');
+      const baseNorm  = normalise(base);
+      const exactClient = clientList.find(c => normalise(c.url) === baseNorm);
+      const anyClient   = clientList.find(c => c.url.startsWith(self.location.origin));
+      const targetClient = exactClient || anyClient;
 
-      if (askClient) {
+      if (targetClient) {
         if (question) {
-          // QOTD: auto-submit the question in the open tab
-          askClient.postMessage({ type: 'AUTO_SUBMIT', question });
-        } else {
-          // Midday motivation: scroll the open page to the form so the user
-          // can start typing — no question to submit automatically.
-          askClient.postMessage({ type: 'NAVIGATE_TO_FORM' });
+          // Navigate the existing tab to the URL with ?autoask=.
+          // This is reliable even when the tab has been discarded/suspended by
+          // the browser — navigate() forces a fresh load and checkAutoAsk() fires.
+          // postMessage alone fails for discarded tabs because the message is lost.
+          return targetClient.navigate(targetUrl)
+            .then(navigated => { if (navigated) navigated.focus(); })
+            .catch(() => {
+              // navigate() not available (old iOS Safari < 15.4) — fall back to
+              // postMessage for tabs that are still alive, then focus.
+              targetClient.postMessage({ type: 'AUTO_SUBMIT', question });
+              return targetClient.focus();
+            });
         }
-        askClient.focus();
-        return;
+        // No specific question (streak / generic motivation) — bring app to front.
+        // Navigate to baseUrl so the user lands on the ask page even if they had
+        // browsed elsewhere, without the overhead of building an autoask URL.
+        return targetClient.navigate(base + hash)
+          .then(navigated => { if (navigated) navigated.focus(); })
+          .catch(() => targetClient.focus().catch(() => null));
       }
 
-      // Ask Mirror Talk page is not open — check for any other window on
-      // this origin and navigate it, rather than opening a second tab.
-      const anyClient = clientList.find(c => c.url.startsWith(self.location.origin));
-      if (anyClient) {
-        return anyClient.navigate(targetUrl).then(navigatedClient => {
-          if (navigatedClient) navigatedClient.focus();
-        }).catch(() => clients.openWindow(targetUrl));
-      }
-
-      // Nothing open at all — open a fresh tab.
+      // No window open at all — open a fresh tab.
       return clients.openWindow(targetUrl);
     })
   );

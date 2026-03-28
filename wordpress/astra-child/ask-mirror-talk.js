@@ -1670,7 +1670,7 @@
    * Only shown if: Push API is available, permission not already decided,
    * and user hasn't dismissed it this session.
    */
-  function showNotificationOptIn() {
+  function showNotificationOptIn(fromBell) {
     console.log('[NotifOptIn] Called with args:', arguments);
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
     const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
@@ -1687,8 +1687,9 @@
     // Show a targeted message so users aren't shown wrong instructions.
     if (isIOS && !isSafari && !isStandalone) {
       try {
-        if (sessionStorage.getItem('amt_notif_dismissed')) return;
-        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+        // Skip dismissal checks when called from bell button
+        if (!fromBell && sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (!fromBell && localStorage.getItem('amt_notif_dismissed_permanent')) return;
       } catch (e) {}
 
       const existing = document.getElementById('amt-notif-optin');
@@ -1710,11 +1711,13 @@
       `;
 
       const widget = document.querySelector('.ask-mirror-talk');
-      const heading = widget ? widget.querySelector('h2') : null;
-      if (heading && heading.nextSibling) {
-        widget.insertBefore(banner, heading.nextSibling);
-      } else if (widget) {
-        widget.appendChild(banner);
+      if (widget) {
+        const headingRow = widget.querySelector('.amt-heading-row');
+        if (headingRow) {
+          headingRow.insertAdjacentElement('afterend', banner);
+        } else {
+          widget.insertBefore(banner, widget.firstChild);
+        }
       }
 
       banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
@@ -1741,10 +1744,10 @@
     // iOS Safari (not added to home screen): Push API is not available.
     // Show a banner explaining they need to install the PWA first.
     if (isIOS && !isStandalone) {
-      // Don't show if dismissed
+      // Don't show if dismissed (unless called from bell button)
       try {
-        if (sessionStorage.getItem('amt_notif_dismissed')) return;
-        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+        if (!fromBell && sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (!fromBell && localStorage.getItem('amt_notif_dismissed_permanent')) return;
       } catch (e) {}
 
       const existing = document.getElementById('amt-notif-optin');
@@ -1766,11 +1769,13 @@
       `;
 
       const widget = document.querySelector('.ask-mirror-talk');
-      const heading = widget ? widget.querySelector('h2') : null;
-      if (heading && heading.nextSibling) {
-        widget.insertBefore(banner, heading.nextSibling);
-      } else if (widget) {
-        widget.appendChild(banner);
+      if (widget) {
+        const headingRow = widget.querySelector('.amt-heading-row');
+        if (headingRow) {
+          headingRow.insertAdjacentElement('afterend', banner);
+        } else {
+          widget.insertBefore(banner, widget.firstChild);
+        }
       }
 
       banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
@@ -1793,7 +1798,7 @@
     // This means iOS version is below 16.4. Show a helpful message.
     if (isIOS && isStandalone && (!('PushManager' in window) || !('Notification' in window))) {
       try {
-        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (!fromBell && sessionStorage.getItem('amt_notif_dismissed')) return;
       } catch (e) {}
 
       const existing = document.getElementById('amt-notif-optin');
@@ -1815,11 +1820,13 @@
       `;
 
       const widget = document.querySelector('.ask-mirror-talk');
-      const heading = widget ? widget.querySelector('h2') : null;
-      if (heading && heading.nextSibling) {
-        widget.insertBefore(banner, heading.nextSibling);
-      } else if (widget) {
-        widget.appendChild(banner);
+      if (widget) {
+        const headingRow = widget.querySelector('.amt-heading-row');
+        if (headingRow) {
+          headingRow.insertAdjacentElement('afterend', banner);
+        } else {
+          widget.insertBefore(banner, widget.firstChild);
+        }
       }
 
       banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
@@ -1847,9 +1854,9 @@
     // If permission already denied, show browser settings instructions
     if (Notification.permission === 'denied') {
       console.log('[NotifOptIn] Permission denied, showing instructions');
-      // Don't show if dismissed this session
+      // Don't show if dismissed this session (unless called from bell button)
       try {
-        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (!fromBell && sessionStorage.getItem('amt_notif_dismissed')) return;
       } catch (e) {}
 
       const existing = document.getElementById('amt-notif-optin');
@@ -1871,11 +1878,13 @@
       `;
 
       const widget = document.querySelector('.ask-mirror-talk');
-      const heading = widget ? widget.querySelector('h2') : null;
-      if (heading && heading.nextSibling) {
-        widget.insertBefore(banner, heading.nextSibling);
-      } else if (widget) {
-        widget.appendChild(banner);
+      if (widget) {
+        const headingRow = widget.querySelector('.amt-heading-row');
+        if (headingRow) {
+          headingRow.insertAdjacentElement('afterend', banner);
+        } else {
+          widget.insertBefore(banner, widget.firstChild);
+        }
       }
 
       banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
@@ -1965,11 +1974,13 @@
 
     // Insert after the widget heading or at top of widget
     const widget = document.querySelector('.ask-mirror-talk');
-    const heading = widget ? widget.querySelector('h2') : null;
-    if (heading && heading.nextSibling) {
-      widget.insertBefore(banner, heading.nextSibling);
-    } else if (widget) {
-      widget.appendChild(banner);
+    if (widget) {
+      const headingRow = widget.querySelector('.amt-heading-row');
+      if (headingRow) {
+        headingRow.insertAdjacentElement('afterend', banner);
+      } else {
+        widget.insertBefore(banner, widget.firstChild);
+      }
     } else {
       document.body.appendChild(banner);
     }
@@ -2348,11 +2359,10 @@
                          window.navigator.standalone === true;
     const hasStatsBar = document.getElementById('amt-stats-bar');
     
-    // Only show bell if user has visited before or is in standalone mode
-    // (hides it for first-time visitors until they show engagement)
+    // Show bell if user has visited before OR is in standalone mode (PWA installed)
     try {
-      const hasVisited = localStorage.getItem('amt_last_question') || isStandalone;
-      if (hasVisited && hasStatsBar) {
+      const hasVisited = localStorage.getItem('amt_last_question');
+      if ((hasVisited || isStandalone) && hasStatsBar) {
         btn.style.display = '';
       }
     } catch (e) {}
@@ -2805,20 +2815,34 @@
   // Onboarding Flow (first-visit 3-step guide)
   // ========================================
   (function initOnboarding() {
+    // Early exit conditions - check these first before any UI work
     try {
       if (localStorage.getItem('amt_onboarded')) return;
+      
       // Skip onboarding if page was just reloaded by service worker
-      if (sessionStorage.getItem('amt_sw_reloaded')) return;
+      if (sessionStorage.getItem('amt_sw_reloaded')) {
+        // If we're reloading from SW and onboarding was in progress, mark as complete
+        if (localStorage.getItem('amt_onboarding_started')) {
+          localStorage.setItem('amt_onboarded', '1');
+          localStorage.removeItem('amt_onboarding_started');
+        }
+        return;
+      }
+      
       // Skip onboarding if we're in standalone mode (already installed)
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                            window.navigator.standalone === true;
       if (isStandalone) {
         localStorage.setItem('amt_onboarded', '1');
+        localStorage.removeItem('amt_onboarding_started');
         return;
       }
+      
       // Mark as started to prevent double-show on SW reload
       localStorage.setItem('amt_onboarding_started', '1');
-    } catch (e) { return; }
+    } catch (e) { 
+      return; 
+    }
 
     const overlay = document.getElementById('amt-onboarding-overlay');
     if (!overlay) return;
@@ -2939,7 +2963,10 @@
   // Initialise stats bar on page load
   try {
     const initStats = loadStats();
-    if (initStats.totalQuestions > 0) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true;
+    // Show stats bar if user has asked questions OR is in standalone/PWA mode
+    if (initStats.totalQuestions > 0 || isStandalone) {
       renderStatsBar(initStats);
       // Restore daily-depth glow if the user already hit ≥ 3 questions today
       const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');

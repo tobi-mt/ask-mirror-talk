@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.0.3';
+const CACHE_VERSION = 'amt-v5.0.5';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -288,6 +288,12 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// ── Version query (used by page to detect a stale SW and trigger a hard reset) ──
+self.addEventListener('message', (event) => {
+  if (event.data === 'GET_VERSION' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ version: CACHE_VERSION });
+  }
+});
 
 function offlineHTML() {
   return `<!DOCTYPE html>

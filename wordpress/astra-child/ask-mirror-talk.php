@@ -107,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.3'; // v5.0.3: force reg.update() on page load to break SW caching deadlock
+    $version = '5.0.5'; // v5.0.5: cookie backup for gamification state (streak/XP survives iOS PWA reinstall)
     
     // Core styles
     wp_enqueue_style(
@@ -328,34 +328,107 @@ function ask_mirror_talk_serve_manifest() {
 add_action('init', 'ask_mirror_talk_serve_manifest', 0);
 
 /**
- * PWA: Register service worker via inline script in footer.
- * Uses the root-level /sw.js proxy URL so scope: '/' works correctly.
+ * PWA: Register service worker + enforce version on every page load.
  *
- * reg.update() is called on every load — per spec, this bypasses the SW's own
- * fetch handler and goes direct to the server, breaking any caching deadlock
- * where the old SW was intercepting its own update check.
+ * Strategy:
+ * 1. Register with updateViaCache:'none' so the browser bypasses HTTP cache on update checks.
+ * 2. Call reg.update() which bypasses the SW's own fetch handler (per SW spec).
+ * 3. If no update was found (reg.installing/waiting are null) but the active SW
+ *    still reports an old version via a message-channel query, we are in a
+ *    hard server-side caching deadlock. Break it with a one-time hard reset:
+ *    unregister all SWs, delete all caches, re-register, hard-reload.
+ *    A localStorage flag (per target version) prevents infinite reload loops.
  */
 function ask_mirror_talk_pwa_footer() {
     ?>
     <script>
-    if ('serviceWorker' in navigator) {
+    (function() {
+        if (!('serviceWorker' in navigator) || !('caches' in window)) return;
+
+        var SW_URL    = '/sw.js';
+        var SW_TARGET = 'amt-v5.0.5';           // must match CACHE_VERSION in sw.js
+        var RESET_KEY = 'amt_sw_reset_' + SW_TARGET;
+
+        // Ask the active SW what version it is via a MessageChannel.
+        // Resolves null if the SW has no handler (i.e. old version).
+        function querySwVersion(active) {
+            return new Promise(function(resolve) {
+                var timer = setTimeout(function() { resolve(null); }, 1500);
+                try {
+                    var mc = new MessageChannel();
+                    mc.port1.onmessage = function(e) {
+                        clearTimeout(timer);
+                        resolve(e.data && e.data.version ? e.data.version : null);
+                    };
+                    active.postMessage('GET_VERSION', [mc.port2]);
+                } catch (e) { clearTimeout(timer); resolve(null); }
+            });
+        }
+
+        async function enforceSW() {
+            // Register (or update opts on existing registration)
+            var reg = await navigator.serviceWorker.register(SW_URL, {
+                scope: '/',
+                updateViaCache: 'none'
+            });
+
+            // Trigger an update check that bypasses both the SW fetch handler
+            // and (with updateViaCache:'none') the HTTP cache.
+            await reg.update();
+
+            // If an update was found it is now installing/waiting and skipWaiting()
+            // will activate it. Nothing more needed.
+            if (reg.installing || reg.waiting) {
+                console.log('[PWA] SW update found — installing.');
+                return;
+            }
+
+            // No update found via normal path. Check if the active SW is the
+            // right version or if we are stuck in a server-caching deadlock.
+            if (!reg.active) return;
+            var version = await querySwVersion(reg.active);
+            if (version === SW_TARGET) {
+                console.log('[PWA] SW up-to-date:', version);
+                return;
+            }
+
+            // Active SW is stale AND update check found nothing = deadlock.
+            // Guard against reload loops with a per-version localStorage flag.
+            var already;
+            try { already = localStorage.getItem(RESET_KEY); } catch (e) {}
+            if (already) {
+                console.warn('[PWA] Hard reset already attempted for', SW_TARGET, '— giving up.');
+                return;
+            }
+            try { localStorage.setItem(RESET_KEY, '1'); } catch (e) {}
+
+            console.log('[PWA] Stale SW (', version, ') — hard reset to', SW_TARGET);
+
+            // Unregister every SW registration on this origin.
+            var regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(function(r) { return r.unregister(); }));
+
+            // Wipe all caches so nothing stale remains.
+            var keys = await caches.keys();
+            await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+
+            // Register fresh (no prior SW will interfere with the fetch).
+            await navigator.serviceWorker.register(SW_URL, {
+                scope: '/',
+                updateViaCache: 'none'
+            });
+
+            // Hard-reload: forces the browser to fetch the HTML and all assets
+            // fresh from the server with zero SW or cache involvement.
+            window.location.reload(true);
+        }
+
         window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
-            }).then(function(reg) {
-                console.log('[PWA] Service Worker registered, scope:', reg.scope);
-                // Force an update check on every page load.
-                // registration.update() bypasses the SW fetch handler entirely
-                // (per SW spec § "update" algorithm step 4) so it always hits
-                // the real server — even if the old SW was caching sw.js.
-                return reg.update();
-            }).then(function() {
-                console.log('[PWA] Service Worker update check complete.');
-            }).catch(function(err) {
-                console.warn('[PWA] Service Worker error:', err);
+            enforceSW().catch(function(err) {
+                console.warn('[PWA] SW enforce error:', err);
             });
         });
-    }
+    })();
     </script>
     <?php
 }

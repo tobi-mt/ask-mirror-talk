@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.0.3 loaded');
+  console.log('Ask Mirror Talk Widget v5.0.5 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -2285,14 +2285,36 @@
     'Faith','Identity','Empowerment','Transition','Community',
   ];
 
+  // ── Cookie helpers for cross-PWA-reinstall backup ────────────────────────
+  // localStorage is wiped on iOS when the user deletes the PWA from homescreen.
+  // Cookies survive because they live at the browser/domain level, not the PWA
+  // context. We dual-write gamification state to both so data is recoverable.
+  function _cookieSet(name, value, days) {
+    try {
+      const exp = new Date(Date.now() + days * 864e5).toUTCString();
+      document.cookie = name + '=' + encodeURIComponent(value) +
+        '; expires=' + exp + '; path=/; SameSite=Lax';
+    } catch (e) {}
+  }
+  function _cookieGet(name) {
+    try {
+      const re = new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)');
+      const m = document.cookie.match(re);
+      return m ? decodeURIComponent(m[1]) : null;
+    } catch (e) { return null; }
+  }
+
   function loadStats() {
     try {
-      const raw = localStorage.getItem('amt_gamification');
+      const raw = localStorage.getItem('amt_gamification') || _cookieGet('amt_gx');
       if (raw) {
         const parsed = JSON.parse(raw);
-        // themesExplored is serialised as an array
         parsed.themesExplored = new Set(parsed.themesExplored || []);
         parsed.earnedBadges   = new Set(parsed.earnedBadges   || []);
+        // Cookie recovery: re-hydrate localStorage so future writes work normally
+        if (!localStorage.getItem('amt_gamification')) {
+          try { localStorage.setItem('amt_gamification', raw); } catch (e) {}
+        }
         return parsed;
       }
     } catch (e) {}
@@ -2317,7 +2339,9 @@
         themesExplored: [...s.themesExplored],
         earnedBadges:   [...s.earnedBadges],
       });
-      localStorage.setItem('amt_gamification', JSON.stringify(serialisable));
+      const json = JSON.stringify(serialisable);
+      localStorage.setItem('amt_gamification', json);
+      _cookieSet('amt_gx', json, 365); // backup — survives iOS PWA reinstall
     } catch (e) {}
   }
 

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.0.0 loaded');
+  console.log('Ask Mirror Talk Widget v5.0.1 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3547,21 +3547,7 @@
   // FEATURE 7: Auto-Open Explore Panel on First Visit
   // ========================================
 
-  (function autoOpenExploreOnFirstVisit() {
-    try {
-      if (localStorage.getItem('amt_explore_opened')) return;
-      if (!exploreToggle || !explorePanel || !exploreExpander) return;
-    } catch (e) { return; }
-
-    // Wait until content has loaded so the panel has height
-    setTimeout(() => {
-      if (exploreExpander.style.display === 'none') return; // no content yet, bail
-      exploreToggle.setAttribute('aria-expanded', 'true');
-      explorePanel.classList.add('amt-explore-panel--open');
-      exploreToggle.classList.add('amt-explore-first-visit-glow');
-      try { localStorage.setItem('amt_explore_opened', '1'); } catch (e) {}
-    }, 1800);
-  })();
+  // autoOpenExploreOnFirstVisit — disabled; expander is always collapsed by default.
 
   // ========================================
   // FEATURE 8: Emoji Mood Reactions

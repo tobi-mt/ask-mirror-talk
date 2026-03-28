@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.0.0';
+const CACHE_VERSION = 'amt-v5.0.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -72,6 +72,9 @@ self.addEventListener('fetch', (event) => {
 
   // Skip admin, login, preview pages
   if (url.pathname.startsWith('/wp-admin') || url.pathname.startsWith('/wp-login')) return;
+
+  // Never cache the service worker itself — browser must always fetch it fresh
+  if (url.pathname.endsWith('sw.js')) return;
 
   // API calls: network-first with cache fallback
   if (url.origin === API_BASE || url.href.startsWith(API_BASE)) {

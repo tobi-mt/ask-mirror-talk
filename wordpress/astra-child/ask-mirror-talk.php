@@ -107,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.0'; // v5.0.0: saved insights, streak protection, reflection prompts, come-back teaser, referral share, about modal, auto-open explore, mood reactions, copy answer, text size toggle, animated icons, response progress
+    $version = '5.0.1'; // v5.0.1: SW self-cache fix, explore expander always collapsed by default
     
     // Core styles
     wp_enqueue_style(

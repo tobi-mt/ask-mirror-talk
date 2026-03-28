@@ -20,6 +20,7 @@ function ask_mirror_talk_shortcode() {
             <h2>Ask Mirror Talk</h2>
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
+                <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
                 <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
             </div>
         </div>
@@ -40,7 +41,7 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-stat-label">/ 20 topics</span>
             </div>
             <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
-            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>                <button type="button" class="amt-journal-btn" id="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes"><span aria-hidden="true">📓</span><span class="screen-reader-text"> My notes</span></button>            <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
+            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>                <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
         </div>
         <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
         <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
@@ -108,7 +109,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.1.0'; // v5.1.0: My Reflection Notes journal modal
+    $version = '5.1.3'; // v5.1.3: fix explore expander bounce from tall emojis
     
     // Core styles
     wp_enqueue_style(
@@ -280,7 +281,7 @@ function ask_mirror_talk_serve_sw_init() {
     }
 
     // Must match CACHE_VERSION in sw.js — the only line to change on each release
-    $sw_ver = '5.1.0';
+    $sw_ver = '5.1.3';
     $sw_url = '/sw.js?v=' . $sw_ver;
 
     while (ob_get_level()) {

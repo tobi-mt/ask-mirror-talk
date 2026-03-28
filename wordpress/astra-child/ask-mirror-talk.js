@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.1.0 loaded');
+  console.log('Ask Mirror Talk Widget v5.1.3 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3252,8 +3252,10 @@
     const insights = loadInsights();
 
     if (insights.length === 0) {
-      panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
-      panel.style.display = '';
+      // Hide the panel — empty state is not shown inline, it only appears when
+      // the user explicitly opens the panel via the 🔖 button
+      panel.style.display = 'none';
+      panel.innerHTML = '';
       return;
     }
 
@@ -3314,7 +3316,13 @@
       if (panel.style.display !== 'none') {
         panel.style.display = 'none';
       } else {
-        renderInsightsPanel();
+        const insights = loadInsights();
+        if (insights.length === 0) {
+          panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
+          panel.style.display = '';
+        } else {
+          renderInsightsPanel();
+        }
       }
     });
   })();

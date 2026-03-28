@@ -3243,16 +3243,43 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-insights-btn:hover { opacity: 1; }
 
 /* ── Text Size Levels ─────────────────────────────────────── */
-.ask-mirror-talk.amt-text-small #ask-mirror-talk-output,
-.ask-mirror-talk.amt-text-small .ask-mirror-talk-response {
-  font-size: 14px;
+/* Applied to root container so ALL widget text scales together */
+.ask-mirror-talk.amt-text-small {
+  font-size: 14px !important;
   line-height: 1.65;
 }
-
-.ask-mirror-talk.amt-text-large #ask-mirror-talk-output,
-.ask-mirror-talk.amt-text-large .ask-mirror-talk-response {
-  font-size: 18px;
+.ask-mirror-talk.amt-text-large {
+  font-size: 18px !important;
   line-height: 1.85;
+}
+/* Explicitly cascade into key text-bearing elements */
+.ask-mirror-talk.amt-text-small #ask-mirror-talk-output,
+.ask-mirror-talk.amt-text-small .ask-mirror-talk-response,
+.ask-mirror-talk.amt-text-small .amt-qotd,
+.ask-mirror-talk.amt-text-small .amt-topics,
+.ask-mirror-talk.amt-text-small .amt-suggestions,
+.ask-mirror-talk.amt-text-small #ask-mirror-talk-input,
+.ask-mirror-talk.amt-text-small .amt-citation,
+.ask-mirror-talk.amt-text-small .amt-reflect-textarea {
+  font-size: 14px !important;
+  line-height: 1.65;
+}
+.ask-mirror-talk.amt-text-large #ask-mirror-talk-output,
+.ask-mirror-talk.amt-text-large .ask-mirror-talk-response,
+.ask-mirror-talk.amt-text-large .amt-qotd,
+.ask-mirror-talk.amt-text-large .amt-topics,
+.ask-mirror-talk.amt-text-large .amt-suggestions,
+.ask-mirror-talk.amt-text-large #ask-mirror-talk-input,
+.ask-mirror-talk.amt-text-large .amt-citation,
+.ask-mirror-talk.amt-text-large .amt-reflect-textarea {
+  font-size: 18px !important;
+  line-height: 1.85;
+}
+/* Visual flash feedback when size changes */
+.amt-text-size-btn.amt-size-changed {
+  background: rgba(212, 165, 80, 0.35) !important;
+  transform: scale(1.18);
+  transition: transform 0.12s ease, background 0.12s ease;
 }
 
 /* ── Response Header (with copy button) ──────────────────── */

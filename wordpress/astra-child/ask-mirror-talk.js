@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.0.1 loaded');
+  console.log('Ask Mirror Talk Widget v5.0.2 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3640,20 +3640,27 @@
       if (saved >= 0 && saved <= 2) current = saved;
     } catch (e) {}
 
-    function applySize(idx) {
+    const sizeNames = ['Small', 'Default', 'Large'];
+
+    function applySize(idx, flash) {
       const widget = document.querySelector('.ask-mirror-talk');
       if (!widget) return;
       sizes.forEach(cls => widget.classList.remove(cls));
-      widget.classList.add(sizes[idx]);
+      if (idx !== 1) widget.classList.add(sizes[idx]); // no class needed for default
       btn.textContent = labels[idx];
+      btn.title = 'Text size: ' + sizeNames[idx] + ' \u2014 click to change';
       try { localStorage.setItem('amt_text_size', String(idx)); } catch (e) {}
+      if (flash) {
+        btn.classList.add('amt-size-changed');
+        setTimeout(() => btn.classList.remove('amt-size-changed'), 350);
+      }
     }
 
-    applySize(current);
+    applySize(current, false);
 
     btn.addEventListener('click', () => {
       current = (current + 1) % sizes.length;
-      applySize(current);
+      applySize(current, true);
     });
   })();
 

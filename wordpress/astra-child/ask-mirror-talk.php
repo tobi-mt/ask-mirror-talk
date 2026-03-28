@@ -107,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.1'; // v5.0.1: SW self-cache fix, explore expander always collapsed by default
+    $version = '5.0.2'; // v5.0.2: LiteSpeed no-cache header for sw.js, Aa button affects all widget text
     
     // Core styles
     wp_enqueue_style(
@@ -249,6 +249,7 @@ function ask_mirror_talk_serve_sw() {
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
         header('Expires: 0');
+        header('X-LiteSpeed-Cache-Control: no-cache'); // Bypass LiteSpeed/LSCWP server cache (Hostinger)
         header('X-Content-Type-Options: nosniff');
         readfile($sw_file);
         exit;

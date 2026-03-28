@@ -1060,7 +1060,7 @@
       const body = encodeURIComponent(
         `Question: ${question}\n\n` +
         `Answer from Mirror Talk:\n${answer}\n\n` +
-        `— Answered by Ask Mirror Talk\nhttps://mirrortalk.com/ask-mirror-talk/`
+        `— Answered by Ask Mirror Talk\nhttps://mirrortalkpodcast.com/ask-mirror-talk/`
       );
       window.location.href = `mailto:?subject=${subject}&body=${body}`;
     });

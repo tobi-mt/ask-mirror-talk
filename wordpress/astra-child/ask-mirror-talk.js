@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.1.9 loaded');
+  console.log('Ask Mirror Talk Widget v5.2.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1551,7 +1551,10 @@
     if (banner) banner.remove();
 
     // Mark onboarding as complete immediately to prevent double-show on reload
-    try { localStorage.setItem('amt_onboarded', '1'); } catch (e) {}
+    try { 
+      localStorage.setItem('amt_onboarded', '1');
+      localStorage.removeItem('amt_onboarding_started');
+    } catch (e) {}
 
     // After install, prompt for notifications after a short delay
     setTimeout(() => showNotificationOptIn(), 2000);
@@ -1668,10 +1671,16 @@
    * and user hasn't dismissed it this session.
    */
   function showNotificationOptIn() {
+    console.log('[NotifOptIn] Called with args:', arguments);
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
     const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                          window.navigator.standalone === true;
+
+    console.log('[NotifOptIn] Environment:', { isIOS, isSafari, isStandalone, 
+                 hasPushManager: 'PushManager' in window, 
+                 hasNotification: 'Notification' in window,
+                 permission: typeof Notification !== 'undefined' ? Notification.permission : 'N/A' });
 
     // Non-Safari iOS browser (Edge, Chrome, Firefox on iOS) not in standalone:
     // PWA installation — and therefore push notifications — requires Safari on iOS.
@@ -1830,10 +1839,14 @@
     }
 
     // Guard: Push API must be available (non-iOS browsers without support)
-    if (!('PushManager' in window) || !('Notification' in window)) return;
+    if (!('PushManager' in window) || !('Notification' in window)) {
+      console.log('[NotifOptIn] Push API not available, returning early');
+      return;
+    }
 
     // If permission already denied, show browser settings instructions
     if (Notification.permission === 'denied') {
+      console.log('[NotifOptIn] Permission denied, showing instructions');
       // Don't show if dismissed this session
       try {
         if (sessionStorage.getItem('amt_notif_dismissed')) return;
@@ -1884,22 +1897,35 @@
     // If permission already granted but not subscribed, allow them to subscribe
     // (Don't nag if they explicitly dismissed, but let bell button trigger this)
     const clickedBell = arguments[0] === 'fromBell';
+    console.log('[NotifOptIn] clickedBell:', clickedBell, 'permission:', Notification.permission);
     if (Notification.permission === 'granted' && !clickedBell) {
       // Permission already granted - they can subscribe via bell button
+      console.log('[NotifOptIn] Permission granted but not from bell, returning');
       return;
     }
 
     // Don't show if dismissed this session (unless clicked bell)
     if (!clickedBell) {
+      console.log('[NotifOptIn] Not from bell, checking dismissal status');
       try {
-        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+        if (sessionStorage.getItem('amt_notif_dismissed')) {
+          console.log('[NotifOptIn] Dismissed this session, returning');
+          return;
+        }
       } catch (e) {}
 
       // Don't show if they dismissed permanently
       try {
-        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+        if (localStorage.getItem('amt_notif_dismissed_permanent')) {
+          console.log('[NotifOptIn] Dismissed permanently, returning');
+          return;
+        }
       } catch (e) {}
+    } else {
+      console.log('[NotifOptIn] From bell click, bypassing dismissal checks');
     }
+
+    console.log('[NotifOptIn] Creating notification banner');
 
     // Remove any existing banner
     const existing = document.getElementById('amt-notif-optin');
@@ -2332,16 +2358,20 @@
     } catch (e) {}
     
     btn.addEventListener('click', () => {
+      console.log('[Bell] Notification bell clicked');
       try {
         const isSubscribed = localStorage.getItem('amt_push_subscribed');
+        console.log('[Bell] Subscribed status:', isSubscribed);
         if (isSubscribed) {
           // User is subscribed — show management panel
           toggleNotificationManagePanel();
         } else {
           // User is not subscribed — show opt-in prompt (pass 'fromBell' to bypass dismissal checks)
+          console.log('[Bell] Showing notification opt-in');
           showNotificationOptIn('fromBell');
         }
       } catch (e) {
+        console.error('[Bell] Error:', e);
         // Fallback to showing opt-in
         showNotificationOptIn('fromBell');
       }
@@ -2777,6 +2807,17 @@
   (function initOnboarding() {
     try {
       if (localStorage.getItem('amt_onboarded')) return;
+      // Skip onboarding if page was just reloaded by service worker
+      if (sessionStorage.getItem('amt_sw_reloaded')) return;
+      // Skip onboarding if we're in standalone mode (already installed)
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                           window.navigator.standalone === true;
+      if (isStandalone) {
+        localStorage.setItem('amt_onboarded', '1');
+        return;
+      }
+      // Mark as started to prevent double-show on SW reload
+      localStorage.setItem('amt_onboarding_started', '1');
     } catch (e) { return; }
 
     const overlay = document.getElementById('amt-onboarding-overlay');
@@ -2860,7 +2901,10 @@
 
     function closeOnboarding() {
       overlay.style.display = 'none';
-      try { localStorage.setItem('amt_onboarded', '1'); } catch (e) {}
+      try { 
+        localStorage.setItem('amt_onboarded', '1');
+        localStorage.removeItem('amt_onboarding_started');
+      } catch (e) {}
     }
 
     // Show after a short delay so the page renders first

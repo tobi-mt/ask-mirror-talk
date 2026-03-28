@@ -109,7 +109,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.1.9'; // v5.1.9: fix desktop notification options visibility
+    $version = '5.2.0'; // v5.2.0: fix double onboarding during install + debug bell
     
     // Core styles
     wp_enqueue_style(

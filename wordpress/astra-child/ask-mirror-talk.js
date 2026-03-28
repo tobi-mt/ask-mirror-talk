@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.1.3 loaded');
+  console.log('Ask Mirror Talk Widget v5.1.7 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -155,6 +155,21 @@
 
   // ─── Handle messages from service worker (already-open tab) ───
   if ('serviceWorker' in navigator) {
+    // controllerchange fires natively when a new SW takes control — works on
+    // iOS Safari PWA where client.navigate() and postMessage may be unreliable.
+    // Guard: only reload if there was ALREADY a controller (i.e. an SW update
+    // happened), not on the very first install.
+    var _hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (!_hadController) { _hadController = true; return; }
+      try {
+        if (!sessionStorage.getItem('amt_sw_reloaded')) {
+          sessionStorage.setItem('amt_sw_reloaded', '1');
+          window.location.reload();
+        }
+      } catch (e) { window.location.reload(); }
+    });
+
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
         // QOTD notification clicked while app was open — auto-submit the question.
@@ -3417,15 +3432,20 @@
     });
 
     section.querySelector('.amt-reflect-save-btn').addEventListener('click', () => {
-      const note = section.querySelector('.amt-reflect-textarea').value.trim();
+      const textarea = section.querySelector('.amt-reflect-textarea');
+      const note = textarea.value.trim();
       if (!note) return;
       try {
         const existing = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]');
         existing.unshift({ note, prompt, savedAt: Date.now() });
         localStorage.setItem('amt_reflect_notes', JSON.stringify(existing.slice(0, 50)));
       } catch (e) {}
-      section.querySelector('.amt-reflect-saved-msg').style.display = '';
-      section.querySelector('.amt-reflect-save-btn').disabled = true;
+      // Clear the textarea and show brief confirmation so the user can add another note
+      textarea.value = '';
+      textarea.focus();
+      const msg = section.querySelector('.amt-reflect-saved-msg');
+      msg.style.display = '';
+      setTimeout(() => { msg.style.display = 'none'; }, 2000);
     });
   }
 
@@ -3617,10 +3637,11 @@
         : notes.map((entry, i) => `
           <div class="amt-journal-entry" data-index="${i}">
             <p class="amt-journal-prompt">${escapeHtml(entry.prompt || '')}</p>
-            <p class="amt-journal-note">${escapeHtml(entry.note || '')}</p>
+            <p class="amt-journal-note" data-index="${i}">${escapeHtml(entry.note || '')}</p>
             <div class="amt-journal-entry-footer">
               <span class="amt-journal-date">${formatDate(entry.savedAt)}</span>
               <div class="amt-journal-entry-actions">
+                <button type="button" class="amt-journal-edit-btn" data-index="${i}" title="Edit this note">✏️ Edit</button>
                 <button type="button" class="amt-journal-share-btn" data-index="${i}" title="Share this note">📤 Share</button>
                 <button type="button" class="amt-journal-delete-btn" data-index="${i}" title="Delete this note">🗑</button>
               </div>
@@ -3650,6 +3671,57 @@
       document.addEventListener('keydown', function escHandler(e) {
         if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
       }, { once: true });
+
+      // Edit buttons — inline editing within the entry card
+      modal.querySelectorAll('.amt-journal-edit-btn').forEach(editBtn => {
+        editBtn.addEventListener('click', () => {
+          const idx = parseInt(editBtn.dataset.index, 10);
+          let notes = [];
+          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          const entry = notes[idx];
+          if (!entry) return;
+
+          const noteEl = modal.querySelector(`.amt-journal-note[data-index="${idx}"]`);
+          const footer = editBtn.closest('.amt-journal-entry-footer');
+          if (!noteEl || !footer) return;
+
+          // Replace static text with editable textarea
+          noteEl.style.display = 'none';
+          const editWrap = document.createElement('div');
+          editWrap.className = 'amt-journal-edit-wrap';
+          editWrap.innerHTML = `
+            <textarea class="amt-journal-edit-textarea" maxlength="500" rows="4">${escapeHtml(entry.note || '')}</textarea>
+            <div class="amt-journal-edit-actions">
+              <button type="button" class="amt-journal-edit-save-btn">Save</button>
+              <button type="button" class="amt-journal-edit-cancel-btn">Cancel</button>
+            </div>
+          `;
+          noteEl.parentNode.insertBefore(editWrap, noteEl.nextSibling);
+          footer.style.display = 'none';
+
+          const textarea = editWrap.querySelector('.amt-journal-edit-textarea');
+          // position cursor at end
+          textarea.focus();
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+          editWrap.querySelector('.amt-journal-edit-save-btn').addEventListener('click', () => {
+            const newText = textarea.value.trim();
+            if (!newText) return;
+            let notes = [];
+            try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+            notes[idx] = { ...notes[idx], note: newText };
+            try { localStorage.setItem('amt_reflect_notes', JSON.stringify(notes)); } catch (e) {}
+            close();
+            setTimeout(() => openJournal(), 310);
+          });
+
+          editWrap.querySelector('.amt-journal-edit-cancel-btn').addEventListener('click', () => {
+            editWrap.remove();
+            noteEl.style.display = '';
+            footer.style.display = '';
+          });
+        });
+      });
 
       // Share buttons
       modal.querySelectorAll('.amt-journal-share-btn').forEach(shareBtn => {

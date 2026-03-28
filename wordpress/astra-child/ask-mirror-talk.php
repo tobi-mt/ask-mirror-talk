@@ -109,7 +109,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.1.3'; // v5.1.3: fix explore expander bounce from tall emojis
+    $version = '5.1.7'; // v5.1.7: /sw-init (no .js ext) — old SWs pass through without interception
     
     // Core styles
     wp_enqueue_style(
@@ -260,28 +260,26 @@ function ask_mirror_talk_serve_sw() {
 add_action('init', 'ask_mirror_talk_serve_sw', 0); // Priority 0 = run first
 
 /**
- * PWA: Serve the SW-init script from /sw-init.js with strict no-cache headers.
+ * PWA: Serve the SW-init script from /sw-init (no .js extension) with strict no-cache headers.
  *
- * Root problem: LiteSpeed caches the WordPress page HTML. The inline
- * enforceSW() script in the footer becomes stale whenever a new theme version
- * is deployed, because users' old SWs fetch the page via networkFirst, which
- * hits LiteSpeed and gets the old cached HTML — the new PHP code never runs.
+ * Root problem: Old service workers treat any .js URL as a static asset
+ * (cacheFirstWithUpdate), which means /sw-init.js was intercepted and potentially
+ * served from cache even with a versioned query string.
  *
- * Fix: move enforceSW() into a dedicated /sw-init.js endpoint served by PHP
- * with no-cache headers. The HTML footer now has a static
- * <script src="/sw-init.js"> tag that never changes across versions. LiteSpeed
- * has no existing cache entry for this URL, so the first response carries
- * no-cache headers and LiteSpeed never stores it. Future deployments only
- * require updating SW_VER here — no LiteSpeed cache purge needed.
+ * Fix v5.1.7: rename endpoint to /sw-init (no extension). Old SWs only call
+ * event.respondWith() for static assets (.js/.css/etc), API calls, and HTML.
+ * /sw-init matches none of those patterns, so the fetch handler returns without
+ * intercepting — the browser fetches it directly from the network every time.
+ * This is guaranteed to work for ALL old SW versions, even pre-5.0.8.
  */
 function ask_mirror_talk_serve_sw_init() {
     $request_path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-    if ($request_path !== '/sw-init.js') {
+    if ($request_path !== '/sw-init') {
         return;
     }
 
     // Must match CACHE_VERSION in sw.js — the only line to change on each release
-    $sw_ver = '5.1.3';
+    $sw_ver = '5.1.7';
     $sw_url = '/sw.js?v=' . $sw_ver;
 
     while (ob_get_level()) {
@@ -312,11 +310,13 @@ function ask_mirror_talk_serve_sw_init() {
   async function enforceSW() {
     // Unregister any SW at a different script URL (old version or old URL format)
     var allRegs = await navigator.serviceWorker.getRegistrations();
+    var unregisteredAny = false;
     await Promise.all(allRegs.map(function(r) {
       var sw = r.active || r.installing || r.waiting;
       var url = sw ? sw.scriptURL : '';
       if (url.indexOf('v=' + SW_VER) === -1) {
         console.log('[PWA] Unregistering stale SW:', url || '(unknown)');
+        unregisteredAny = true;
         return r.unregister();
       }
       return Promise.resolve();
@@ -327,6 +327,31 @@ function ask_mirror_talk_serve_sw_init() {
       scope: '/',
       updateViaCache: 'none'
     });
+
+    // Reload when new SW activates. Works on iOS Safari PWA where client.navigate() is unreliable.
+    // Uses two hooks to cover all timing scenarios:
+    //  1. reg.installing/waiting — already set when register() resolves (first install or update)
+    //  2. updatefound — fires when update() finds a newer SW and starts installing it
+    function watchWorker(worker) {
+      if (!worker) return;
+      worker.addEventListener('statechange', function() {
+        if (worker.state === 'activated') {
+          console.log('[PWA] New SW activated — reloading page');
+          try {
+            if (!sessionStorage.getItem('amt_sw_reloaded')) {
+              sessionStorage.setItem('amt_sw_reloaded', '1');
+              window.location.reload();
+            }
+          } catch(e) { window.location.reload(); }
+        }
+      });
+    }
+
+    // Hook 1: already-installing worker (covers first registration after unregister)
+    watchWorker(reg.installing || reg.waiting);
+
+    // Hook 2: future updatefound (covers update() detecting a newer script)
+    reg.addEventListener('updatefound', function() { watchWorker(reg.installing); });
 
     // Belt-and-suspenders update check (bypasses SW fetch handler per spec)
     await reg.update();
@@ -420,15 +445,17 @@ add_action('init', 'ask_mirror_talk_serve_manifest', 0);
 /**
  * PWA: Load SW-init script from the dedicated no-cache PHP endpoint.
  *
- * The HTML tag is intentionally static (/sw-init.js with no version query
- * string). LiteSpeed caches this HTML forever — and that is fine, because
- * /sw-init.js is served by PHP with no-cache headers and LiteSpeed never stores
- * it. Future SW updates only require changing SW_VER in ask_mirror_talk_serve_sw_init()
- * above; no LiteSpeed cache purge is needed.
+ * IMPORTANT: the ?v= query string MUST be bumped with every release.
+ *
+ * Why: /sw-init has no .js extension, so old SWs (all versions) pass the request
+ * straight through to the network — never intercepted, never cached by any SW.
+ * The ?v= query string additionally bypasses LiteSpeed's HTTP cache.
+ * The combination guarantees every visit fetches a fresh PHP response.
  */
 function ask_mirror_talk_pwa_footer() {
+    $sw_init_ver = '5.1.7'; // ← bump this with every release (same as $sw_ver above)
     ?>
-    <script src="/sw-init.js" defer></script>
+    <script src="/sw-init?v=<?php echo esc_attr($sw_init_ver); ?>" defer></script>
     <?php
 }
 add_action('wp_footer', 'ask_mirror_talk_pwa_footer', 99);

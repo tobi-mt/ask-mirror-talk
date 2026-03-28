@@ -4130,3 +4130,71 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-journal-title { font-size: 18px; }
 }
 
+/* ── Journal inline edit ───────────────────────────────────── */
+
+.amt-journal-edit-btn {
+  background: transparent;
+  border: 1px solid #e0d8cc;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #7a6a55;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.amt-journal-edit-btn:hover { background: #f5f0e8; border-color: #c8baa8; }
+
+.amt-journal-edit-wrap {
+  margin: 6px 0 10px;
+}
+
+.amt-journal-edit-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid #c8bfb0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  color: #2e2a24;
+  background: #fff;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.amt-journal-edit-textarea:focus { border-color: #8b7355; }
+
+.amt-journal-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.amt-journal-edit-save-btn {
+  background: #2e2a24;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.amt-journal-edit-save-btn:hover { background: #4a4540; }
+
+.amt-journal-edit-cancel-btn {
+  background: transparent;
+  border: 1px solid #e0d8cc;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #8b7355;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.amt-journal-edit-cancel-btn:hover { background: #f5f0e8; }
+

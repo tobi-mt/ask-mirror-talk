@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.1.7 loaded');
+  console.log('Ask Mirror Talk Widget v5.1.8 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1550,6 +1550,9 @@
     const banner = document.getElementById('amt-install-banner');
     if (banner) banner.remove();
 
+    // Mark onboarding as complete immediately to prevent double-show on reload
+    try { localStorage.setItem('amt_onboarded', '1'); } catch (e) {}
+
     // After install, prompt for notifications after a short delay
     setTimeout(() => showNotificationOptIn(), 2000);
   });
@@ -2048,7 +2051,7 @@
         console.log('[Push] Subscription registered successfully');
         try {
           localStorage.setItem('amt_push_subscribed', '1');
-          // Reveal the management bell in the stats bar
+          // Bell is already shown by initNotifManageBtn, just ensure it's visible
           const bellBtn = document.getElementById('amt-notif-manage-btn');
           if (bellBtn) bellBtn.style.display = '';
         } catch (e) {}
@@ -2255,12 +2258,38 @@
   (function initNotifManageBtn() {
     const btn = document.getElementById('amt-notif-manage-btn');
     if (!btn) return;
+    
+    // Show bell for all users (subscribed or not)
+    // If not subscribed, clicking will show the opt-in prompt
+    // If subscribed, clicking will show the management panel
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true;
+    const hasStatsBar = document.getElementById('amt-stats-bar');
+    
+    // Only show bell if user has visited before or is in standalone mode
+    // (hides it for first-time visitors until they show engagement)
     try {
-      if (localStorage.getItem('amt_push_subscribed')) {
+      const hasVisited = localStorage.getItem('amt_last_question') || isStandalone;
+      if (hasVisited && hasStatsBar) {
         btn.style.display = '';
       }
     } catch (e) {}
-    btn.addEventListener('click', toggleNotificationManagePanel);
+    
+    btn.addEventListener('click', () => {
+      try {
+        const isSubscribed = localStorage.getItem('amt_push_subscribed');
+        if (isSubscribed) {
+          // User is subscribed — show management panel
+          toggleNotificationManagePanel();
+        } else {
+          // User is not subscribed — show opt-in prompt
+          showNotificationOptIn();
+        }
+      } catch (e) {
+        // Fallback to showing opt-in
+        showNotificationOptIn();
+      }
+    });
   })();
 
   // Show notification opt-in after a delay.

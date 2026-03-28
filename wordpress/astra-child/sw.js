@@ -8,13 +8,15 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.0.6';
+const CACHE_VERSION = 'amt-v5.1.0';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
 // App shell files to pre-cache on install
+// NOTE: '/' (homepage HTML) is intentionally excluded — the HTML must always
+// be fetched fresh so that sw-init.js can update the service worker. Offline
+// users get the dedicated offlineHTML() fallback instead.
 const APP_SHELL = [
-  '/',
   '/wp-content/themes/astra-child/ask-mirror-talk.css',
   '/wp-content/themes/astra-child/ask-mirror-talk-enhanced.css',
   '/wp-content/themes/astra-child/ask-mirror-talk.js',
@@ -54,11 +56,19 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
       .then(() => {
-        // After claiming open tabs, tell every window client to reload so
-        // it picks up the freshly-cached assets instead of the old in-memory ones.
-        return self.clients.matchAll({ type: 'window' }).then((windowClients) => {
-          windowClients.forEach((client) => client.postMessage({ type: 'SW_UPDATED' }));
-        });
+        // Force-navigate every visible open tab so the new SW takes over
+        // immediately — no JS listener needed in the old page (which may be
+        // running a version that predates the SW_UPDATED postMessage handler).
+        return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+          .then((windowClients) => {
+            windowClients.forEach((client) => {
+              // navigate() reloads the page under the new SW
+              client.navigate(client.url).catch(() => {
+                // Fallback: postMessage for browsers that don't support navigate()
+                client.postMessage({ type: 'SW_UPDATED' });
+              });
+            });
+          });
       })
   );
 });
@@ -80,8 +90,8 @@ self.addEventListener('fetch', (event) => {
   // Skip admin, login, preview pages
   if (url.pathname.startsWith('/wp-admin') || url.pathname.startsWith('/wp-login')) return;
 
-  // Never cache the service worker itself — browser must always fetch it fresh
-  if (url.pathname.endsWith('sw.js')) return;
+  // Never cache the service worker or its init script — PHP must always serve these fresh
+  if (url.pathname.endsWith('sw.js') || url.pathname.endsWith('sw-init.js')) return;
 
   // API calls: network-first with cache fallback
   if (url.origin === API_BASE || url.href.startsWith(API_BASE)) {

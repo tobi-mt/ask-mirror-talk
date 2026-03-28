@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.0.6 loaded');
+  console.log('Ask Mirror Talk Widget v5.1.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3584,7 +3584,108 @@
   // autoOpenExploreOnFirstVisit — disabled; expander is always collapsed by default.
 
   // ========================================
-  // FEATURE 8: Emoji Mood Reactions
+  // FEATURE: My Reflection Notes Journal
+  // ========================================
+
+  (function initJournalModal() {
+    const btn   = document.getElementById('amt-journal-btn');
+    const modal = document.getElementById('amt-journal-modal');
+    if (!btn || !modal) return;
+
+    function formatDate(ts) {
+      try {
+        return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+      } catch (e) { return ''; }
+    }
+
+    function openJournal() {
+      let notes = [];
+      try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+
+      const pageUrl = window.location.href;
+
+      const noteItems = notes.length === 0
+        ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After asking a question, look for the <strong>✍️ Take a moment to reflect…</strong> section below the response.</p>`
+        : notes.map((entry, i) => `
+          <div class="amt-journal-entry" data-index="${i}">
+            <p class="amt-journal-prompt">${escapeHtml(entry.prompt || '')}</p>
+            <p class="amt-journal-note">${escapeHtml(entry.note || '')}</p>
+            <div class="amt-journal-entry-footer">
+              <span class="amt-journal-date">${formatDate(entry.savedAt)}</span>
+              <div class="amt-journal-entry-actions">
+                <button type="button" class="amt-journal-share-btn" data-index="${i}" title="Share this note">📤 Share</button>
+                <button type="button" class="amt-journal-delete-btn" data-index="${i}" title="Delete this note">🗑</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+      modal.innerHTML = `
+        <div class="amt-journal-backdrop"></div>
+        <div class="amt-journal-panel">
+          <button class="amt-journal-close" aria-label="Close">✕</button>
+          <h2 class="amt-journal-title">📓 My Reflection Notes</h2>
+          <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private, stored on this device</p>
+          <div class="amt-journal-list">${noteItems}</div>
+        </div>
+      `;
+      modal.style.display = '';
+      requestAnimationFrame(() => modal.classList.add('amt-journal-visible'));
+
+      const close = () => {
+        modal.classList.remove('amt-journal-visible');
+        setTimeout(() => { modal.style.display = 'none'; modal.innerHTML = ''; }, 300);
+      };
+
+      modal.querySelector('.amt-journal-backdrop').addEventListener('click', close);
+      modal.querySelector('.amt-journal-close').addEventListener('click', close);
+      document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+      }, { once: true });
+
+      // Share buttons
+      modal.querySelectorAll('.amt-journal-share-btn').forEach(shareBtn => {
+        shareBtn.addEventListener('click', async () => {
+          const idx = parseInt(shareBtn.dataset.index, 10);
+          let notes = [];
+          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          const entry = notes[idx];
+          if (!entry) return;
+
+          const shareText = `Reflection: ${entry.prompt}\n\nMy note: ${entry.note}`;
+          if (navigator.share) {
+            try {
+              await navigator.share({ title: 'My Mirror Talk Reflection', text: shareText, url: pageUrl });
+            } catch (e) {
+              if (e.name !== 'AbortError') console.warn('Share failed:', e);
+            }
+          } else {
+            try {
+              await navigator.clipboard.writeText(`${shareText}\n\n${pageUrl}`);
+              shareBtn.textContent = '✅ Copied!';
+              setTimeout(() => { shareBtn.textContent = '📤 Share'; }, 2500);
+            } catch (e) { console.warn('Copy failed:', e); }
+          }
+        });
+      });
+
+      // Delete buttons
+      modal.querySelectorAll('.amt-journal-delete-btn').forEach(delBtn => {
+        delBtn.addEventListener('click', () => {
+          const idx = parseInt(delBtn.dataset.index, 10);
+          let notes = [];
+          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          notes.splice(idx, 1);
+          try { localStorage.setItem('amt_reflect_notes', JSON.stringify(notes)); } catch (e) {}
+          // Re-render
+          close();
+          setTimeout(() => openJournal(), 310);
+        });
+      });
+    }
+
+    btn.addEventListener('click', openJournal);
+  })();
   // ========================================
 
   const MOOD_REACTIONS = [

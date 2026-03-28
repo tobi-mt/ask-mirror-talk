@@ -40,8 +40,7 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-stat-label">/ 20 topics</span>
             </div>
             <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
-            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>
-            <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
+            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>                <button type="button" class="amt-journal-btn" id="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes"><span aria-hidden="true">📓</span><span class="screen-reader-text"> My notes</span></button>            <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
         </div>
         <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
         <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
@@ -50,6 +49,8 @@ function ask_mirror_talk_shortcode() {
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
+        <!-- Journal modal -->
+        <div id="amt-journal-modal" class="amt-journal-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="My reflection notes"></div>
         <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
         <div id="amt-explore-expander" class="amt-explore-expander" style="display:none;">
             <button type="button" id="amt-explore-toggle" class="amt-explore-toggle" aria-expanded="false" aria-controls="amt-explore-panel">
@@ -107,7 +108,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.6'; // v5.0.6: SW_UPDATED message triggers page reload after new SW activates
+    $version = '5.1.0'; // v5.1.0: My Reflection Notes journal modal
     
     // Core styles
     wp_enqueue_style(
@@ -258,6 +259,94 @@ function ask_mirror_talk_serve_sw() {
 add_action('init', 'ask_mirror_talk_serve_sw', 0); // Priority 0 = run first
 
 /**
+ * PWA: Serve the SW-init script from /sw-init.js with strict no-cache headers.
+ *
+ * Root problem: LiteSpeed caches the WordPress page HTML. The inline
+ * enforceSW() script in the footer becomes stale whenever a new theme version
+ * is deployed, because users' old SWs fetch the page via networkFirst, which
+ * hits LiteSpeed and gets the old cached HTML — the new PHP code never runs.
+ *
+ * Fix: move enforceSW() into a dedicated /sw-init.js endpoint served by PHP
+ * with no-cache headers. The HTML footer now has a static
+ * <script src="/sw-init.js"> tag that never changes across versions. LiteSpeed
+ * has no existing cache entry for this URL, so the first response carries
+ * no-cache headers and LiteSpeed never stores it. Future deployments only
+ * require updating SW_VER here — no LiteSpeed cache purge needed.
+ */
+function ask_mirror_talk_serve_sw_init() {
+    $request_path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($request_path !== '/sw-init.js') {
+        return;
+    }
+
+    // Must match CACHE_VERSION in sw.js — the only line to change on each release
+    $sw_ver = '5.1.0';
+    $sw_url = '/sw.js?v=' . $sw_ver;
+
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    http_response_code(200);
+    header('Content-Type: application/javascript; charset=UTF-8');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('X-LiteSpeed-Cache-Control: no-cache'); // Prevent LiteSpeed from caching this ever
+    header('X-Content-Type-Options: nosniff');
+
+    echo "(function() {
+  if (!('serviceWorker' in navigator)) return;
+
+  var SW_VER = '{$sw_ver}';
+  var SW_URL = '{$sw_url}';
+
+  // Clean up stale RESET_KEY flags written by the 5.0.4 strategy
+  try {
+    Object.keys(localStorage).forEach(function(k) {
+      if (k.indexOf('amt_sw_reset_') === 0) localStorage.removeItem(k);
+    });
+  } catch (e) {}
+
+  async function enforceSW() {
+    // Unregister any SW at a different script URL (old version or old URL format)
+    var allRegs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(allRegs.map(function(r) {
+      var sw = r.active || r.installing || r.waiting;
+      var url = sw ? sw.scriptURL : '';
+      if (url.indexOf('v=' + SW_VER) === -1) {
+        console.log('[PWA] Unregistering stale SW:', url || '(unknown)');
+        return r.unregister();
+      }
+      return Promise.resolve();
+    }));
+
+    // Register at versioned URL — LiteSpeed cache miss guaranteed
+    var reg = await navigator.serviceWorker.register(SW_URL, {
+      scope: '/',
+      updateViaCache: 'none'
+    });
+
+    // Belt-and-suspenders update check (bypasses SW fetch handler per spec)
+    await reg.update();
+
+    console.log('[PWA] SW enforce complete. State:',
+      reg.installing ? 'installing' :
+      reg.waiting    ? 'waiting'    :
+      reg.active     ? 'active'     : 'unknown');
+  }
+
+  window.addEventListener('load', function() {
+    enforceSW().catch(function(err) {
+      console.warn('[PWA] SW enforce error:', err);
+    });
+  });
+})();";
+    exit;
+}
+add_action('init', 'ask_mirror_talk_serve_sw_init', 0);
+
+/**
  * PWA: Serve manifest.json from root URL (/manifest.json).
  * Icons are injected dynamically so they always point to the correct child-theme URL,
  * regardless of what directory WordPress installs the theme in.
@@ -328,108 +417,17 @@ function ask_mirror_talk_serve_manifest() {
 add_action('init', 'ask_mirror_talk_serve_manifest', 0);
 
 /**
- * PWA: Register service worker + enforce version on every page load.
+ * PWA: Load SW-init script from the dedicated no-cache PHP endpoint.
  *
- * Strategy:
- * 1. Register with updateViaCache:'none' so the browser bypasses HTTP cache on update checks.
- * 2. Call reg.update() which bypasses the SW's own fetch handler (per SW spec).
- * 3. If no update was found (reg.installing/waiting are null) but the active SW
- *    still reports an old version via a message-channel query, we are in a
- *    hard server-side caching deadlock. Break it with a one-time hard reset:
- *    unregister all SWs, delete all caches, re-register, hard-reload.
- *    A localStorage flag (per target version) prevents infinite reload loops.
+ * The HTML tag is intentionally static (/sw-init.js with no version query
+ * string). LiteSpeed caches this HTML forever — and that is fine, because
+ * /sw-init.js is served by PHP with no-cache headers and LiteSpeed never stores
+ * it. Future SW updates only require changing SW_VER in ask_mirror_talk_serve_sw_init()
+ * above; no LiteSpeed cache purge is needed.
  */
 function ask_mirror_talk_pwa_footer() {
     ?>
-    <script>
-    (function() {
-        if (!('serviceWorker' in navigator) || !('caches' in window)) return;
-
-        var SW_URL    = '/sw.js';
-        var SW_TARGET = 'amt-v5.0.6';           // must match CACHE_VERSION in sw.js
-        var RESET_KEY = 'amt_sw_reset_' + SW_TARGET;
-
-        // Ask the active SW what version it is via a MessageChannel.
-        // Resolves null if the SW has no handler (i.e. old version).
-        function querySwVersion(active) {
-            return new Promise(function(resolve) {
-                var timer = setTimeout(function() { resolve(null); }, 1500);
-                try {
-                    var mc = new MessageChannel();
-                    mc.port1.onmessage = function(e) {
-                        clearTimeout(timer);
-                        resolve(e.data && e.data.version ? e.data.version : null);
-                    };
-                    active.postMessage('GET_VERSION', [mc.port2]);
-                } catch (e) { clearTimeout(timer); resolve(null); }
-            });
-        }
-
-        async function enforceSW() {
-            // Register (or update opts on existing registration)
-            var reg = await navigator.serviceWorker.register(SW_URL, {
-                scope: '/',
-                updateViaCache: 'none'
-            });
-
-            // Trigger an update check that bypasses both the SW fetch handler
-            // and (with updateViaCache:'none') the HTTP cache.
-            await reg.update();
-
-            // If an update was found it is now installing/waiting and skipWaiting()
-            // will activate it. Nothing more needed.
-            if (reg.installing || reg.waiting) {
-                console.log('[PWA] SW update found — installing.');
-                return;
-            }
-
-            // No update found via normal path. Check if the active SW is the
-            // right version or if we are stuck in a server-caching deadlock.
-            if (!reg.active) return;
-            var version = await querySwVersion(reg.active);
-            if (version === SW_TARGET) {
-                console.log('[PWA] SW up-to-date:', version);
-                return;
-            }
-
-            // Active SW is stale AND update check found nothing = deadlock.
-            // Guard against reload loops with a per-version localStorage flag.
-            var already;
-            try { already = localStorage.getItem(RESET_KEY); } catch (e) {}
-            if (already) {
-                console.warn('[PWA] Hard reset already attempted for', SW_TARGET, '— giving up.');
-                return;
-            }
-            try { localStorage.setItem(RESET_KEY, '1'); } catch (e) {}
-
-            console.log('[PWA] Stale SW (', version, ') — hard reset to', SW_TARGET);
-
-            // Unregister every SW registration on this origin.
-            var regs = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(regs.map(function(r) { return r.unregister(); }));
-
-            // Wipe all caches so nothing stale remains.
-            var keys = await caches.keys();
-            await Promise.all(keys.map(function(k) { return caches.delete(k); }));
-
-            // Register fresh (no prior SW will interfere with the fetch).
-            await navigator.serviceWorker.register(SW_URL, {
-                scope: '/',
-                updateViaCache: 'none'
-            });
-
-            // Hard-reload: forces the browser to fetch the HTML and all assets
-            // fresh from the server with zero SW or cache involvement.
-            window.location.reload(true);
-        }
-
-        window.addEventListener('load', function() {
-            enforceSW().catch(function(err) {
-                console.warn('[PWA] SW enforce error:', err);
-            });
-        });
-    })();
-    </script>
+    <script src="/sw-init.js" defer></script>
     <?php
 }
 add_action('wp_footer', 'ask_mirror_talk_pwa_footer', 99);

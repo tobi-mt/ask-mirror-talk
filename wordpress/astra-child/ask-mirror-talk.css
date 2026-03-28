@@ -3965,3 +3965,166 @@ body.amt-light-mode .amt-suggestions-label {
     font-size: 19px;
   }
 }
+
+/* ── My Reflection Notes Journal ──────────────────────────── */
+
+.amt-journal-btn {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.2s;
+  border-radius: 8px;
+  line-height: 1;
+}
+.amt-journal-btn:hover { opacity: 1; }
+
+.amt-journal-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+}
+
+.amt-journal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.amt-journal-visible .amt-journal-backdrop { opacity: 1; }
+
+.amt-journal-panel {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(to bottom, #faf8f4, #fff);
+  border-radius: 24px 24px 0 0;
+  padding: 28px 20px 32px;
+  box-sizing: border-box;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.18);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.amt-journal-visible .amt-journal-panel {
+  transform: translateX(-50%) translateY(0);
+}
+
+.amt-journal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #8b7355;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+.amt-journal-close:hover { background: #f0ede7; }
+
+.amt-journal-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: #2e2a24;
+  margin: 0 0 4px 0;
+  font-family: Georgia, serif;
+  text-align: center;
+}
+
+.amt-journal-subtitle {
+  font-size: 12px;
+  color: #a89070;
+  text-align: center;
+  margin: 0 0 20px 0;
+}
+
+.amt-journal-empty {
+  color: #8b7355;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px 8px 8px;
+  line-height: 1.6;
+}
+
+.amt-journal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.amt-journal-entry {
+  background: #fdf9f4;
+  border: 1px solid #e8e0d5;
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+}
+
+.amt-journal-prompt {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 6px 0;
+  line-height: 1.4;
+}
+
+.amt-journal-note {
+  font-size: 15px;
+  color: #2e2a24;
+  line-height: 1.65;
+  margin: 0 0 10px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.amt-journal-entry-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.amt-journal-date {
+  font-size: 11px;
+  color: #b0a090;
+}
+
+.amt-journal-entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.amt-journal-share-btn,
+.amt-journal-delete-btn {
+  background: transparent;
+  border: 1px solid #e0d8cc;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #7a6a55;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.amt-journal-share-btn:hover { background: #f5f0e8; border-color: #c8baa8; }
+.amt-journal-delete-btn:hover { background: #fff0f0; border-color: #f0b0b0; color: #c05050; }
+
+@media (max-width: 400px) {
+  .amt-journal-panel {
+    padding: 24px 12px 28px;
+    max-height: 90vh;
+  }
+  .amt-journal-title { font-size: 18px; }
+}
+

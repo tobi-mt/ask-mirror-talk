@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.0.5 loaded');
+  console.log('Ask Mirror Talk Widget v5.0.6 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -164,6 +164,16 @@
         // to the form and focus the input so the user can start typing.
         if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (input) input.focus();
+      } else if (event.data && event.data.type === 'SW_UPDATED') {
+        // New service worker just activated and claimed this tab.
+        // Reload so the page picks up freshly-cached JS/CSS instead of old
+        // in-memory assets. Guard with sessionStorage to prevent reload loops.
+        try {
+          if (!sessionStorage.getItem('amt_sw_reloaded')) {
+            sessionStorage.setItem('amt_sw_reloaded', '1');
+            window.location.reload();
+          }
+        } catch (e) { window.location.reload(); }
       }
     });
   }

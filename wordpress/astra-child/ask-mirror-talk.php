@@ -107,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.5'; // v5.0.5: cookie backup for gamification state (streak/XP survives iOS PWA reinstall)
+    $version = '5.0.6'; // v5.0.6: SW_UPDATED message triggers page reload after new SW activates
     
     // Core styles
     wp_enqueue_style(
@@ -346,7 +346,7 @@ function ask_mirror_talk_pwa_footer() {
         if (!('serviceWorker' in navigator) || !('caches' in window)) return;
 
         var SW_URL    = '/sw.js';
-        var SW_TARGET = 'amt-v5.0.5';           // must match CACHE_VERSION in sw.js
+        var SW_TARGET = 'amt-v5.0.6';           // must match CACHE_VERSION in sw.js
         var RESET_KEY = 'amt_sw_reset_' + SW_TARGET;
 
         // Ask the active SW what version it is via a MessageChannel.

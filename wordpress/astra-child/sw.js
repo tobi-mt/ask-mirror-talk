@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.0.5';
+const CACHE_VERSION = 'amt-v5.0.6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -39,7 +39,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// ── Activate: clean up old caches ──
+// ── Activate: clean up old caches, then tell open pages to reload ──
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating', CACHE_VERSION);
   event.waitUntil(
@@ -53,6 +53,13 @@ self.addEventListener('activate', (event) => {
           })
       );
     }).then(() => self.clients.claim())
+      .then(() => {
+        // After claiming open tabs, tell every window client to reload so
+        // it picks up the freshly-cached assets instead of the old in-memory ones.
+        return self.clients.matchAll({ type: 'window' }).then((windowClients) => {
+          windowClients.forEach((client) => client.postMessage({ type: 'SW_UPDATED' }));
+        });
+      })
   );
 });
 

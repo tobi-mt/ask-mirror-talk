@@ -107,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.0.2'; // v5.0.2: LiteSpeed no-cache header for sw.js, Aa button affects all widget text
+    $version = '5.0.3'; // v5.0.3: force reg.update() on page load to break SW caching deadlock
     
     // Core styles
     wp_enqueue_style(
@@ -330,6 +330,10 @@ add_action('init', 'ask_mirror_talk_serve_manifest', 0);
 /**
  * PWA: Register service worker via inline script in footer.
  * Uses the root-level /sw.js proxy URL so scope: '/' works correctly.
+ *
+ * reg.update() is called on every load — per spec, this bypasses the SW's own
+ * fetch handler and goes direct to the server, breaking any caching deadlock
+ * where the old SW was intercepting its own update check.
  */
 function ask_mirror_talk_pwa_footer() {
     ?>
@@ -340,8 +344,15 @@ function ask_mirror_talk_pwa_footer() {
                 scope: '/'
             }).then(function(reg) {
                 console.log('[PWA] Service Worker registered, scope:', reg.scope);
+                // Force an update check on every page load.
+                // registration.update() bypasses the SW fetch handler entirely
+                // (per SW spec § "update" algorithm step 4) so it always hits
+                // the real server — even if the old SW was caching sw.js.
+                return reg.update();
+            }).then(function() {
+                console.log('[PWA] Service Worker update check complete.');
             }).catch(function(err) {
-                console.warn('[PWA] Service Worker registration failed:', err);
+                console.warn('[PWA] Service Worker error:', err);
             });
         });
     }

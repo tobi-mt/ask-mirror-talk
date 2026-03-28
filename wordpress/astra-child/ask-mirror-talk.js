@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.1.8 loaded');
+  console.log('Ask Mirror Talk Widget v5.1.9 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1832,18 +1832,74 @@
     // Guard: Push API must be available (non-iOS browsers without support)
     if (!('PushManager' in window) || !('Notification' in window)) return;
 
-    // Already granted or denied — don't nag
-    if (Notification.permission !== 'default') return;
+    // If permission already denied, show browser settings instructions
+    if (Notification.permission === 'denied') {
+      // Don't show if dismissed this session
+      try {
+        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+      } catch (e) {}
 
-    // Don't show if dismissed this session
-    try {
-      if (sessionStorage.getItem('amt_notif_dismissed')) return;
-    } catch (e) {}
+      const existing = document.getElementById('amt-notif-optin');
+      if (existing) existing.remove();
 
-    // Don't show if they dismissed permanently
-    try {
-      if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
-    } catch (e) {}
+      const banner = document.createElement('div');
+      banner.id = 'amt-notif-optin';
+      banner.className = 'amt-notif-optin';
+      banner.innerHTML = `
+        <div class="amt-notif-inner">
+          <div class="amt-notif-text">
+            <strong>🔔 Notifications are blocked</strong>
+            <span>To enable notifications, click the 🔒 or ⓘ icon in your address bar, then change notification permissions to "Allow".</span>
+          </div>
+          <div class="amt-notif-actions">
+            <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
+          </div>
+        </div>
+      `;
+
+      const widget = document.querySelector('.ask-mirror-talk');
+      const heading = widget ? widget.querySelector('h2') : null;
+      if (heading && heading.nextSibling) {
+        widget.insertBefore(banner, heading.nextSibling);
+      } else if (widget) {
+        widget.appendChild(banner);
+      }
+
+      banner.querySelector('.amt-notif-dismiss').addEventListener('click', () => {
+        banner.classList.add('amt-notif-hiding');
+        setTimeout(() => banner.remove(), 300);
+        try { sessionStorage.setItem('amt_notif_dismissed', '1'); } catch (e) {}
+      });
+
+      setTimeout(() => {
+        if (banner.parentNode) {
+          banner.classList.add('amt-notif-hiding');
+          setTimeout(() => banner.remove(), 300);
+        }
+      }, 15000);
+
+      return;
+    }
+
+    // If permission already granted but not subscribed, allow them to subscribe
+    // (Don't nag if they explicitly dismissed, but let bell button trigger this)
+    const clickedBell = arguments[0] === 'fromBell';
+    if (Notification.permission === 'granted' && !clickedBell) {
+      // Permission already granted - they can subscribe via bell button
+      return;
+    }
+
+    // Don't show if dismissed this session (unless clicked bell)
+    if (!clickedBell) {
+      try {
+        if (sessionStorage.getItem('amt_notif_dismissed')) return;
+      } catch (e) {}
+
+      // Don't show if they dismissed permanently
+      try {
+        if (localStorage.getItem('amt_notif_dismissed_permanent')) return;
+      } catch (e) {}
+    }
 
     // Remove any existing banner
     const existing = document.getElementById('amt-notif-optin');
@@ -2282,12 +2338,12 @@
           // User is subscribed — show management panel
           toggleNotificationManagePanel();
         } else {
-          // User is not subscribed — show opt-in prompt
-          showNotificationOptIn();
+          // User is not subscribed — show opt-in prompt (pass 'fromBell' to bypass dismissal checks)
+          showNotificationOptIn('fromBell');
         }
       } catch (e) {
         // Fallback to showing opt-in
-        showNotificationOptIn();
+        showNotificationOptIn('fromBell');
       }
     });
   })();

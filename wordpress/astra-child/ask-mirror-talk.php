@@ -16,7 +16,13 @@ function ask_mirror_talk_shortcode() {
     ob_start();
     ?>
     <div class="ask-mirror-talk">
-        <h2>Ask Mirror Talk</h2>
+        <div class="amt-heading-row">
+            <h2>Ask Mirror Talk</h2>
+            <div class="amt-heading-controls">
+                <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
+                <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
+            </div>
+        </div>
         <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
             <div class="amt-stat amt-stat-streak">
                 <span class="amt-stat-icon" aria-hidden="true">🔥</span>
@@ -34,19 +40,33 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-stat-label">/ 20 topics</span>
             </div>
             <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
+            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>
             <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
         </div>
+        <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
+        <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
         <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
         <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
+        <!-- About modal -->
+        <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
         <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
-        <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
-            <p class="amt-topics-label">Browse by topic:</p>
-            <div class="amt-topics-list"></div>
-        </div>
-        <div id="ask-mirror-talk-suggestions" class="amt-suggestions">
-            <p class="amt-suggestions-label">Try asking about:</p>
-            <div class="amt-suggestions-list"></div>
+        <div id="amt-explore-expander" class="amt-explore-expander" style="display:none;">
+            <button type="button" id="amt-explore-toggle" class="amt-explore-toggle" aria-expanded="false" aria-controls="amt-explore-panel">
+                <span class="amt-explore-icons" id="amt-explore-icons" aria-hidden="true"></span>
+                <span class="amt-explore-label">Explore topics &amp; questions</span>
+                <span class="amt-explore-chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+            <div id="amt-explore-panel" class="amt-explore-panel" role="region" aria-label="Topics and suggested questions">
+                <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
+                    <p class="amt-topics-label">Browse by topic:</p>
+                    <div class="amt-topics-list"></div>
+                </div>
+                <div id="ask-mirror-talk-suggestions" class="amt-suggestions" style="display:none;">
+                    <p class="amt-suggestions-label">Try asking about:</p>
+                    <div class="amt-suggestions-list"></div>
+                </div>
+            </div>
         </div>
         <form id="ask-mirror-talk-form">
             <label for="ask-mirror-talk-input">What’s on your heart?</label>
@@ -55,8 +75,14 @@ function ask_mirror_talk_shortcode() {
             <button type="submit" id="ask-mirror-talk-submit">Ask</button>
         </form>
         <div class="ask-mirror-talk-response">
-            <h3>Response</h3>
+            <div class="amt-response-progress" id="amt-response-progress" aria-hidden="true"><div class="amt-response-progress-bar" id="amt-response-progress-bar"></div></div>
+            <div class="amt-response-header">
+                <h3>Response</h3>
+                <button type="button" id="amt-copy-answer-btn" class="amt-copy-answer-btn" style="display:none;" title="Copy answer" aria-label="Copy answer">⎘ Copy</button>
+            </div>
             <div id="ask-mirror-talk-output"></div>
+            <div id="amt-mood-reactions" class="amt-mood-reactions" style="display:none;" aria-label="How did this land?"></div>
+            <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
         </div>
         <div class="ask-mirror-talk-citations">
             <h3>Referenced Episodes</h3>
@@ -81,7 +107,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '4.9.5'; // v4.9.5: fix notification click auto-submit when app already open (navigate() replaces lost postMessage)
+    $version = '5.0.0'; // v5.0.0: saved insights, streak protection, reflection prompts, come-back teaser, referral share, about modal, auto-open explore, mood reactions, copy answer, text size toggle, animated icons, response progress
     
     // Core styles
     wp_enqueue_style(

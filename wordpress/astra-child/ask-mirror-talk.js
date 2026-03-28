@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v4.9.5 loaded');
+  console.log('Ask Mirror Talk Widget v5.0.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -17,6 +17,10 @@
   const topicsContainer = document.querySelector("#ask-mirror-talk-topics");
   const topicsList = topicsContainer ? topicsContainer.querySelector(".amt-topics-list") : null;
   const qotdContainer = document.querySelector("#ask-mirror-talk-qotd");
+  const exploreExpander = document.querySelector('#amt-explore-expander');
+  const exploreToggle = document.querySelector('#amt-explore-toggle');
+  const explorePanel = document.querySelector('#amt-explore-panel');
+  const exploreIcons = document.querySelector('#amt-explore-icons');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -192,6 +196,7 @@
           suggestionsList.appendChild(btn);
         });
         suggestionsContainer.style.display = '';
+        updateExploreExpander();
       })
       .catch(err => {
         console.warn('Could not load suggested questions:', err);
@@ -265,7 +270,10 @@
 
           topicsList.appendChild(item);
         });
+        const icons = topics.slice(0, 5).map(t => t.icon).join(' ');
+        if (exploreIcons) exploreIcons.textContent = icons;
         topicsContainer.style.display = '';
+        updateExploreExpander();
       })
       .catch(err => {
         console.warn('Could not load topics:', err);
@@ -274,6 +282,22 @@
   }
 
   loadTopics();
+
+  // ─── Explore Expander ──────────────────────────────────────
+  function updateExploreExpander() {
+    if (!exploreExpander) return;
+    const hasContent = (topicsContainer && topicsContainer.style.display !== 'none') ||
+                       (suggestionsContainer && suggestionsContainer.style.display !== 'none');
+    exploreExpander.style.display = hasContent ? '' : 'none';
+  }
+
+  if (exploreToggle && explorePanel) {
+    exploreToggle.addEventListener('click', () => {
+      const isOpen = exploreToggle.getAttribute('aria-expanded') === 'true';
+      exploreToggle.setAttribute('aria-expanded', String(!isOpen));
+      explorePanel.classList.toggle('amt-explore-panel--open', !isOpen);
+    });
+  }
 
   // ─── Follow-up Questions ────────────────────────────────────
   function showFollowUpQuestions(questions) {
@@ -3121,5 +3145,663 @@
   const _origShowMilestoneToast = showMilestoneToast;
   // Override to attach a share button for badge toasts
   window._amtShareMilestone = shareMilestone; // expose for badge shelf buttons
+
+  // ========================================
+  // FEATURE 1: Saved Answers — "My Insights"
+  // ========================================
+
+  const INSIGHTS_KEY = 'amt_saved_insights';
+
+  function loadInsights() {
+    try {
+      return JSON.parse(localStorage.getItem(INSIGHTS_KEY) || '[]');
+    } catch (e) { return []; }
+  }
+
+  function saveInsights(arr) {
+    try { localStorage.setItem(INSIGHTS_KEY, JSON.stringify(arr.slice(0, 30))); } catch (e) {}
+  }
+
+  function addSaveInsightButton(question, answerText) {
+    const existing = document.getElementById('amt-save-insight-section');
+    if (existing) existing.remove();
+    if (!question || !answerText) return;
+
+    const section = document.createElement('div');
+    section.id = 'amt-save-insight-section';
+    section.className = 'amt-save-insight-section';
+
+    const insights = loadInsights();
+    const alreadySaved = insights.some(i => i.question === question);
+
+    section.innerHTML = `<button type="button" class="amt-save-insight-btn" title="${alreadySaved ? 'Already saved' : 'Save this insight'}">
+      ${alreadySaved ? '🔖 Saved' : '🔖 Save insight'}
+    </button>`;
+
+    // Insert after email section or share section
+    const emailSection = document.getElementById('amt-email-section');
+    const shareSection = document.getElementById('amt-share-section');
+    const anchor = emailSection || shareSection;
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(section, anchor.nextSibling);
+    } else {
+      responseContainer.appendChild(section);
+    }
+
+    const btn = section.querySelector('.amt-save-insight-btn');
+    if (alreadySaved) {
+      btn.disabled = true;
+      return;
+    }
+
+    btn.addEventListener('click', () => {
+      const allInsights = loadInsights();
+      allInsights.unshift({ question, answer: answerText.substring(0, 1500), savedAt: Date.now() });
+      saveInsights(allInsights);
+      btn.textContent = '🔖 Saved!';
+      btn.disabled = true;
+      // Update the insights button badge
+      updateInsightsBadge();
+    });
+  }
+
+  function updateInsightsBadge() {
+    const btn = document.getElementById('amt-insights-btn');
+    if (!btn) return;
+    const count = loadInsights().length;
+    btn.style.display = count > 0 ? '' : 'none';
+  }
+
+  function renderInsightsPanel() {
+    const panel = document.getElementById('amt-insights-panel');
+    if (!panel) return;
+    const insights = loadInsights();
+
+    if (insights.length === 0) {
+      panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
+      panel.style.display = '';
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="amt-insights-header">
+        <span class="amt-insights-title">🔖 My Insights <span class="amt-insights-count">(${insights.length})</span></span>
+        <button type="button" class="amt-insights-close-btn" aria-label="Close insights">✕</button>
+      </div>
+      <div class="amt-insights-list">
+        ${insights.map((ins, idx) => `
+          <div class="amt-insight-item" data-idx="${idx}">
+            <p class="amt-insight-question">${escapeHtml(ins.question)}</p>
+            <p class="amt-insight-answer">${escapeHtml(ins.answer.substring(0, 200))}${ins.answer.length > 200 ? '…' : ''}</p>
+            <div class="amt-insight-meta">
+              <span class="amt-insight-date">${new Date(ins.savedAt).toLocaleDateString()}</span>
+              <button type="button" class="amt-insight-ask-btn" data-q="${ins.question.replace(/"/g,'&quot;')}">Ask again</button>
+              <button type="button" class="amt-insight-delete-btn" data-idx="${idx}" aria-label="Delete">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    panel.style.display = '';
+
+    panel.querySelector('.amt-insights-close-btn').addEventListener('click', () => {
+      panel.style.display = 'none';
+    });
+
+    panel.querySelectorAll('.amt-insight-ask-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        input.value = btn.dataset.q;
+        panel.style.display = 'none';
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 200);
+      });
+    });
+
+    panel.querySelectorAll('.amt-insight-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        const all = loadInsights();
+        all.splice(idx, 1);
+        saveInsights(all);
+        updateInsightsBadge();
+        renderInsightsPanel();
+      });
+    });
+  }
+
+  // Wire insights button
+  (function initInsightsBtn() {
+    const btn = document.getElementById('amt-insights-btn');
+    const panel = document.getElementById('amt-insights-panel');
+    if (!btn || !panel) return;
+    updateInsightsBadge();
+    btn.addEventListener('click', () => {
+      if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+      } else {
+        renderInsightsPanel();
+      }
+    });
+  })();
+
+  // Hook into done event to show save button — patch post-answer flow
+  const _origAddShareButton = addShareButton;
+
+  // ========================================
+  // FEATURE 2: Streak Protection In-App Alert
+  // ========================================
+
+  (function checkStreakProtection() {
+    try {
+      const stats = loadStats();
+      if (stats.currentStreak < 1) return; // no streak to protect
+      const today = todayStr();
+      // Already asked today — no need to warn
+      if (stats.lastActiveDate === today) return;
+
+      const hour = new Date().getHours();
+      // Only show the banner after 18:00 (6 PM) when the streak is at risk
+      if (hour < 18) return;
+
+      const banner = document.getElementById('amt-streak-protect-banner');
+      if (!banner) return;
+
+      banner.innerHTML = `
+        <div class="amt-streak-protect-inner">
+          <span class="amt-streak-protect-icon">🔥</span>
+          <span class="amt-streak-protect-text">Your <strong>${stats.currentStreak}-day streak</strong> ends at midnight — ask one question to keep it alive.</span>
+          <button type="button" class="amt-streak-protect-cta">Ask now</button>
+          <button type="button" class="amt-streak-protect-dismiss" aria-label="Dismiss">✕</button>
+        </div>
+      `;
+      banner.style.display = '';
+
+      banner.querySelector('.amt-streak-protect-cta').addEventListener('click', () => {
+        banner.style.display = 'none';
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      banner.querySelector('.amt-streak-protect-dismiss').addEventListener('click', () => {
+        banner.style.display = 'none';
+        try { sessionStorage.setItem('amt_streak_protect_dismissed', '1'); } catch (e) {}
+      });
+    } catch (e) {}
+  })();
+
+  // ========================================
+  // FEATURE 3: Reflect Prompt After Answer
+  // ========================================
+
+  const REFLECT_PROMPTS = [
+    'What part of this resonated most with you today?',
+    'How might you apply this in your life this week?',
+    'What emotion came up as you read this?',
+    'Which line felt most true for where you are right now?',
+    'What would change if you truly believed this?',
+    'Is there someone in your life who needs to hear this too?',
+    'What\u2019s one small step you could take today based on this?',
+  ];
+
+  function showReflectPrompt() {
+    const section = document.getElementById('amt-reflect-section');
+    if (!section) return;
+
+    const prompt = REFLECT_PROMPTS[Math.floor(Math.random() * REFLECT_PROMPTS.length)];
+
+    section.innerHTML = `
+      <div class="amt-reflect-inner">
+        <p class="amt-reflect-label">✍️ Take a moment to reflect…</p>
+        <p class="amt-reflect-question">${escapeHtml(prompt)}</p>
+        <button type="button" class="amt-reflect-toggle">Jot a note ↓</button>
+        <div class="amt-reflect-note-wrap" style="display:none;">
+          <textarea class="amt-reflect-textarea" rows="3" maxlength="500" placeholder="Write for yourself — this stays private on your device…" aria-label="Private reflection note"></textarea>
+          <div class="amt-reflect-actions">
+            <button type="button" class="amt-reflect-save-btn">Save note</button>
+            <span class="amt-reflect-saved-msg" style="display:none;">✓ Saved</span>
+          </div>
+        </div>
+      </div>
+    `;
+    section.style.display = '';
+
+    section.querySelector('.amt-reflect-toggle').addEventListener('click', function() {
+      const wrap = section.querySelector('.amt-reflect-note-wrap');
+      const isOpen = wrap.style.display !== 'none';
+      wrap.style.display = isOpen ? 'none' : '';
+      this.textContent = isOpen ? 'Jot a note ↓' : 'Hide note ↑';
+      if (!isOpen) section.querySelector('.amt-reflect-textarea').focus();
+    });
+
+    section.querySelector('.amt-reflect-save-btn').addEventListener('click', () => {
+      const note = section.querySelector('.amt-reflect-textarea').value.trim();
+      if (!note) return;
+      try {
+        const existing = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]');
+        existing.unshift({ note, prompt, savedAt: Date.now() });
+        localStorage.setItem('amt_reflect_notes', JSON.stringify(existing.slice(0, 50)));
+      } catch (e) {}
+      section.querySelector('.amt-reflect-saved-msg').style.display = '';
+      section.querySelector('.amt-reflect-save-btn').disabled = true;
+    });
+  }
+
+  // ========================================
+  // FEATURE 4: "Come Back Tomorrow" Teaser
+  // ========================================
+
+  function showComeBackTeaser() {
+    // Pick a tomorrow theme (rotate by tomorrow's date for consistency)
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayIdx = tomorrow.toISOString().slice(0, 10).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const stats = loadStats();
+    const exploredThemes = stats.themesExplored || new Set();
+    const unexplored = AMT_THEMES.filter(t => !exploredThemes.has(t));
+    const pool = unexplored.length > 0 ? unexplored : AMT_THEMES;
+    const teaserTheme = pool[dayIdx % pool.length];
+
+    // Show a brief teaser toast (reuse the milestone toast style)
+    const toast = document.getElementById('amt-milestone-toast');
+    if (!toast) return;
+    toast.innerHTML = `
+      <span class="amt-toast-emoji">🌅</span>
+      <div>
+        <strong>Come back tomorrow</strong>
+        <span>Tomorrow's theme: <em>${escapeHtml(teaserTheme)}</em></span>
+      </div>
+    `;
+    toast.style.display = '';
+    toast.classList.add('amt-toast-in');
+
+    setTimeout(() => {
+      toast.classList.remove('amt-toast-in');
+      toast.classList.add('amt-toast-out');
+      setTimeout(() => {
+        toast.style.display = 'none';
+        toast.classList.remove('amt-toast-out');
+      }, 500);
+    }, 4500);
+  }
+
+  // ========================================
+  // FEATURE 5: Referral-Framed Share Copy
+  // ========================================
+  // Patch addShareButton to include both "Share Answer" and "Invite a Friend"
+
+  function addShareButtonV2(question, answerText) {
+    const existing = document.getElementById('amt-share-section');
+    if (existing) existing.remove();
+
+    const shareSection = document.createElement('div');
+    shareSection.id = 'amt-share-section';
+    shareSection.className = 'amt-share-section amt-share-section-v2';
+
+    const pageUrl = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+    const answerShare = `Q: ${question}\n\n${answerText.substring(0, 600)}\n\nAnswered by Ask Mirror Talk\n${pageUrl}`;
+    const referralShare = `I've been exploring "${question.substring(0, 80)}" on Mirror Talk — ask your own question:\n${pageUrl}`;
+
+    shareSection.innerHTML = `
+      <div class="amt-share-toggle-row">
+        <button type="button" class="amt-share-mode-btn amt-share-mode-active" data-mode="answer">📤 Share Answer</button>
+        <button type="button" class="amt-share-mode-btn" data-mode="invite">🤝 Invite a Friend</button>
+      </div>
+      <button type="button" class="amt-share-btn" data-mode="answer">Share this insight</button>
+    `;
+
+    responseContainer.appendChild(shareSection);
+
+    shareSection.querySelectorAll('.amt-share-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        shareSection.querySelectorAll('.amt-share-mode-btn').forEach(b => b.classList.remove('amt-share-mode-active'));
+        btn.classList.add('amt-share-mode-active');
+        const mainBtn = shareSection.querySelector('.amt-share-btn');
+        mainBtn.dataset.mode = btn.dataset.mode;
+        mainBtn.textContent = btn.dataset.mode === 'answer' ? 'Share this insight' : 'Invite a friend';
+      });
+    });
+
+    shareSection.querySelector('.amt-share-btn').addEventListener('click', async function() {
+      const mode = this.dataset.mode;
+      const textToShare = mode === 'invite' ? referralShare : answerShare;
+      const titleToShare = mode === 'invite' ? 'Ask Mirror Talk' : `Mirror Talk: ${question.substring(0, 60)}`;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: titleToShare, text: textToShare, url: pageUrl });
+        } catch (e) {
+          if (e.name !== 'AbortError') console.warn('Share failed:', e);
+        }
+      } else {
+        try {
+          await navigator.clipboard.writeText(textToShare);
+          const btn = this;
+          const origText = btn.textContent;
+          btn.textContent = '✅ Copied!';
+          setTimeout(() => { btn.textContent = origText; }, 2500);
+        } catch (e) {}
+      }
+    });
+
+    // Also add the save insight button here
+    addSaveInsightButton(question, answerText);
+  }
+
+  // ========================================
+  // FEATURE 6: "About This App" Explainer Modal
+  // ========================================
+
+  (function initAboutModal() {
+    const btn = document.getElementById('amt-about-btn');
+    const modal = document.getElementById('amt-about-modal');
+    if (!btn || !modal) return;
+
+    btn.addEventListener('click', () => {
+      modal.innerHTML = `
+        <div class="amt-about-backdrop"></div>
+        <div class="amt-about-panel">
+          <button class="amt-about-close" aria-label="Close">✕</button>
+          <div class="amt-about-logo" aria-hidden="true">🎙️</div>
+          <h2 class="amt-about-title">Ask Mirror Talk</h2>
+          <p class="amt-about-tagline">Your personal guide to the Mirror Talk podcast library</p>
+          <ul class="amt-about-bullets">
+            <li><span class="amt-about-bullet-icon">🔍</span><span>Ask any question and get AI-powered answers <strong>drawn directly from podcast episodes</strong> — with timestamps you can listen to.</span></li>
+            <li><span class="amt-about-bullet-icon">🔥</span><span>Build a <strong>daily exploration habit</strong> with streaks, badges and a personalised Question of the Day.</span></li>
+            <li><span class="amt-about-bullet-icon">📲</span><span><strong>Add to your home screen</strong> for instant access and daily wisdom delivered straight to your phone.</span></li>
+          </ul>
+          <div class="amt-about-stats-preview" id="amt-about-stats-preview"></div>
+          <button type="button" class="amt-about-cta">Start asking →</button>
+        </div>
+      `;
+      modal.style.display = '';
+      requestAnimationFrame(() => modal.classList.add('amt-about-visible'));
+
+      // Personalise with user stats if available
+      try {
+        const s = loadStats();
+        if (s.totalQuestions > 0) {
+          const preview = modal.querySelector('#amt-about-stats-preview');
+          if (preview) preview.innerHTML = `<p class="amt-about-your-stats">Your journey so far: <strong>${s.totalQuestions} questions</strong> · <strong>${s.currentStreak}-day streak</strong> · <strong>${s.earnedBadges.size} badges</strong></p>`;
+        }
+      } catch (e) {}
+
+      const close = () => {
+        modal.classList.remove('amt-about-visible');
+        setTimeout(() => { modal.style.display = 'none'; modal.innerHTML = ''; }, 300);
+      };
+      modal.querySelector('.amt-about-close').addEventListener('click', close);
+      modal.querySelector('.amt-about-backdrop').addEventListener('click', close);
+      modal.querySelector('.amt-about-cta').addEventListener('click', () => {
+        close();
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+      }, { once: true });
+    });
+  })();
+
+  // ========================================
+  // FEATURE 7: Auto-Open Explore Panel on First Visit
+  // ========================================
+
+  (function autoOpenExploreOnFirstVisit() {
+    try {
+      if (localStorage.getItem('amt_explore_opened')) return;
+      if (!exploreToggle || !explorePanel || !exploreExpander) return;
+    } catch (e) { return; }
+
+    // Wait until content has loaded so the panel has height
+    setTimeout(() => {
+      if (exploreExpander.style.display === 'none') return; // no content yet, bail
+      exploreToggle.setAttribute('aria-expanded', 'true');
+      explorePanel.classList.add('amt-explore-panel--open');
+      exploreToggle.classList.add('amt-explore-first-visit-glow');
+      try { localStorage.setItem('amt_explore_opened', '1'); } catch (e) {}
+    }, 1800);
+  })();
+
+  // ========================================
+  // FEATURE 8: Emoji Mood Reactions
+  // ========================================
+
+  const MOOD_REACTIONS = [
+    { emoji: '😮', label: 'Surprising' },
+    { emoji: '💡', label: 'Insightful' },
+    { emoji: '😢', label: 'Moving' },
+    { emoji: '🙏', label: 'Grateful' },
+    { emoji: '❤️', label: 'Loving it' },
+  ];
+
+  function showMoodReactions() {
+    const container = document.getElementById('amt-mood-reactions');
+    if (!container) return;
+
+    container.innerHTML = `
+      <p class="amt-mood-label">How did this land?</p>
+      <div class="amt-mood-buttons">
+        ${MOOD_REACTIONS.map((r, i) => `
+          <button type="button" class="amt-mood-btn" data-emoji="${r.emoji}" data-label="${r.label}" style="animation-delay:${i * 0.08}s" title="${r.label}">
+            <span class="amt-mood-emoji">${r.emoji}</span>
+            <span class="amt-mood-reaction-label">${r.label}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+    container.style.display = '';
+
+    container.querySelectorAll('.amt-mood-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        container.querySelectorAll('.amt-mood-btn').forEach(b => b.classList.remove('amt-mood-selected'));
+        this.classList.add('amt-mood-selected');
+        // Track in stats (lightweight — just store last reaction per session)
+        try { sessionStorage.setItem('amt_last_reaction', this.dataset.label); } catch (e) {}
+        // Brief thank-you
+        setTimeout(() => {
+          const label = container.querySelector('.amt-mood-label');
+          if (label) {
+            label.textContent = 'Thanks for sharing how you feel 🙏';
+            label.style.fontStyle = 'italic';
+          }
+        }, 400);
+      });
+    });
+  }
+
+  // ========================================
+  // FEATURE 9: Copy Answer Button
+  // ========================================
+
+  function initCopyAnswerButton(answerText) {
+    const btn = document.getElementById('amt-copy-answer-btn');
+    if (!btn) return;
+    btn.style.display = '';
+    // Detach any previous listener
+    const freshBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(freshBtn, btn);
+    freshBtn.style.display = '';
+
+    freshBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(answerText);
+        freshBtn.textContent = '✓ Copied';
+        freshBtn.classList.add('amt-copy-copied');
+        setTimeout(() => {
+          freshBtn.textContent = '⎘ Copy';
+          freshBtn.classList.remove('amt-copy-copied');
+        }, 2000);
+      } catch (e) {
+        freshBtn.textContent = '⚠️ Failed';
+        setTimeout(() => { freshBtn.textContent = '⎘ Copy'; }, 2000);
+      }
+    });
+  }
+
+  // ========================================
+  // FEATURE 10: Text Size Toggle
+  // ========================================
+
+  (function initTextSizeToggle() {
+    const btn = document.getElementById('amt-text-size-btn');
+    if (!btn) return;
+    const sizes = ['amt-text-small', 'amt-text-default', 'amt-text-large'];
+    const labels = ['Aa–', 'Aa', 'Aa+'];
+    let current = 1; // default
+    try {
+      const saved = parseInt(localStorage.getItem('amt_text_size') || '1', 10);
+      if (saved >= 0 && saved <= 2) current = saved;
+    } catch (e) {}
+
+    function applySize(idx) {
+      const widget = document.querySelector('.ask-mirror-talk');
+      if (!widget) return;
+      sizes.forEach(cls => widget.classList.remove(cls));
+      widget.classList.add(sizes[idx]);
+      btn.textContent = labels[idx];
+      try { localStorage.setItem('amt_text_size', String(idx)); } catch (e) {}
+    }
+
+    applySize(current);
+
+    btn.addEventListener('click', () => {
+      current = (current + 1) % sizes.length;
+      applySize(current);
+    });
+  })();
+
+  // ========================================
+  // FEATURE 11: Animated Topic Icon Parade
+  // ========================================
+
+  (function initIconParade() {
+    if (!exploreIcons) return;
+
+    let iconList = [];
+    let paradeIdx = 0;
+    let paradeTimer = null;
+
+    // Called once topics load and populate exploreIcons
+    const observer = new MutationObserver(() => {
+      if (!exploreIcons.textContent.trim()) return;
+      // Extract icons from the text content
+      iconList = [...exploreIcons.textContent].filter(c => c.trim() && c !== ' ');
+      if (iconList.length < 2) return;
+      observer.disconnect();
+      startParade();
+    });
+    observer.observe(exploreIcons, { childList: true, characterData: true, subtree: true });
+
+    function startParade() {
+      if (paradeTimer) return;
+      paradeTimer = setInterval(() => {
+        // Only animate when the panel is closed (chevron not expanded)
+        if (exploreToggle && exploreToggle.getAttribute('aria-expanded') === 'true') return;
+        paradeIdx = (paradeIdx + 1) % iconList.length;
+        exploreIcons.classList.add('amt-icons-fade-out');
+        setTimeout(() => {
+          // Rotate the array display: show 5 icons starting from paradeIdx
+          const visible = [];
+          for (let i = 0; i < Math.min(5, iconList.length); i++) {
+            visible.push(iconList[(paradeIdx + i) % iconList.length]);
+          }
+          exploreIcons.textContent = visible.join(' ');
+          exploreIcons.classList.remove('amt-icons-fade-out');
+          exploreIcons.classList.add('amt-icons-fade-in');
+          setTimeout(() => exploreIcons.classList.remove('amt-icons-fade-in'), 400);
+        }, 300);
+      }, 2000);
+    }
+  })();
+
+  // ========================================
+  // FEATURE 12: Response Reading Progress Bar
+  // ========================================
+
+  (function initResponseProgressBar() {
+    const progressBar = document.getElementById('amt-response-progress-bar');
+    if (!progressBar) return;
+
+    function updateProgress() {
+      if (!responseContainer || responseContainer.style.display === 'none') return;
+      const rect = responseContainer.getBoundingClientRect();
+      const windowH = window.innerHeight;
+      const totalH = responseContainer.offsetHeight;
+      if (totalH <= windowH) {
+        progressBar.style.width = '100%';
+        return;
+      }
+      const scrolled = Math.max(0, -rect.top);
+      const scrollable = totalH - windowH;
+      const pct = Math.min(100, (scrolled / scrollable) * 100);
+      progressBar.style.width = pct + '%';
+    }
+
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    // Reset on new answer
+    const progressOutput = document.getElementById('ask-mirror-talk-output');
+    if (progressOutput) {
+      new MutationObserver(() => {
+        progressBar.style.width = '0%';
+      }).observe(progressOutput, { childList: true });
+    }
+  })();
+
+  // ========================================
+  // PATCH: Wire all new features into post-answer flow
+  // ========================================
+
+  // Intercept the 'done' event path by patching the SSE done block
+  // We do this by overriding addShareButton to the V2 version everywhere
+  // and calling the new functions at the right time.
+
+  // Replace addShareButton globally within this scope
+  // (The original is still bound in the SSE done handler — we override it here)
+  window._amtPostAnswerExtras = function(question, ans) {
+    // Feature 1: save insight button (called inside V2 share)
+    addShareButtonV2(question, ans);
+    // Feature 3: reflect prompt
+    setTimeout(() => showReflectPrompt(), 600);
+    // Feature 9: copy button
+    initCopyAnswerButton(ans);
+    // Feature 8: mood reactions
+    setTimeout(() => showMoodReactions(), 400);
+  };
+
+  // Hook into 'done' SSE event by patching the form submit handler
+  // The safest approach: re-define addShareButton in this closure scope to V2
+  // (original is only referenced internally; we reuse the same variable name)
+  // Since we can't re-assign the already-declared const, we patch via the DOM event
+  // by attaching a MutationObserver on #ask-mirror-talk-output for amt-complete class.
+
+  const postAnswerObserver = new MutationObserver(() => {
+    if (output.classList.contains('amt-complete')) {
+      const question = input.value.trim();
+      const ans = output.innerText || output.textContent || '';
+      if (question && ans.length > 20) {
+        // Remove old share section to let V2 replace it
+        setTimeout(() => {
+          window._amtPostAnswerExtras(question, ans);
+        }, 200);
+      }
+    }
+  });
+  if (output) postAnswerObserver.observe(output, { attributes: true, attributeFilter: ['class'] });
+
+  // Hook into daily depth milestone for "Come Back Tomorrow" teaser (Feature 4)
+  // Patch onQuestionAnswered post-processing to append the teaser at depth=3
+  const _patchedOnQA = onQuestionAnswered;
+  // We can't reassign a const but we can hook by decorating the DAILY_DEPTH_MILESTONES check
+  // via the observable side-effect: watch for the '🌊 Deep session!' toast firing
+  const _toastObserver = new MutationObserver(() => {
+    const toast = document.getElementById('amt-milestone-toast');
+    if (toast && toast.innerHTML.includes('Deep session')) {
+      // Schedule come-back teaser to fire after the milestone toast finishes (3.5s + buffer)
+      setTimeout(() => showComeBackTeaser(), 5000);
+    }
+  });
+  const toastEl = document.getElementById('amt-milestone-toast');
+  if (toastEl) _toastObserver.observe(toastEl, { childList: true });
 
 })();

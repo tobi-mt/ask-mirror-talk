@@ -882,9 +882,10 @@
 
 /* ── Toast share button ───────────────────────── */
 .amt-toast-share-btn {
-  display: inline-block;
-  margin-left: 12px;
-  padding: 5px 12px;
+  display: block;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 6px 12px;
   background: rgba(255,255,255,0.15);
   color: #fff;
   border: 1px solid rgba(255,255,255,0.3);
@@ -892,7 +893,7 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  flex-shrink: 0;
+  text-align: center;
   transition: background 0.15s;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -1429,6 +1430,34 @@
     transform: scale(0.96);
   }
 
+  /* ── Explore Expander ───────────────── */
+  .amt-explore-toggle {
+    padding: 10px 14px;
+    border-radius: 20px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .amt-explore-toggle[aria-expanded="true"] {
+    border-radius: 16px 16px 0 0;
+  }
+
+  .amt-explore-panel--open {
+    padding: 12px 12px 6px;
+  }
+
+  /* Neutralise edge-bleed negative margins on the inner topics list */
+  .amt-explore-panel .amt-topics-list {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Remove right-fade hint (was positioned relative to topics wrapper) */
+  .amt-explore-panel .amt-topics::after {
+    display: none;
+  }
+
   /* ── Response Section ───────────────── */
   .ask-mirror-talk-response {
     margin-top: 16px;
@@ -1775,6 +1804,111 @@
 }
 
 /* QOTD tablet adjustments handled in responsive section above */
+
+/* ========================================
+   Explore Expander (Topics + Suggestions)
+   ======================================== */
+.amt-explore-expander {
+  margin-bottom: 16px;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.amt-explore-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: linear-gradient(135deg, #faf8f4, #f5f2ec);
+  border: 1.5px solid #e6e2dc;
+  border-radius: 24px;
+  padding: 10px 18px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b665d;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.amt-explore-toggle:hover {
+  background: linear-gradient(135deg, #f0ede7, #e8e3db);
+  border-color: #c8c2b8;
+  color: #2e2a24;
+  box-shadow: 0 2px 8px rgba(46, 42, 36, 0.08);
+}
+
+.amt-explore-toggle[aria-expanded="true"] {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border-color: #2e2a24;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 4px 14px rgba(46, 42, 36, 0.18);
+}
+
+.amt-explore-icons {
+  font-size: 15px;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.amt-explore-toggle[aria-expanded="true"] .amt-explore-icons {
+  opacity: 1;
+}
+
+.amt-explore-label {
+  flex: 1;
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0.2px;
+}
+
+.amt-explore-chevron {
+  font-size: 20px;
+  font-weight: 300;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  display: inline-block;
+  opacity: 0.5;
+  line-height: 1;
+}
+
+.amt-explore-toggle[aria-expanded="true"] .amt-explore-chevron {
+  transform: rotate(90deg);
+  opacity: 1;
+}
+
+/* Panel — hidden by default, animated open */
+.amt-explore-panel {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.35s ease,
+              padding 0.35s ease;
+  opacity: 0;
+  background: linear-gradient(to bottom, #faf8f4, #fff);
+  border: 1.5px solid #e6e2dc;
+  border-top: none;
+  border-radius: 0 0 20px 20px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.amt-explore-panel--open {
+  max-height: 1200px;
+  opacity: 1;
+  padding: 16px 16px 8px;
+}
+
+/* Tighten inner section margins inside the panel */
+.amt-explore-panel .amt-topics {
+  margin-bottom: 12px;
+}
+
+.amt-explore-panel .amt-suggestions {
+  margin-bottom: 4px;
+}
 
 /* ========================================
    Browse by Topic
@@ -2639,6 +2773,7 @@
   border-radius: 16px;
   padding: 14px 20px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   color: #fff;
@@ -3036,4 +3171,770 @@ body.amt-light-mode .amt-suggestions-label {
 
 .amt-topic-item.amt-topic-open .amt-topic-expand-arrow {
   transform: rotate(90deg);
+}
+
+/* ============================================================
+   v5.0.0 — New Feature Styles
+   ============================================================ */
+
+/* ── Heading row with controls ────────────────────────────── */
+.amt-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.amt-heading-row h2 {
+  margin: 0;
+}
+
+.amt-heading-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.amt-text-size-btn,
+.amt-about-btn {
+  background: transparent;
+  border: 1.5px solid #e6e2dc;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.amt-text-size-btn:hover,
+.amt-about-btn:hover {
+  border-color: #2e2a24;
+  color: #2e2a24;
+  background: #faf8f4;
+}
+
+.amt-about-btn {
+  font-size: 16px;
+  font-weight: 400;
+}
+
+/* Insights button in stats bar */
+.amt-insights-btn {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.2s;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.amt-insights-btn:hover { opacity: 1; }
+
+/* ── Text Size Levels ─────────────────────────────────────── */
+.ask-mirror-talk.amt-text-small #ask-mirror-talk-output,
+.ask-mirror-talk.amt-text-small .ask-mirror-talk-response {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.ask-mirror-talk.amt-text-large #ask-mirror-talk-output,
+.ask-mirror-talk.amt-text-large .ask-mirror-talk-response {
+  font-size: 18px;
+  line-height: 1.85;
+}
+
+/* ── Response Header (with copy button) ──────────────────── */
+.amt-response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+
+.amt-response-header h3 {
+  margin: 0;
+}
+
+.amt-copy-answer-btn {
+  background: transparent;
+  border: 1.5px solid #d4cec6;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  flex-shrink: 0;
+}
+
+.amt-copy-answer-btn:hover {
+  border-color: #2e2a24;
+  color: #2e2a24;
+  background: #faf8f4;
+}
+
+.amt-copy-answer-btn.amt-copy-copied {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+/* ── Response Reading Progress Bar ──────────────────────── */
+.amt-response-progress {
+  position: sticky;
+  top: 0;
+  height: 3px;
+  background: transparent;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  z-index: 2;
+  margin: -1px -16px 0;
+}
+
+.amt-response-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #d4a574, #8b7355);
+  border-radius: 2px;
+  transition: width 0.15s ease-out;
+}
+
+/* ── Mood Reactions ──────────────────────────────────────── */
+.amt-mood-reactions {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #e6e2dc;
+  animation: fadeInUp 0.4s ease;
+}
+
+.amt-mood-label {
+  font-size: 13px;
+  color: #8b7355;
+  font-style: italic;
+  margin: 0 0 10px 0;
+}
+
+.amt-mood-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.amt-mood-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: #fff;
+  border: 1.5px solid #e6e2dc;
+  border-radius: 14px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: followUpAppear 0.5s ease-out both;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-width: 58px;
+}
+
+.amt-mood-btn:hover {
+  border-color: #2e2a24;
+  background: #faf8f4;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(46,42,36,0.12);
+}
+
+.amt-mood-btn.amt-mood-selected {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  border-color: #2e2a24;
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(46,42,36,0.2);
+}
+
+.amt-mood-btn.amt-mood-selected .amt-mood-reaction-label {
+  color: rgba(255,255,255,0.8);
+}
+
+.amt-mood-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.amt-mood-reaction-label {
+  font-size: 11px;
+  color: #8b7355;
+  white-space: nowrap;
+}
+
+/* ── Reflect Prompt ──────────────────────────────────────── */
+.amt-reflect-section {
+  margin-top: 16px;
+  animation: fadeInUp 0.5s ease 0.3s both;
+}
+
+.amt-reflect-inner {
+  background: linear-gradient(135deg, #faf8f4, #f5f2ec);
+  border: 1px solid #e6e2dc;
+  border-left: 3px solid #d4a574;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.amt-reflect-label {
+  font-size: 12px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 6px 0;
+}
+
+.amt-reflect-question {
+  font-size: 14px;
+  font-style: italic;
+  color: #2e2a24;
+  line-height: 1.6;
+  margin: 0 0 10px 0;
+}
+
+.amt-reflect-toggle {
+  background: transparent;
+  border: 1.5px solid #d4cec6;
+  border-radius: 16px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.amt-reflect-toggle:hover {
+  border-color: #8b7355;
+  color: #2e2a24;
+}
+
+.amt-reflect-note-wrap {
+  margin-top: 10px;
+}
+
+.amt-reflect-textarea {
+  width: 100%;
+  border: 1.5px solid #e6e2dc;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #2e2a24;
+  background: #fff;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.amt-reflect-textarea:focus {
+  outline: none;
+  border-color: #8b7355;
+}
+
+.amt-reflect-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amt-reflect-save-btn {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.amt-reflect-save-btn:disabled { opacity: 0.5; cursor: default; }
+
+.amt-reflect-saved-msg {
+  font-size: 13px;
+  color: #10b981;
+}
+
+/* ── Save Insight Button ─────────────────────────────────── */
+.amt-save-insight-section {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.amt-save-insight-btn {
+  background: transparent;
+  border: 1.5px solid #d4cec6;
+  border-radius: 20px;
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-save-insight-btn:hover {
+  border-color: #8b7355;
+  background: #faf8f4;
+  color: #2e2a24;
+}
+
+.amt-save-insight-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Insights Panel ────────────────────────────────────────── */
+.amt-insights-panel {
+  background: #fff;
+  border: 1.5px solid #e6e2dc;
+  border-radius: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  animation: fadeInUp 0.35s ease;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.amt-insights-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e6e2dc;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.amt-insights-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e2a24;
+}
+
+.amt-insights-count {
+  font-weight: 400;
+  color: #8b7355;
+  font-size: 13px;
+}
+
+.amt-insights-close-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #8b7355;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.amt-insights-list {
+  padding: 8px 0;
+}
+
+.amt-insight-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0ede7;
+  transition: background 0.15s;
+}
+
+.amt-insight-item:last-child { border-bottom: none; }
+.amt-insight-item:hover { background: #faf8f4; }
+
+.amt-insight-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e2a24;
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.amt-insight-answer {
+  font-size: 13px;
+  color: #6b665d;
+  margin: 0 0 8px 0;
+  line-height: 1.5;
+}
+
+.amt-insight-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amt-insight-date {
+  font-size: 11px;
+  color: #b5afa5;
+  flex: 1;
+}
+
+.amt-insight-ask-btn {
+  background: transparent;
+  border: 1.5px solid #d4cec6;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.amt-insight-ask-btn:hover { border-color: #8b7355; color: #2e2a24; }
+
+.amt-insight-delete-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.4;
+  padding: 0;
+  line-height: 1;
+  transition: opacity 0.15s;
+}
+
+.amt-insight-delete-btn:hover { opacity: 0.9; }
+
+.amt-insights-empty {
+  padding: 20px 16px;
+  text-align: center;
+  color: #8b7355;
+  font-size: 14px;
+}
+
+.amt-insights-empty-hint {
+  font-size: 13px;
+  color: #b5afa5;
+  font-style: italic;
+  margin-top: 6px;
+}
+
+/* ── Streak Protection Banner ──────────────────────────────── */
+.amt-streak-protect-banner {
+  margin-bottom: 12px;
+  animation: fadeInUp 0.4s ease;
+}
+
+.amt-streak-protect-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #fffbf0, #fff8e6);
+  border: 1.5px solid #f7c948;
+  border-radius: 14px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+
+.amt-streak-protect-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.amt-streak-protect-text {
+  flex: 1;
+  font-size: 13px;
+  color: #2e2a24;
+  min-width: 180px;
+  line-height: 1.4;
+}
+
+.amt-streak-protect-cta {
+  background: linear-gradient(135deg, #f7c948, #e6b433);
+  border: none;
+  border-radius: 16px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1208;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.amt-streak-protect-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(247,201,72,0.4);
+}
+
+.amt-streak-protect-dismiss {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #b5afa5;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Share V2 (with mode toggle) ─────────────────────────── */
+.amt-share-section-v2 {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.amt-share-toggle-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.amt-share-mode-btn {
+  background: #fff;
+  border: 1.5px solid #d4cec6;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b7355;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-share-mode-btn.amt-share-mode-active {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  border-color: #2e2a24;
+  color: #fff;
+}
+
+.amt-share-mode-btn:hover:not(.amt-share-mode-active) {
+  border-color: #8b7355;
+  color: #2e2a24;
+}
+
+/* ── About Modal ─────────────────────────────────────────── */
+.amt-about-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+}
+
+.amt-about-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.amt-about-visible .amt-about-backdrop {
+  opacity: 1;
+}
+
+.amt-about-panel {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(to bottom, #faf8f4, #fff);
+  border-radius: 24px 24px 0 0;
+  padding: 28px 24px 32px;
+  box-sizing: border-box;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.18);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.amt-about-visible .amt-about-panel {
+  transform: translateX(-50%) translateY(0);
+}
+
+.amt-about-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #8b7355;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.amt-about-close:hover { background: #f0ede7; }
+
+.amt-about-logo {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+.amt-about-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2e2a24;
+  margin: 0 0 6px 0;
+  font-family: Georgia, serif;
+}
+
+.amt-about-tagline {
+  font-size: 14px;
+  color: #8b7355;
+  font-style: italic;
+  margin: 0 0 20px 0;
+}
+
+.amt-about-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  text-align: left;
+}
+
+.amt-about-bullets li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0ede7;
+  font-size: 14px;
+  color: #2e2a24;
+  line-height: 1.5;
+}
+
+.amt-about-bullets li:last-child { border-bottom: none; }
+
+.amt-about-bullet-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.amt-about-your-stats {
+  font-size: 13px;
+  color: #8b7355;
+  background: linear-gradient(135deg, #faf8f4, #f5f2ec);
+  border: 1px solid #e6e2dc;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 0 0 18px 0;
+}
+
+.amt-about-cta {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border: none;
+  border-radius: 24px;
+  padding: 12px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.amt-about-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(46,42,36,0.2);
+}
+
+/* ── Explore first-visit glow ──────────────────────────────── */
+.amt-explore-first-visit-glow {
+  animation: amtExploreGlow 2.5s ease-in-out 3;
+}
+
+@keyframes amtExploreGlow {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(212,165,116,0.45), 0 4px 18px rgba(212,165,116,0.25); }
+}
+
+/* ── Icon parade fade ──────────────────────────────────────── */
+.amt-icons-fade-out {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.amt-icons-fade-in {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+/* ── Mobile overrides for v5.0 features ────────────────────── */
+@media (max-width: 480px) {
+  .amt-heading-controls {
+    gap: 4px;
+  }
+
+  .amt-text-size-btn,
+  .amt-about-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .amt-mood-buttons {
+    gap: 6px;
+  }
+
+  .amt-mood-btn {
+    min-width: 50px;
+    padding: 7px 8px;
+  }
+
+  .amt-mood-emoji {
+    font-size: 18px;
+  }
+
+  .amt-mood-reaction-label {
+    font-size: 10px;
+  }
+
+  .amt-streak-protect-inner {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .amt-streak-protect-text {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .amt-share-toggle-row {
+    flex-wrap: wrap;
+  }
+
+  .amt-insights-panel {
+    max-height: 320px;
+  }
+
+  .amt-about-panel {
+    padding: 24px 16px 28px;
+    max-height: 90vh;
+  }
+
+  .amt-about-title {
+    font-size: 19px;
+  }
 }

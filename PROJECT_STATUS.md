@@ -1,7 +1,8 @@
 # Ask Mirror Talk - Project Status
 
-**Last Updated:** March 12, 2025  
-**Status:** ✅ Production Ready & Clean
+**Last Updated:** March 28, 2026  
+**Widget Version:** 5.0.0  
+**Status:** ✅ Production Ready — v5.0.0 ZIP deployed
 
 ---
 
@@ -16,7 +17,7 @@ Ask Mirror Talk is a Q&A system with PWA capabilities and push notifications for
 ### 1. **PWA (Progressive Web App)**
 - ✅ Installable on mobile and desktop
 - ✅ Offline support with service worker
-- ✅ App manifest with custom icons
+- ✅ App manifest with custom icons (192, 512, 180, 167, 152px)
 - ✅ Native app-like experience
 
 **Files:**
@@ -26,7 +27,8 @@ Ask Mirror Talk is a Q&A system with PWA capabilities and push notifications for
 
 ### 2. **Push Notifications**
 - ✅ Daily QOTD notifications (Railway cron)
-- ✅ New episode alerts
+- ✅ Streak protection reminders (6 PM if streak at risk)
+- ✅ Midday motivation messages
 - ✅ Opt-in/opt-out UI
 - ✅ Platform detection (iOS, Safari, PWA)
 - ✅ VAPID key management (base64url format)
@@ -34,55 +36,74 @@ Ask Mirror Talk is a Q&A system with PWA capabilities and push notifications for
 **Backend:**
 - `app/notifications/push.py` - Push notification service
 - `scripts/send_daily_qotd.py` - Daily QOTD cron job
+- `scripts/send_midday_motivation.py` - Midday motivation cron
+- `scripts/send_streak_protection.py` - Streak protection cron
 - `app/api/main.py` - Push notification API endpoints
 
 **Frontend:**
 - `wordpress/astra-child/ask-mirror-talk.js` - Notification opt-in logic
 - `wordpress/astra-child/ask-mirror-talk.css` - Notification UI styles
 
-### 3. **WordPress Child Theme**
-- ✅ All customizations moved to `astra-child` theme
-- ✅ Safe from parent theme updates
-- ✅ Deployment script provided
-- ✅ Parent theme cleaned (no custom files)
+### 3. **Gamification (v4.x)**
+- ✅ Daily question streak tracking with fire emoji milestones
+- ✅ XP points system
+- ✅ Unlockable badges (First Question, 7-day streak, 30-day streak, etc.)
+- ✅ Animated milestone toast notifications
+- ✅ Session depth tracking ("Deep session" milestone at 3+ questions)
+- ✅ Stats bar showing streak, XP, and badge count
+
+### 4. **Widget UX — v4.9.x**
+- ✅ Collapsible Explore expander ("Browse by topic" + "Try asking about" suggestions)
+- ✅ Share button in milestone toast — full-width on mobile (flex-wrap fix)
+- ✅ Streaming answer display with SSE
+- ✅ Reading time badge on answers
+- ✅ Answer archive page template
+
+### 5. **Widget UX — v5.0.0 (12 new features)**
+- ✅ **Saved Insights (🔖)** — bookmark answers to localStorage panel (up to 30, re-askable)
+- ✅ **Streak Protection Banner** — amber reminder after 6 PM when streak is at risk
+- ✅ **Reflection Prompts** — post-answer private journaling with random prompts
+- ✅ **Come Back Tomorrow Teaser** — fires after "Deep session" milestone with tomorrow's theme
+- ✅ **Share v2** — two-mode toggle: share specific answer OR invite a friend (referral)
+- ✅ **About Modal (ⓘ)** — bottom-sheet panel with app purpose, personalised stats, CTA
+- ✅ **Auto-Open Explore** — explore panel opens on first visit (1.8 s delay + gold glow)
+- ✅ **Mood Reactions** — 5 emoji reactions (😮 💡 😢 🙏 ❤️) after every answer
+- ✅ **Copy Answer Button** — one-tap clipboard copy with ✓ Copied feedback
+- ✅ **Text Size Toggle (Aa)** — 3-level font size toggle persisted to localStorage
+- ✅ **Animated Icon Parade** — explore toggle cycles themed icons when panel is closed
+- ✅ **Response Progress Bar** — sticky gold bar fills as user scrolls answer
+
+**localStorage keys (v5):** `amt_saved_insights`, `amt_text_size`, `amt_explore_opened`, `amt_reflect_notes`
+
+### 6. **WordPress Child Theme**
+- ✅ All customizations in `astra-child` theme — safe from parent theme updates
+- ✅ Deployment ZIP: `wordpress/ask-mirror-talk-v5.0.0.zip`
 
 **Location:** `wordpress/astra-child/`
 
 **Key Files:**
 - `functions.php` - Theme initialization
-- `ask-mirror-talk.php` - Widget PHP code
-- `ask-mirror-talk.js` - Widget JavaScript
-- `ask-mirror-talk.css` - Widget styles
-- `analytics-addon.js` - Analytics tracking
+- `ask-mirror-talk.php` - Widget PHP + shortcode (v5.0.0)
+- `ask-mirror-talk.js` - Widget JavaScript (3807 lines, v5.0.0)
+- `ask-mirror-talk.css` - Widget styles (3940 lines, v5.0.0)
+- `ask-mirror-talk-enhanced.css` / `.js` - Additional premium layer
+- `analytics-addon.js` - Citation tracking and feedback
+- `answer-archive-template.php` - Answer archive page template
 - `manifest.json` - PWA manifest
 - `sw.js` - Service worker
 - `README.md` - Installation instructions
-- `deploy-child-theme.sh` - Deployment helper
 
-### 4. **Project Cleanup**
-- ✅ Removed archived documentation
-- ✅ Removed `.agents/` skill references
-- ✅ Removed old deployment configs (render, nixpacks)
-- ✅ Removed virtual environments
-- ✅ Removed Python cache files
-- ✅ Removed macOS metadata (`.DS_Store`)
-- ✅ Removed unnecessary markdown files
-- ✅ Removed custom files from parent theme
+### 7. **Analytics**
+- ✅ Citation click tracking
+- ✅ Answer feedback (thumbs)
+- ✅ Episode engagement tracking
+- ✅ Weekly engagement reports
+- ✅ Dashboard analytics via `scripts/analytics_queries.py`
 
-**What Was Removed:**
-- `docs/` - Archived documentation
-- `.agents/` - Skill references
-- `.env.local`, `.env.railway` - Old env files
-- `render.yaml`, `render-build.sh` - Render config
-- `nixpacks.toml` - Nixpacks config
-- `docker-compose.yml`, `docker-compose.prod.yml` - Old compose files
-- `Dockerfile.api` - Unused API Dockerfile
-- `setup-github-mirror.sh` - Old setup script
-- `.venv/`, `venv/` - Virtual environments
-- `ask_mirror_talk.egg-info/` - Python egg info
-- `.neon` - Neon config file
-- `scripts/README_MONITORING.md` - Monitoring docs
-- `wordpress/astra/*` - All custom files from parent theme
+### 8. **Project Cleanup**
+- ✅ Removed archived documentation, old deployment configs, virtual environments
+- ✅ Removed macOS metadata and Python cache files
+- ✅ Removed custom files from parent Astra theme
 
 ---
 
@@ -118,11 +139,13 @@ ask-mirror-talk/
 │   │   ├── analytics-addon.js
 │   │   ├── manifest.json
 │   │   ├── sw.js
+│   │   ├── answer-archive-template.php
+│   │   ├── ask-mirror-talk-enhanced.css
+│   │   ├── ask-mirror-talk-enhanced.js
 │   │   ├── pwa-icon-*.png
-│   │   ├── README.md
-│   │   └── deploy-child-theme.sh
+│   │   └── README.md
 │   ├── astra/                   # Parent theme (clean, no custom files)
-│   └── astra-child-mirror-talk.zip
+│   └── ask-mirror-talk-v5.0.0.zip  # Latest deployment ZIP
 │
 ├── data/                         # Audio, transcripts, logs
 │   ├── audio/                   # Episode MP3 files
@@ -176,7 +199,7 @@ Scheduled daily via Railway cron service.
 **Theme:** Astra Child (astra-child)
 
 **Installation:**
-1. Upload `wordpress/astra-child-mirror-talk.zip` to WordPress
+1. Upload `wordpress/ask-mirror-talk-v5.0.0.zip` to WordPress
 2. Activate the child theme
 3. Widget will auto-load on pages
 
@@ -362,21 +385,22 @@ cd wordpress
 
 ### **Future Enhancements:**
 
-- [ ] User authentication
-- [ ] Personalized recommendations
-- [ ] Saved questions/favorites
-- [ ] Share functionality
-- [ ] Advanced search filters
+- [ ] User authentication & profiles
+- [ ] Personalised recommendations (track mood reactions over time)
+- [ ] Cloud-synced saved insights (currently localStorage only)
+- [ ] Advanced search filters (by episode, topic, date)
 - [ ] Multi-language support
+- [ ] Referral tracking backend (link Share v2 invites to analytics)
 
 ---
 
 ## 📝 Notes
 
-- **Version:** 3.9.0 (latest)
-- **Last Widget Update:** March 2025
-- **Last Backend Update:** March 2025
+- **Version:** 5.0.0 (latest)
+- **Last Widget Update:** March 28, 2026
+- **Last Backend Update:** March 2026
 - **Last Cleanup:** March 12, 2025
+- **Deployment ZIP:** `wordpress/ask-mirror-talk-v5.0.0.zip` (351 KB)
 
 **Production URLs:**
 - API: `https://your-railway-url.railway.app`

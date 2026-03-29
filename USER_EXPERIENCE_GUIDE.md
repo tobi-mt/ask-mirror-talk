@@ -14,7 +14,7 @@ Ask Mirror Talk is an AI-powered companion for the **Mirror Talk podcast** — a
 
 | Platform | How |
 |---|---|
-| **Website** | Embedded widget on mirrortalk.com via the `[ask_mirror_talk]` shortcode |
+| **Website** | Embedded widget on mirrortalkpodcast.com via the `[ask_mirror_talk]` shortcode |
 | **Mobile (Android/iOS)** | Install as a PWA: tap "Add to Home Screen" from Android/Chrome or Safari |
 | **Desktop** | Install from the browser's install prompt (appears in the address bar) |
 

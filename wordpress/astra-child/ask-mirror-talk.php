@@ -109,7 +109,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.2.5'; // v5.2.5: fix syntax error from incomplete replacement
+    $version = '5.2.6'; // v5.2.6: update version
     
     // Core styles
     wp_enqueue_style(

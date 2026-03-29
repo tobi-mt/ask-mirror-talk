@@ -24,3 +24,13 @@ add_action('wp_enqueue_scripts', 'astra_child_enqueue_parent_styles', 10);
  * This file contains the shortcode, AJAX handlers, and PWA setup
  */
 require_once get_stylesheet_directory() . '/ask-mirror-talk.php';
+
+add_action('wp_enqueue_scripts', 'mirrortalk_child_enqueue_styles', 20);
+function mirrortalk_child_enqueue_styles() {
+    wp_enqueue_style(
+        'astra-child-style',
+        get_stylesheet_uri(),
+        array('astra-theme-css'),
+        wp_get_theme()->get('Version')
+    );
+}

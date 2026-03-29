@@ -1219,6 +1219,81 @@ def get_episode_analytics(db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=str(e2))
 
 
+@app.get("/api/admin/episodes/export")
+def export_episode_catalog(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(_security),
+    db: Session = Depends(get_db),
+    limit: int = 500,
+    search: str = "",
+    include_transcript: bool = True,
+):
+    """Admin endpoint: export episode metadata and latest transcript for internal tools."""
+    _admin_auth(credentials, request)
+
+    safe_limit = max(1, min(int(limit or 500), 2000))
+    normalized_search = search.strip().lower()
+    pattern = f"%{normalized_search}%" if normalized_search else ""
+
+    results = db.execute(
+        text(
+            """
+            SELECT
+                e.id,
+                e.guid,
+                e.title,
+                e.description,
+                e.published_at,
+                e.audio_url,
+                t.raw_text,
+                t.provider,
+                t.created_at
+            FROM episodes e
+            LEFT JOIN LATERAL (
+                SELECT raw_text, provider, created_at
+                FROM transcripts
+                WHERE episode_id = e.id
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            ) t ON TRUE
+            WHERE (
+                :pattern = ''
+                OR LOWER(e.title) LIKE :pattern
+                OR LOWER(COALESCE(e.guid, '')) LIKE :pattern
+            )
+            ORDER BY e.published_at DESC NULLS LAST, e.id DESC
+            LIMIT :limit
+            """
+        ),
+        {"pattern": pattern, "limit": safe_limit},
+    ).fetchall()
+
+    episodes = []
+    for row in results:
+        transcript_text = row[6] if include_transcript else None
+        episodes.append(
+            {
+                "id": row[0],
+                "guid": row[1],
+                "title": row[2],
+                "description": row[3],
+                "published_at": row[4].isoformat() if row[4] else None,
+                "audio_url": row[5],
+                "transcript_text": transcript_text,
+                "transcript_provider": row[7],
+                "transcript_created_at": row[8].isoformat() if row[8] else None,
+            }
+        )
+
+    return {
+        "count": len(episodes),
+        "limit": safe_limit,
+        "search": normalized_search,
+        "include_transcript": include_transcript,
+        "episodes": episodes,
+    }
+
+
 def _get_client_ip(request: Request) -> str:
     """Return the real client IP, honouring X-Forwarded-For when present."""
     forwarded = request.headers.get("X-Forwarded-For")

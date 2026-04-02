@@ -11,6 +11,7 @@ from app.core.db import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+INTERNAL_USER_IP = "cache-prewarm"
 
 
 @router.get("/api/analytics/summary")
@@ -27,27 +28,28 @@ def get_analytics_summary(
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         total_questions = db.execute(
-            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff"),
-            {"cutoff": cutoff},
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).scalar()
         unique_users = db.execute(
-            text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff"),
-            {"cutoff": cutoff},
+            text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).scalar()
         avg_latency = db.execute(
-            text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff"),
-            {"cutoff": cutoff},
+            text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).scalar()
         top_questions = db.execute(
             text("""
                 SELECT question, COUNT(*) as count
                 FROM qa_logs
                 WHERE created_at >= :cutoff
+                  AND COALESCE(user_ip, '') != :internal_user_ip
                 GROUP BY question
                 ORDER BY count DESC
                 LIMIT 10
             """),
-            {"cutoff": cutoff},
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).fetchall()
         most_cited = db.execute(
             text("""
@@ -59,11 +61,12 @@ def get_analytics_summary(
                 CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(q.episode_ids, ',')) AS episode_id
                 JOIN episodes e ON e.id = episode_id::int
                 WHERE q.created_at >= :cutoff
+                  AND COALESCE(q.user_ip, '') != :internal_user_ip
                 GROUP BY e.id, e.title
                 ORDER BY citation_count DESC
                 LIMIT 10
             """),
-            {"cutoff": cutoff},
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).fetchall()
 
         try:
@@ -73,8 +76,9 @@ def get_analytics_summary(
                     FROM qa_logs q
                     CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(q.episode_ids, ',')) AS episode_id
                     WHERE q.created_at >= :cutoff
+                      AND COALESCE(q.user_ip, '') != :internal_user_ip
                 """),
-                {"cutoff": cutoff},
+                {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
             ).scalar()
             total_clicks = db.execute(
                 text("SELECT COUNT(*) FROM citation_clicks WHERE clicked_at >= :cutoff"),
@@ -108,12 +112,12 @@ def get_analytics_summary(
 
         try:
             unanswered = db.execute(
-                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE"),
-                {"cutoff": cutoff},
+                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE AND COALESCE(user_ip, '') != :internal_user_ip"),
+                {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
             ).scalar() or 0
             cached_count = db.execute(
-                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE"),
-                {"cutoff": cutoff},
+                text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE AND COALESCE(user_ip, '') != :internal_user_ip"),
+                {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
             ).scalar() or 0
         except Exception:
             db.rollback()
@@ -166,6 +170,7 @@ def get_episode_analytics(
                     LEFT JOIN (
                         SELECT id, UNNEST(STRING_TO_ARRAY(episode_ids, ','))::int as episode_id
                         FROM qa_logs
+                        WHERE COALESCE(user_ip, '') != :internal_user_ip
                     ) q ON q.episode_id = e.id
                     GROUP BY e.id, e.title, e.published_at
                 ),
@@ -191,7 +196,8 @@ def get_episode_analytics(
                 LEFT JOIN episode_clicks eck ON eck.episode_id = ec.id
                 ORDER BY ec.total_citations DESC
                 LIMIT 50
-            """)
+            """),
+            {"internal_user_ip": INTERNAL_USER_IP},
         ).fetchall()
 
         return {
@@ -222,11 +228,13 @@ def get_episode_analytics(
                     LEFT JOIN (
                         SELECT id, UNNEST(STRING_TO_ARRAY(episode_ids, ','))::int as episode_id
                         FROM qa_logs
+                        WHERE COALESCE(user_ip, '') != :internal_user_ip
                     ) q ON q.episode_id = e.id
                     GROUP BY e.id, e.title, e.published_at
                     ORDER BY total_citations DESC
                     LIMIT 50
-                """)
+                """),
+                {"internal_user_ip": INTERNAL_USER_IP},
             ).fetchall()
             return {
                 "episodes": [

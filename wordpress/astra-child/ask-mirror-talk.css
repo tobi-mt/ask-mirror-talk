@@ -94,6 +94,167 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+.amt-intent-starters {
+  margin: 4px 0 12px;
+}
+
+.amt-intent-starters-label {
+  margin: 0 0 8px;
+  color: #8b7355;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-intent-starters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-intent-starter-chip {
+  background: linear-gradient(135deg, rgba(250,248,244,0.98), rgba(245,241,233,0.95));
+  border: 1px solid #d8cdbd;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amt-intent-starter-chip:hover {
+  border-color: #8b7355;
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
+}
+
+.amt-theme-starters {
+  margin: 4px 0 14px;
+}
+
+.amt-theme-starters-label {
+  margin: 0 0 8px;
+  color: #8b7355;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-theme-starters-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-theme-starter-chip {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #ddd4c9;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.amt-theme-starter-chip:hover {
+  border-color: #8b7355;
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
+}
+
+.amt-theme-starter-chip-theme {
+  white-space: nowrap;
+}
+
+.amt-campaign-welcome {
+  margin: 16px 0 18px;
+}
+
+.amt-campaign-welcome-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(180, 143, 89, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(247, 201, 72, 0.16), transparent 42%),
+    linear-gradient(135deg, rgba(255,255,255,0.92), rgba(247,243,235,0.95));
+  box-shadow: 0 10px 26px rgba(46, 42, 36, 0.06);
+}
+
+.amt-campaign-kicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-campaign-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.amt-campaign-text,
+.amt-campaign-meta {
+  margin: 0;
+  color: #6b665d;
+  line-height: 1.55;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-campaign-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8f877b;
+}
+
+.amt-campaign-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 230px;
+}
+
+.amt-campaign-btn {
+  border: 1px solid #d8cdbd;
+  border-radius: 14px;
+  padding: 11px 14px;
+  background: rgba(255,255,255,0.9);
+  color: #2e2a24;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+  text-align: left;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.amt-campaign-btn:hover {
+  transform: translateY(-1px);
+  border-color: #8b7355;
+  box-shadow: 0 6px 16px rgba(46, 42, 36, 0.08);
+}
+
+.amt-campaign-btn-primary {
+  background: linear-gradient(135deg, #2e2a24, #474038);
+  color: #fff;
+  border-color: #2e2a24;
+}
+
 .amt-form-footer {
   display: flex;
   align-items: center;
@@ -577,6 +738,10 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.amt-citation-trust-copy-soft {
+  gap: 5px;
 }
 
 .amt-citation-trust-copy strong {
@@ -2562,10 +2727,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: linear-gradient(135deg, #f0ede8 0%, #e8e4dd 100%);
-  border: 1px solid #d4cfc5;
-  border-radius: 12px;
-  padding: 16px 20px;
+  background: linear-gradient(135deg, #f7f2e9 0%, #efe7db 100%);
+  border: 1px solid #ddd3c4;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 22px rgba(46, 42, 36, 0.06);
 }
 
 .amt-notif-success {
@@ -2583,7 +2749,7 @@
 .amt-notif-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .amt-notif-text strong {
@@ -2594,6 +2760,7 @@
 .amt-notif-text span {
   font-size: 13px;
   color: #6b665d;
+  line-height: 1.55;
 }
 
 .amt-notif-actions {
@@ -2652,6 +2819,13 @@
   flex-direction: column;
   gap: 10px;
   animation: amtSlideDown 0.2s ease-out;
+}
+
+.amt-notif-prefs-intro {
+  margin: 0 0 4px;
+  color: #6b665d;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .amt-notif-pref {
@@ -3694,6 +3868,27 @@ body.amt-light-mode .amt-suggestions-label {
   max-width: 52ch;
 }
 
+.amt-heading-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.amt-heading-trust-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(139, 115, 85, 0.08);
+  border: 1px solid rgba(139, 115, 85, 0.14);
+  color: #6d5a42;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 .amt-heading-controls {
   display: flex;
   gap: 6px;
@@ -3704,8 +3899,8 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-text-size-btn,
 .amt-journal-btn,
 .amt-about-btn {
-  background: transparent;
-  border: 1.5px solid #e6e2dc;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid #e6e2dc;
   border-radius: 50%;
   width: 34px;
   height: 34px;
@@ -3720,6 +3915,7 @@ body.amt-light-mode .amt-suggestions-label {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   flex-shrink: 0;
   padding: 0;
+  box-shadow: 0 1px 3px rgba(46, 42, 36, 0.04);
 }
 
 .amt-text-size-btn:hover,
@@ -3727,7 +3923,7 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-about-btn:hover {
   border-color: #2e2a24;
   color: #2e2a24;
-  background: #faf8f4;
+  background: #fff;
 }
 
 .amt-journal-btn,
@@ -3842,6 +4038,13 @@ body.amt-light-mode .amt-suggestions-label {
   gap: 4px;
 }
 
+.amt-answer-context-copy-soft {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fbf7f1, #f3ecdf);
+  border: 1px solid #e7dccd;
+}
+
 .amt-answer-context-kicker {
   color: #8b7355;
   text-transform: uppercase;
@@ -3906,6 +4109,72 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-answer-utilities > .amt-email-section,
 .amt-answer-utilities > .amt-save-insight-section {
   margin-top: 0;
+}
+
+.amt-continuation-strip {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #efe8dd;
+  animation: fadeInUp 0.35s ease;
+}
+
+.amt-continuation-strip-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #faf6ef, #f4ede2);
+  border: 1px solid #e7dccd;
+}
+
+.amt-continuation-kicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-continuation-text {
+  margin: 0;
+  color: #5f584f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.amt-continuation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-continuation-btn {
+  background: #fff;
+  border: 1px solid #d9cdbf;
+  border-radius: 999px;
+  padding: 9px 14px;
+  color: #2e2a24;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-continuation-btn:hover {
+  border-color: #8b7355;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(46, 42, 36, 0.08);
+}
+
+.amt-continuation-btn-primary {
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border-color: #2e2a24;
 }
 
 /* ── Response Reading Progress Bar ──────────────────────── */
@@ -4456,41 +4725,42 @@ body.amt-light-mode .amt-suggestions-label {
   flex-shrink: 0;
 }
 
-/* ── Share V2 (with mode toggle) ─────────────────────────── */
+/* ── Share V2 (separate actions) ─────────────────────────── */
 .amt-share-section-v2 {
-  text-align: center;
   margin-top: 16px;
+  background: linear-gradient(135deg, #faf8f4, #f4efe7);
+  border: 1px solid #e8e1d6;
+  border-radius: 16px;
+  padding: 16px;
 }
 
-.amt-share-toggle-row {
+.amt-share-actions-row {
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-top: 12px;
 }
 
-.amt-share-mode-btn {
-  background: #fff;
-  border: 1.5px solid #d4cec6;
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #8b7355;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+.amt-share-btn {
+  flex: 1 1 220px;
+  min-height: 46px;
 }
 
-.amt-share-mode-btn.amt-share-mode-active {
+.amt-share-btn-primary {
   background: linear-gradient(135deg, #2e2a24, #3d3731);
-  border-color: #2e2a24;
   color: #fff;
+  border: 1px solid #2e2a24;
 }
 
-.amt-share-mode-btn:hover:not(.amt-share-mode-active) {
-  border-color: #8b7355;
+.amt-share-btn-secondary {
+  background: #fff;
   color: #2e2a24;
+  border: 1px solid #d8d0c3;
+}
+
+.amt-share-btn-secondary:hover {
+  border-color: #8b7355;
+  background: #faf7f2;
 }
 
 /* ── About Modal ─────────────────────────────────────────── */
@@ -4956,3 +5226,14 @@ body.amt-light-mode .amt-suggestions-label {
   transition: background 0.15s;
 }
 .amt-journal-edit-cancel-btn:hover { background: #f5f0e8; }
+
+@media (max-width: 640px) {
+  .amt-campaign-welcome-inner {
+    flex-direction: column;
+  }
+
+  .amt-campaign-actions {
+    min-width: 0;
+    width: 100%;
+  }
+}

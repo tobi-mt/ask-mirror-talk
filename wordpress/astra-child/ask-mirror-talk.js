@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.1 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.3 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -22,11 +22,15 @@
   const explorePanel = document.querySelector('#amt-explore-panel');
   const exploreIcons = document.querySelector('#amt-explore-icons');
   const journeyCard = document.querySelector('#amt-journey-card');
+  const campaignWelcome = document.querySelector('#amt-campaign-welcome');
   const weeklyRecapCard = document.querySelector('#amt-weekly-recap');
   const streakRevivalCard = document.querySelector('#amt-streak-revival-card');
   const answerContext = document.querySelector('#amt-answer-context');
+  const continuationStrip = document.querySelector('#amt-continuation-strip');
   const answerUtilities = document.querySelector('#amt-answer-utilities');
   const citationTrustNote = document.querySelector('#amt-citation-trust-note');
+  const intentStartersContainer = document.querySelector('#amt-intent-starters');
+  const themeStartersContainer = document.querySelector('#amt-theme-starters');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -35,7 +39,179 @@
 
   // ─── API URL ────────────────────────────────────────────────
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
+  const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+  const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
   let lastShownCitations = [];
+  let pendingQuestionOrigin = 'typed';
+  let activeCampaignContext = null;
+
+  function hasStrongSupport(citationsList) {
+    return Array.isArray(citationsList) && citationsList.length > 0;
+  }
+
+  function _readStorage(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function _writeStorage(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  function sanitizeCampaignValue(value, maxLen) {
+    const clean = String(value || '').trim();
+    if (!clean) return '';
+    return clean.slice(0, maxLen || 120);
+  }
+
+  function loadCampaignContext() {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = {
+      source: sanitizeCampaignValue(params.get('utm_source'), 80),
+      medium: sanitizeCampaignValue(params.get('utm_medium'), 80),
+      campaign: sanitizeCampaignValue(params.get('utm_campaign'), 120),
+      content: sanitizeCampaignValue(params.get('utm_content'), 120),
+      ref: sanitizeCampaignValue(params.get('ref'), 80),
+      intent: sanitizeCampaignValue(params.get('intent'), 80),
+      theme: sanitizeCampaignValue(params.get('theme'), 80),
+      question: sanitizeCampaignValue(params.get('question') || params.get('q'), 220),
+      landedAt: Date.now()
+    };
+
+    const hasUrlContext = !!(fromUrl.source || fromUrl.medium || fromUrl.campaign || fromUrl.ref || fromUrl.intent || fromUrl.theme || fromUrl.question);
+    if (hasUrlContext) {
+      _writeStorage(CAMPAIGN_SESSION_KEY, JSON.stringify(fromUrl));
+      return fromUrl;
+    }
+
+    try {
+      const raw = _readStorage(CAMPAIGN_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const landedAt = parseInt(parsed.landedAt || '0', 10);
+      if (landedAt && Date.now() - landedAt > 7 * 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(CAMPAIGN_SESSION_KEY);
+        return null;
+      }
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getCampaignMetadata() {
+    const context = activeCampaignContext || loadCampaignContext();
+    if (!context) return {};
+    return {
+      campaign_source: context.source || null,
+      campaign_medium: context.medium || null,
+      campaign_name: context.campaign || null,
+      campaign_content: context.content || null,
+      campaign_ref: context.ref || null,
+      campaign_intent: context.intent || null,
+      campaign_theme: context.theme || null
+    };
+  }
+
+  function buildTrackedPageUrl(overrides) {
+    const data = Object.assign({}, activeCampaignContext || {}, overrides || {});
+    const url = new URL(BASE_PAGE_URL);
+    if (data.source) url.searchParams.set('utm_source', data.source);
+    if (data.medium) url.searchParams.set('utm_medium', data.medium);
+    if (data.campaign) url.searchParams.set('utm_campaign', data.campaign);
+    if (data.content) url.searchParams.set('utm_content', data.content);
+    if (data.ref) url.searchParams.set('ref', data.ref);
+    if (data.intent) url.searchParams.set('intent', data.intent);
+    if (data.theme) url.searchParams.set('theme', data.theme);
+    if (data.question) url.searchParams.set('question', sanitizeCampaignValue(data.question, 160));
+    return url.toString();
+  }
+
+  function resolveCampaignPrompt(context) {
+    if (!context) return '';
+    if (context.question) return context.question;
+    if (context.intent) {
+      const match = INTENT_STARTERS.find(item => item.label.toLowerCase() === String(context.intent).toLowerCase());
+      if (match) return match.prompt;
+    }
+    if (context.theme) return getThemeStarter(context.theme);
+    return '';
+  }
+
+  function renderCampaignWelcome() {
+    if (!campaignWelcome) return;
+    activeCampaignContext = loadCampaignContext();
+    if (!activeCampaignContext) {
+      campaignWelcome.innerHTML = '';
+      campaignWelcome.style.display = 'none';
+      return;
+    }
+
+    const prompt = resolveCampaignPrompt(activeCampaignContext);
+    const title = activeCampaignContext.campaign
+      ? `Start with ${activeCampaignContext.campaign}`
+      : activeCampaignContext.theme
+        ? `${activeCampaignContext.theme} reflection path`
+        : 'Start with a guided question';
+    const body = prompt
+      ? `You landed on a curated Mirror Talk path. Start with this question, or shape it into something more personal before you ask.`
+      : `You landed on a curated Mirror Talk path. Begin with a question that feels true to this moment.`;
+
+    campaignWelcome.innerHTML = `
+      <div class="amt-campaign-welcome-inner">
+        <div class="amt-campaign-welcome-copy">
+          <span class="amt-campaign-kicker">New here?</span>
+          <h3 class="amt-campaign-title">${escapeHtml(title)}</h3>
+          <p class="amt-campaign-text">${escapeHtml(body)}</p>
+          ${activeCampaignContext.source ? `<p class="amt-campaign-meta">Source: ${escapeHtml(activeCampaignContext.source)}${activeCampaignContext.ref ? ` · ${escapeHtml(activeCampaignContext.ref)}` : ''}</p>` : ''}
+        </div>
+        <div class="amt-campaign-actions">
+          ${prompt ? `<button type="button" class="amt-campaign-btn amt-campaign-btn-primary" data-action="prefill">${escapeHtml(truncateText(prompt, 88))}</button>` : ''}
+          <button type="button" class="amt-campaign-btn amt-campaign-btn-secondary" data-action="focus">Ask in your own words</button>
+        </div>
+      </div>
+    `;
+    campaignWelcome.style.display = '';
+
+    emitProductEvent('campaign_landing_viewed', {
+      campaign_prompt_present: !!prompt
+    });
+
+    const prefillBtn = campaignWelcome.querySelector('[data-action="prefill"]');
+    if (prefillBtn) {
+      prefillBtn.addEventListener('click', () => {
+        setQuestionOrigin('campaign_landing', {
+          prompt_type: activeCampaignContext.intent ? 'intent' : (activeCampaignContext.theme ? 'theme' : 'question')
+        });
+        focusFormWithQuestion(prompt);
+      });
+    }
+
+    const focusBtn = campaignWelcome.querySelector('[data-action="focus"]');
+    if (focusBtn) {
+      focusBtn.addEventListener('click', () => {
+        setQuestionOrigin('campaign_landing_custom');
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }
+
+  function emitProductEvent(name, metadata) {
+    try {
+      const merged = Object.assign({}, getCampaignMetadata(), metadata || {});
+      window.dispatchEvent(new CustomEvent('amt:product-event', {
+        detail: {
+          eventName: name,
+          metadata: merged
+        }
+      }));
+    } catch (e) {}
+  }
+
+  function setQuestionOrigin(origin, metadata) {
+    pendingQuestionOrigin = origin || 'typed';
+    emitProductEvent('question_origin_selected', Object.assign({ origin: pendingQuestionOrigin }, metadata || {}));
+  }
 
   // ─── Nonce management ───────────────────────────────────────
   let currentNonce = AskMirrorTalk.nonce;
@@ -102,6 +278,7 @@
         `;
 
         qotdContainer.querySelector('.amt-qotd-ask').addEventListener('click', () => {
+          setQuestionOrigin('qotd', { theme: data.theme || null });
           input.value = data.question;
           input.focus();
           qotdContainer.style.display = 'none';
@@ -123,6 +300,7 @@
     // Don't fire a second concurrent request if one is already in-flight
     // (guards the postMessage fallback path for old iOS Safari < 15.4).
     if (submitBtn && submitBtn.disabled) return;
+    setQuestionOrigin('notification_autoask');
     input.value = question;
     // Hide the QOTD card so the answer takes centre stage
     if (qotdContainer) qotdContainer.style.display = 'none';
@@ -221,6 +399,7 @@
           btn.className = 'amt-suggestion-btn';
           btn.textContent = q;
           btn.addEventListener('click', () => {
+            setQuestionOrigin('suggested_question');
             input.value = q;
             input.focus();
             form.dispatchEvent(new Event('submit', { cancelable: true }));
@@ -293,6 +472,7 @@
           // Starter question clicks
           item.querySelectorAll('.amt-topic-starter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
+              setQuestionOrigin('topic_starter', { topic: t.label || null });
               input.value = btn.dataset.q;
               input.focus();
               topicsContainer.style.display = 'none';
@@ -345,6 +525,7 @@
       btn.className = 'amt-followup-btn';
       btn.textContent = q;
       btn.addEventListener('click', () => {
+        setQuestionOrigin('follow_up');
         input.value = q;
         input.focus();
         followupsContainer.style.display = 'none';
@@ -354,6 +535,12 @@
     });
     followupsContainer.style.display = '';
     // No auto-scroll to follow-ups — user is reading the answer from top to bottom.
+  }
+
+  function ensureLowMatchFollowUps(question, theme) {
+    if (!followupsContainer || !followupsList) return;
+    if (followupsContainer.style.display !== 'none' && followupsList.children.length > 0) return;
+    showFollowUpQuestions(generateLowMatchPrompts(question, theme));
   }
 
   // Rotating loading messages for engagement
@@ -1115,6 +1302,13 @@
     'Community': 'What does Mirror Talk teach about the power of community?'
   };
 
+  const INTENT_STARTERS = [
+    { label: 'I feel stuck', prompt: 'I feel stuck in this season of life. What question should I be asking myself first?' },
+    { label: 'I need clarity', prompt: 'How do I find clarity when my thoughts are pulling me in too many directions?' },
+    { label: 'I am carrying grief', prompt: 'I am carrying grief right now. How can I move through it with honesty and strength?' },
+    { label: 'I need courage', prompt: 'How do I find courage when fear and self-doubt keep taking over?' }
+  ];
+
   function truncateText(text, maxLen) {
     const value = String(text || '').trim();
     if (value.length <= maxLen) return value;
@@ -1123,6 +1317,100 @@
 
   function getThemeStarter(theme) {
     return THEME_STARTERS[theme] || `What does Mirror Talk say about ${String(theme || 'this theme').toLowerCase()}?`;
+  }
+
+  function generateLowMatchPrompts(question, theme) {
+    const activeTheme = theme || inferTheme(question, '') || 'this';
+    return [
+      `Can you answer this through the lens of ${String(activeTheme).toLowerCase()}?`,
+      'What part of this question should I narrow first?',
+      'Can you help me rephrase this into one clearer question?'
+    ];
+  }
+
+  function focusFormWithQuestion(question) {
+    if (!question || !form || !input) return;
+    input.value = question;
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function submitQuestionFromPrompt(question) {
+    if (!question || !form || !input) return;
+    input.value = question;
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 180);
+  }
+
+  function getStarterThemes(limit) {
+    const stats = loadStats();
+    const lastSession = loadLastSession() || {};
+    const exploredThemes = stats.themesExplored || new Set();
+    const prioritized = [];
+
+    if (lastSession.theme) prioritized.push(lastSession.theme);
+    AMT_THEMES.forEach(theme => {
+      if (!exploredThemes.has(theme)) prioritized.push(theme);
+    });
+    AMT_THEMES.forEach(theme => prioritized.push(theme));
+
+    return [...new Set(prioritized)].slice(0, limit || 4);
+  }
+
+  function renderThemeStarterChips() {
+    if (!themeStartersContainer) return;
+    const themes = getStarterThemes(4);
+    if (!themes.length) {
+      themeStartersContainer.innerHTML = '';
+      themeStartersContainer.style.display = 'none';
+      return;
+    }
+
+    themeStartersContainer.innerHTML = `
+      <p class="amt-theme-starters-label">Try starting with a theme:</p>
+      <div class="amt-theme-starters-list">
+        ${themes.map(theme => `
+          <button type="button" class="amt-theme-starter-chip" data-question="${escapeHtml(getThemeStarter(theme))}">
+            <span class="amt-theme-starter-chip-theme">${escapeHtml(theme)}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+    themeStartersContainer.style.display = '';
+
+    themeStartersContainer.querySelectorAll('.amt-theme-starter-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setQuestionOrigin('theme_starter');
+        focusFormWithQuestion(btn.dataset.question || '');
+      });
+    });
+  }
+
+  function renderIntentStarterChips() {
+    if (!intentStartersContainer) return;
+
+    intentStartersContainer.innerHTML = `
+      <p class="amt-intent-starters-label">Start with an intent:</p>
+      <div class="amt-intent-starters-list">
+        ${INTENT_STARTERS.map(item => `
+          <button type="button" class="amt-intent-starter-chip" data-question="${escapeHtml(item.prompt)}">
+            ${escapeHtml(item.label)}
+          </button>
+        `).join('')}
+      </div>
+    `;
+    intentStartersContainer.style.display = '';
+
+    intentStartersContainer.querySelectorAll('.amt-intent-starter-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        emitProductEvent('intent_starter_used', { label: btn.textContent.trim() });
+        setQuestionOrigin('intent_starter', { label: btn.textContent.trim() });
+        focusFormWithQuestion(btn.dataset.question || '');
+      });
+    });
   }
 
   function inferTheme(question, answerText) {
@@ -1192,15 +1480,21 @@
     const count = Array.isArray(citationsList) ? citationsList.length : 0;
 
     if (!count) {
-      citationTrustNote.innerHTML = '';
-      citationTrustNote.style.display = 'none';
+      emitProductEvent('low_match_shown', { citations: 0 });
+      citationTrustNote.innerHTML = `
+        <div class="amt-citation-trust-copy amt-citation-trust-copy-soft">
+          <strong>No direct episode moment surfaced this time</strong>
+          <span>This answer may still be useful, but it is less grounded than usual. Try a narrower follow-up for a stronger match.</span>
+        </div>
+      `;
+      citationTrustNote.style.display = '';
       return;
     }
 
     citationTrustNote.innerHTML = `
       <div class="amt-citation-trust-copy">
         <strong>${count} referenced episode${count === 1 ? '' : 's'}</strong>
-        <span>The strongest match appears first. Tap <em>Preview 30s</em> to hear the exact moment behind the answer.</span>
+        <span>The strongest match appears first. Tap <em>Preview 30s</em> or open the timestamp to verify the moment behind the answer.</span>
       </div>
     `;
     citationTrustNote.style.display = '';
@@ -1211,24 +1505,25 @@
 
     const theme = inferTheme(question, answerText);
     const citationCount = Array.isArray(citationsList) ? citationsList.length : 0;
+    const lowMatch = !hasStrongSupport(citationsList);
     const trustSummary = citationCount > 0
-      ? `${citationCount} episode reference${citationCount === 1 ? '' : 's'} anchored this reflection`
-      : 'Reflective answer drawn from the Mirror Talk library';
+      ? `${citationCount} episode reference${citationCount === 1 ? '' : 's'} support${citationCount === 1 ? 's' : ''} this reflection`
+      : 'A broader reflection shaped by the Mirror Talk library';
     const contextSummary = lastDepthMessage
       ? lastDepthMessage.replace('…', '')
       : (citationCount > 0
-          ? 'Use the references below to preview the exact moments behind this answer.'
-          : 'Ask a follow-up if you want us to explore a narrower angle.');
+          ? 'Use the references below to preview or open the exact moments behind this answer.'
+          : 'A narrower follow-up will usually surface a stronger episode match.');
 
     answerContext.innerHTML = `
-      <div class="amt-answer-context-copy">
-        <span class="amt-answer-context-kicker">Grounded Reflection</span>
+      <div class="amt-answer-context-copy${lowMatch ? ' amt-answer-context-copy-soft' : ''}">
+        <span class="amt-answer-context-kicker">Grounded in Mirror Talk</span>
         <p class="amt-answer-context-summary">${escapeHtml(trustSummary)}.</p>
         <p class="amt-answer-context-detail">${escapeHtml(contextSummary)}</p>
       </div>
       <div class="amt-answer-context-pills">
         ${theme ? `<span class="amt-answer-pill">${escapeHtml(theme)}</span>` : ''}
-        <span class="amt-answer-pill">${citationCount > 0 ? 'Timestamped cues' : 'Reflective guidance'}</span>
+        <span class="amt-answer-pill">${citationCount > 0 ? 'Timestamped cues' : 'Broader guidance'}</span>
       </div>
     `;
     answerContext.style.display = '';
@@ -1250,7 +1545,12 @@
     const theme = themeHint || inferTheme(question, answerText);
     saveLastSession(question, answerText, theme);
     renderAnswerContext(question, answerText, citationsList);
+    if (!hasStrongSupport(citationsList)) {
+      ensureLowMatchFollowUps(question, theme);
+    }
+    renderContinuationStrip(question, answerText, citationsList, theme);
     renderJourneyCard();
+    renderThemeStarterChips();
   }
 
   function renderJourneyCard() {
@@ -1349,6 +1649,64 @@
       .catch(() => {}); // silently fail
   }
 
+  function openStrongestReference() {
+    if (!citationsContainer || citationsContainer.style.display === 'none') return;
+    citationsContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const previewBtn = citationsContainer.querySelector('.citation-preview-btn');
+    if (previewBtn) {
+      setTimeout(() => previewBtn.click(), 220);
+      return;
+    }
+    const citationLink = citationsContainer.querySelector('.citation-link');
+    if (citationLink) {
+      setTimeout(() => citationLink.click(), 220);
+    }
+  }
+
+  function renderContinuationStrip(question, answerText, citationsList, themeHint) {
+    if (!continuationStrip) return;
+
+    const activeTheme = themeHint || inferTheme(question, answerText) || 'Growth';
+    const nextTheme = getStarterThemes(5).find(theme => theme !== activeTheme) || activeTheme;
+    const deeperQuestion = `Go deeper on ${activeTheme.toLowerCase()}: ${getThemeStarter(activeTheme)}`;
+    const tomorrowQuestion = getThemeStarter(nextTheme);
+    const hasReferences = hasStrongSupport(citationsList);
+
+    continuationStrip.innerHTML = `
+      <div class="amt-continuation-strip-inner">
+        <div class="amt-continuation-strip-copy">
+          <span class="amt-continuation-kicker">Keep the reflection moving</span>
+          <p class="amt-continuation-text">${hasReferences ? 'Go deeper, verify the strongest moment, or carry a fresh question into tomorrow.' : 'Try a narrower follow-up for a stronger match, or carry a fresh question into tomorrow.'}</p>
+        </div>
+        <div class="amt-continuation-actions">
+          <button type="button" class="amt-continuation-btn amt-continuation-btn-primary" data-action="deeper">${hasReferences ? 'Go deeper on this' : 'Refine this question'}</button>
+          ${hasReferences ? '<button type="button" class="amt-continuation-btn" data-action="reference">Listen to the strongest moment</button>' : ''}
+          <button type="button" class="amt-continuation-btn" data-action="tomorrow">Come back with ${escapeHtml(nextTheme)}</button>
+        </div>
+      </div>
+    `;
+    continuationStrip.style.display = '';
+
+    continuationStrip.querySelectorAll('.amt-continuation-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        if (action === 'deeper') {
+          if (!hasReferences) emitProductEvent('low_match_action', { action: 'refine_question', theme: activeTheme });
+          submitQuestionFromPrompt(deeperQuestion);
+          return;
+        }
+        if (action === 'reference') {
+          openStrongestReference();
+          return;
+        }
+        if (action === 'tomorrow') {
+          if (!hasReferences) emitProductEvent('low_match_action', { action: 'come_back_with_theme', theme: nextTheme });
+          focusFormWithQuestion(tomorrowQuestion);
+        }
+      });
+    });
+  }
+
   // ========================================
   // Rating (Thumbs Up / Down)
   // ========================================
@@ -1398,6 +1756,7 @@
     event.preventDefault();
 
     const question = input.value.trim();
+    emitProductEvent('question_submitted', { origin: pendingQuestionOrigin, length: question.length });
     if (!question) {
       showError("Please enter a question.");
       return;
@@ -1405,6 +1764,11 @@
     if (question.length < 3) {
       showError("Please enter a more detailed question.");
       return;
+    }
+
+    if (continuationStrip) {
+      continuationStrip.style.display = 'none';
+      continuationStrip.innerHTML = '';
     }
 
     setLoading(true);
@@ -1436,6 +1800,7 @@
         }
       }
     } finally {
+      pendingQuestionOrigin = 'typed';
       setLoading(false);
     }
   });
@@ -1580,6 +1945,17 @@
   sessionObserver.observe(output, { childList: true, subtree: true, characterData: true });
 
   renderJourneyCard();
+  renderCampaignWelcome();
+  renderIntentStarterChips();
+  renderThemeStarterChips();
+
+  const initialCampaignPrompt = resolveCampaignPrompt(activeCampaignContext);
+  if (initialCampaignPrompt && !input.value.trim()) {
+    pendingQuestionOrigin = 'campaign_prefill';
+    input.value = initialCampaignPrompt;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.setAttribute('placeholder', 'Shape this starting prompt into something more personal if you want to.');
+  }
 
   // ========================================
   // PWA Install Prompt — "Add to Home Screen"
@@ -1814,8 +2190,8 @@
       banner.innerHTML = `
         <div class="amt-notif-inner">
           <div class="amt-notif-text">
-            <strong>🔔 Notifications need Safari on iOS</strong>
-            <span>Push notifications require the app to be installed as a PWA, which only works via <strong>Safari</strong> on iPhone and iPad. Open this page in Safari, then tap <strong>Share ⎋ → Add to Home Screen</strong>.</span>
+            <strong>🔔 Use Safari to turn on reminders</strong>
+            <span>On iPhone and iPad, notification support works through the Safari home-screen app. Open this page in <strong>Safari</strong>, then tap <strong>Share ⎋ → Add to Home Screen</strong>.</span>
           </div>
           <div class="amt-notif-actions">
             <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
@@ -1872,8 +2248,8 @@
       banner.innerHTML = `
         <div class="amt-notif-inner">
           <div class="amt-notif-text">
-            <strong>🔔 Want daily wisdom from Mirror Talk?</strong>
-            <span>To receive notifications on iOS, first add this app to your home screen: tap <strong>Share</strong> <span style="font-size:1.2em">⎋</span> then <strong>"Add to Home Screen"</strong>, then open it from there to enable alerts.</span>
+            <strong>🔔 Add Mirror Talk to your home screen first</strong>
+            <span>On iPhone and iPad, reminders work after the app is installed. Tap <strong>Share</strong> <span style="font-size:1.2em">⎋</span>, choose <strong>Add to Home Screen</strong>, then open Mirror Talk from there to enable alerts.</span>
           </div>
           <div class="amt-notif-actions">
             <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
@@ -1923,8 +2299,8 @@
       banner.innerHTML = `
         <div class="amt-notif-inner">
           <div class="amt-notif-text">
-            <strong>🔔 Notifications require iOS 16.4+</strong>
-            <span>Your iOS version does not support push notifications for web apps. Please update your iPhone/iPad to iOS 16.4 or later in Settings > General > Software Update.</span>
+            <strong>🔔 Reminders need iOS 16.4 or newer</strong>
+            <span>Your current iOS version does not support web-app notifications yet. Update in <strong>Settings → General → Software Update</strong> to enable them.</span>
           </div>
           <div class="amt-notif-actions">
             <button class="amt-notif-dismiss" type="button" aria-label="OK">OK</button>
@@ -1981,8 +2357,8 @@
       banner.innerHTML = `
         <div class="amt-notif-inner">
           <div class="amt-notif-text">
-            <strong>🔔 Notifications are blocked</strong>
-            <span>To enable notifications, click the 🔒 or ⓘ icon in your address bar, then change notification permissions to "Allow".</span>
+            <strong>🔔 Reminders are currently blocked</strong>
+            <span>Open your browser's site settings from the address bar, then change notifications to <strong>Allow</strong> for Mirror Talk.</span>
           </div>
           <div class="amt-notif-actions">
             <button class="amt-notif-dismiss" type="button" aria-label="Got it">Got it</button>
@@ -2059,29 +2435,30 @@
     banner.innerHTML = `
       <div class="amt-notif-inner">
         <div class="amt-notif-text">
-          <strong>🔔 Get daily wisdom from Mirror Talk</strong>
-          <span>Receive the Question of the Day and new episode alerts</span>
+          <strong>🔔 Stay gently connected</strong>
+          <span>Choose the kinds of reminders you want from Mirror Talk.</span>
         </div>
         <div class="amt-notif-actions">
-          <button class="amt-notif-enable" type="button">Enable</button>
+          <button class="amt-notif-enable" type="button">Choose reminders</button>
           <button class="amt-notif-dismiss" type="button" aria-label="Not now">Not now</button>
         </div>
       </div>
       <div class="amt-notif-prefs" style="display:none;">
         <button class="amt-notif-back" type="button" aria-label="Go back">← Back</button>
+        <p class="amt-notif-prefs-intro">Pick the reminders that would actually be helpful. You can change these later.</p>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-qotd" checked>
-          <span>✨ Daily Question of the Day</span>
+          <span>✨ Daily reflection question</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-midday" checked>
-          <span>💡 Midday motivation boost</span>
+          <span>💡 Midday check-in</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-episodes" checked>
           <span>🎙️ New episode alerts</span>
         </label>
-        <button class="amt-notif-save" type="button">Save & Enable</button>
+        <button class="amt-notif-save" type="button">Enable selected reminders</button>
       </div>
     `;
 
@@ -2123,7 +2500,7 @@
       if (result.success) {
         banner.innerHTML = `
           <div class="amt-notif-inner amt-notif-success">
-            <span>✅ Notifications enabled! You'll receive daily wisdom from Mirror Talk.</span>
+            <span>✅ Reminders enabled. Mirror Talk will reach out only in the ways you chose.</span>
           </div>
         `;
         setTimeout(() => {
@@ -2137,9 +2514,9 @@
         } else if (result.reason === 'denied') {
           errorMsg = 'Notification permission was blocked. To enable, tap the 🔒 icon in your address bar → Site settings → Notifications → Allow.';
         } else if (result.reason === 'not_configured') {
-          errorMsg = 'Push notifications are being set up and will be available soon. Please check back later!';
+          errorMsg = 'Notifications are still being set up on this app and should be available soon. Please check back a little later.';
         } else {
-          errorMsg = 'Unable to enable notifications. Please try again later.';
+          errorMsg = 'We could not enable reminders right now. Please try again in a moment.';
         }
         banner.innerHTML = `
           <div class="amt-notif-inner amt-notif-error">
@@ -3874,7 +4251,12 @@
     const existing = document.getElementById('amt-share-card-modal');
     if (existing) existing.remove();
 
-    const pageUrl = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+    const pageUrl = buildTrackedPageUrl({
+      source: 'share_card',
+      medium: 'social',
+      campaign: 'organic_reflection_share',
+      ref: 'share_modal'
+    });
     const shareText = caption + '\n\n' + pageUrl;
     const encodedText = encodeURIComponent(shareText);
     const encodedUrl  = encodeURIComponent(pageUrl);
@@ -4487,9 +4869,10 @@
   }
 
   // ========================================
-  // FEATURE 5: Referral-Framed Share Copy
+  // FEATURE 5: Clear Share Actions
   // ========================================
-  // Patch addShareButton to include both "Share Answer" and "Invite a Friend"
+  // Keep the reflection share and invite flows separate so users don't need
+  // to understand a mode switch before they act.
 
   function addShareButtonV2(question, answerText) {
     const existing = document.getElementById('amt-share-section');
@@ -4499,66 +4882,67 @@
     shareSection.id = 'amt-share-section';
     shareSection.className = 'amt-share-section amt-share-section-v2';
 
-    const pageUrl = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+    const pageUrl = buildTrackedPageUrl({
+      source: 'invite_friend',
+      medium: 'share',
+      campaign: 'growth_sprint',
+      ref: 'invite_button',
+      theme: reflectionInsight.theme || '',
+      question: question
+    });
     const reflectionInsight = normalizeInsightRecord({
       question,
       answer: answerText,
       theme: inferTheme(question, answerText),
       savedAt: Date.now()
     });
-    const referralShare = `I've been exploring "${question.substring(0, 80)}" on Mirror Talk — ask your own question:\n${pageUrl}`;
+    const referralShare = `I've been exploring "${question.substring(0, 80)}" on Mirror Talk. Start with this reflection path or ask your own question:\n${pageUrl}`;
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
         <span class="amt-share-kicker">Keep or pass on what mattered</span>
-        <p class="amt-share-caption">Share a premium reflection card or invite someone into the Mirror Talk experience.</p>
+        <p class="amt-share-caption">Share this reflection as a premium card, or invite someone into the Mirror Talk experience.</p>
       </div>
-      <div class="amt-share-toggle-row">
-        <button type="button" class="amt-share-mode-btn amt-share-mode-active" data-mode="answer">📤 Share Card</button>
-        <button type="button" class="amt-share-mode-btn" data-mode="invite">🤝 Invite a Friend</button>
+      <div class="amt-share-actions-row">
+        <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
+        <button type="button" class="amt-share-btn amt-share-btn-secondary" data-action="invite">Invite a friend</button>
       </div>
-      <button type="button" class="amt-share-btn" data-mode="answer">Share this reflection card</button>
     `;
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
 
-    shareSection.querySelectorAll('.amt-share-mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        shareSection.querySelectorAll('.amt-share-mode-btn').forEach(b => b.classList.remove('amt-share-mode-active'));
-        btn.classList.add('amt-share-mode-active');
-        const mainBtn = shareSection.querySelector('.amt-share-btn');
-        mainBtn.dataset.mode = btn.dataset.mode;
-        mainBtn.textContent = btn.dataset.mode === 'answer' ? 'Share this reflection card' : 'Invite a friend';
-      });
-    });
+    shareSection.querySelectorAll('.amt-share-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const action = this.dataset.action;
+        if (action === 'reflection') {
+          emitProductEvent('share_cta_used', { action: 'reflection_card' });
+          shareInsightArtifact(reflectionInsight);
+          return;
+        }
 
-    shareSection.querySelector('.amt-share-btn').addEventListener('click', async function() {
-      const mode = this.dataset.mode;
-      if (mode === 'answer') {
-        shareInsightArtifact(reflectionInsight);
-        return;
-      }
+        const textToShare = referralShare;
+        const titleToShare = 'Ask Mirror Talk';
 
-      const textToShare = referralShare;
-      const titleToShare = 'Ask Mirror Talk';
-
-      if (navigator.share) {
         try {
-          await navigator.share({ title: titleToShare, text: textToShare, url: pageUrl });
-          trackRewardEvent('share');
+          if (navigator.share) {
+            await navigator.share({ title: titleToShare, text: textToShare, url: pageUrl });
+            trackRewardEvent('share');
+            emitProductEvent('share_cta_used', { action: 'invite_friend', method: 'native_share' });
+            return;
+          }
         } catch (e) {
           if (e.name !== 'AbortError') console.warn('Share failed:', e);
         }
-      } else {
+
         try {
           await navigator.clipboard.writeText(textToShare);
           trackRewardEvent('share');
-          const btn = this;
-          const origText = btn.textContent;
-          btn.textContent = '✅ Copied!';
-          setTimeout(() => { btn.textContent = origText; }, 2500);
+          emitProductEvent('share_cta_used', { action: 'invite_friend', method: 'copy_link' });
+          const originalText = this.textContent;
+          this.textContent = 'Link copied';
+          setTimeout(() => { this.textContent = originalText; }, 2500);
         } catch (e) {}
-      }
+      });
     });
 
     // Also add the save insight button here

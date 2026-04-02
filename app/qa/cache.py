@@ -80,6 +80,7 @@ class AnswerCache:
         redis_url: str | None = None,
     ):
         self._entries: list[CacheEntry] = []
+        self._entries_by_question: dict[str, CacheEntry] = {}
         self._lock = threading.Lock()
         self.similarity_threshold = similarity_threshold
         self.ttl_seconds = ttl_seconds
@@ -159,6 +160,7 @@ class AnswerCache:
                 if (now - entry.created_at) >= self.ttl_seconds:
                     continue
                 self._entries.append(entry)
+                self._entries_by_question[entry.question] = entry
                 loaded += 1
             logger.info("Loaded %d entries from Redis cache", loaded)
         except Exception as exc:
@@ -190,9 +192,12 @@ class AnswerCache:
 
         with self._lock:
             # Evict expired entries
-            self._entries = [
+            fresh_entries = [
                 e for e in self._entries if (now - e.created_at) < self.ttl_seconds
             ]
+            if len(fresh_entries) != len(self._entries):
+                self._entries = fresh_entries
+                self._entries_by_question = {e.question: e for e in self._entries}
 
             best_match: CacheEntry | None = None
             best_similarity = 0.0
@@ -225,6 +230,31 @@ class AnswerCache:
             )
             return None
 
+    def get_exact(self, question: str) -> dict | None:
+        """Look up a cached answer by exact normalized question match."""
+        now = time.time()
+
+        with self._lock:
+            entry = self._entries_by_question.get(question)
+            if not entry:
+                return None
+            if (now - entry.created_at) >= self.ttl_seconds:
+                self._entries = [e for e in self._entries if e.question != question]
+                self._entries_by_question.pop(question, None)
+                return None
+
+            entry.hit_count += 1
+            logger.info(
+                "Cache EXACT HIT: '%.60s' (hits=%d)",
+                question,
+                entry.hit_count,
+            )
+            cached = dict(entry.response)
+            cached["cached"] = True
+            cached["cache_similarity"] = 1.0
+            cached["cache_match_type"] = "exact"
+            return cached
+
     def put(self, question: str, embedding: list[float], response: dict) -> None:
         """Store an answer in the cache."""
         with self._lock:
@@ -237,6 +267,7 @@ class AnswerCache:
                 # Remove least recently created entries
                 self._entries.sort(key=lambda e: e.created_at)
                 self._entries = self._entries[-(self.max_entries // 2) :]
+                self._entries_by_question = {e.question: e for e in self._entries}
 
             entry = CacheEntry(
                 question=question,
@@ -244,6 +275,7 @@ class AnswerCache:
                 response=response,
             )
             self._entries.append(entry)
+            self._entries_by_question[entry.question] = entry
             logger.info("Cache PUT: '%.60s' (total entries: %d)", question, len(self._entries))
 
         # Persist outside the lock to avoid blocking cache reads
@@ -265,6 +297,7 @@ class AnswerCache:
         """Clear all cache entries (in-memory and Redis)."""
         with self._lock:
             self._entries.clear()
+            self._entries_by_question.clear()
             logger.info("Cache CLEARED")
         if self._redis:
             try:

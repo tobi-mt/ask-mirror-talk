@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.1';
+    return '5.4.3';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -25,6 +25,11 @@ function ask_mirror_talk_shortcode() {
                 <p class="amt-heading-kicker">Premium reflection, grounded in real episodes</p>
                 <h2>Ask Mirror Talk</h2>
                 <p class="amt-heading-subtitle">Bring a question. Get a calm, thoughtful answer shaped by the Mirror Talk library and anchored with trusted references.</p>
+                <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
+                    <span class="amt-heading-trust-pill">Private by default</span>
+                    <span class="amt-heading-trust-pill">Real episode references</span>
+                    <span class="amt-heading-trust-pill">Built for daily return</span>
+                </div>
             </div>
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
@@ -58,6 +63,7 @@ function ask_mirror_talk_shortcode() {
         <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
+        <div id="amt-campaign-welcome" class="amt-campaign-welcome" style="display:none;" role="region" aria-label="Campaign welcome"></div>
         <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
@@ -87,9 +93,11 @@ function ask_mirror_talk_shortcode() {
                     <p class="amt-form-kicker">Start your reflection</p>
                     <label for="ask-mirror-talk-input">What’s on your heart?</label>
                 </div>
-                <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find.</p>
+                <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find and show you where the answer came from.</p>
             </div>
-            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask a question..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
+            <div id="amt-intent-starters" class="amt-intent-starters" style="display:none;" aria-label="Suggested question intents"></div>
+            <div id="amt-theme-starters" class="amt-theme-starters" style="display:none;" aria-label="Suggested reflection starters"></div>
+            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
             <div class="amt-form-footer">
                 <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
                 <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
@@ -103,6 +111,7 @@ function ask_mirror_talk_shortcode() {
             </div>
             <div id="amt-answer-context" class="amt-answer-context" style="display:none;"></div>
             <div id="ask-mirror-talk-output"></div>
+            <div id="amt-continuation-strip" class="amt-continuation-strip" style="display:none;" aria-label="Next steps"></div>
             <div id="amt-answer-utilities" class="amt-answer-utilities"></div>
             <div id="amt-mood-reactions" class="amt-mood-reactions" style="display:none;" aria-label="How did this land?"></div>
             <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
@@ -131,7 +140,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.1: PWA update and recovery fixes
+    $version = ask_mirror_talk_theme_version(); // v5.4.3: campaign entry and growth attribution
     
     // Core styles
     wp_enqueue_style(

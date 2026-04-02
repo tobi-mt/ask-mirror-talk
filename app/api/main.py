@@ -92,7 +92,7 @@ async def _prewarm_cache():
         try:
             db = SessionLocal()
             try:
-                answer_question(db, question, user_ip="cache-prewarm")
+                answer_question(db, question, user_ip="cache-prewarm", log_interaction=False)
                 warmed += 1
                 logger.info("  ✓ Pre-warmed (%d/%d): %.50s…", warmed, len(questions), question)
             finally:

@@ -24,6 +24,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import text
 from app.core.db import SessionLocal
 
+INTERNAL_USER_IP = "cache-prewarm"
+
+
+def _with_internal_filter(query: str, table_alias: str | None = None) -> str:
+    target = f"{table_alias}.user_ip" if table_alias else "user_ip"
+    return query.replace("{{INTERNAL_FILTER}}", f"AND COALESCE({target}, '') != :internal_user_ip")
+
 
 def run_query(db, query, params=None, description=""):
     """Run a query and display results"""
@@ -75,13 +82,14 @@ def analyze_common_questions(db, days=7):
             MAX(created_at) as last_asked
         FROM qa_logs 
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY question 
         ORDER BY count DESC 
         LIMIT 20
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Common Questions (Last {days} Days)"
     )
 
@@ -101,13 +109,14 @@ def analyze_cited_episodes(db, days=7):
         CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(q.episode_ids, ',')) AS episode_id
         JOIN episodes e ON e.id = episode_id::int
         WHERE q.created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY e.id, e.title, e.published_at
         ORDER BY citation_count DESC
         LIMIT 20
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query, "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Cited Episodes (Last {days} Days)"
     )
 
@@ -126,12 +135,13 @@ def analyze_usage_trends(db, days=30):
             MAX(latency_ms) as max_latency_ms
         FROM qa_logs
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY DATE(created_at)
         ORDER BY date DESC
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Daily Usage Trends (Last {days} Days)"
     )
 
@@ -150,6 +160,7 @@ def analyze_user_behavior(db, days=7):
             EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))/3600 as hours_active
         FROM qa_logs
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY user_ip
         HAVING COUNT(*) > 1
         ORDER BY total_questions DESC
@@ -157,7 +168,7 @@ def analyze_user_behavior(db, days=7):
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Active Users (Last {days} Days)"
     )
 
@@ -174,6 +185,7 @@ def analyze_episode_diversity(db, days=7):
                 ARRAY_LENGTH(STRING_TO_ARRAY(q.episode_ids, ','), 1) as num_episodes_cited
             FROM qa_logs q
             WHERE q.created_at >= :cutoff
+              {{INTERNAL_FILTER}}
         )
         SELECT 
             num_episodes_cited,
@@ -185,7 +197,7 @@ def analyze_episode_diversity(db, days=7):
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query, "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Episode Diversity Distribution (Last {days} Days)"
     )
 
@@ -207,6 +219,7 @@ def analyze_latency_breakdown(db, days=7):
             ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage
         FROM qa_logs
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY 
             CASE 
                 WHEN latency_ms < 1000 THEN '< 1s'
@@ -220,8 +233,155 @@ def analyze_latency_breakdown(db, days=7):
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Response Time Distribution (Last {days} Days)"
+    )
+
+
+def analyze_cache_performance(db, days=7):
+    """Analyze cache hit rate and latency by cache status."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            CASE WHEN is_cached THEN 'cached' ELSE 'fresh' END as response_type,
+            COUNT(*) as count,
+            ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage,
+            ROUND(AVG(latency_ms), 2) as avg_latency_ms,
+            MIN(latency_ms) as min_latency_ms,
+            MAX(latency_ms) as max_latency_ms
+        FROM qa_logs
+        WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
+        GROUP BY is_cached
+        ORDER BY is_cached DESC
+    """
+
+    run_query(
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        f"Cache Performance (Last {days} Days)"
+    )
+
+
+def analyze_bursty_usage(db, days=30):
+    """Find days dominated by a small number of IPs or repeated questions."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        WITH daily_ip_counts AS (
+            SELECT
+                DATE(created_at) AS day,
+                user_ip,
+                COUNT(*) AS question_count
+            FROM qa_logs
+            WHERE created_at >= :cutoff
+              {{INTERNAL_FILTER}}
+            GROUP BY DATE(created_at), user_ip
+        ),
+        daily_totals AS (
+            SELECT
+                DATE(created_at) AS day,
+                COUNT(*) AS total_questions
+            FROM qa_logs
+            WHERE created_at >= :cutoff
+              {{INTERNAL_FILTER}}
+            GROUP BY DATE(created_at)
+        ),
+        ranked AS (
+            SELECT
+                d.day,
+                d.user_ip,
+                d.question_count,
+                t.total_questions,
+                ROUND(d.question_count * 100.0 / NULLIF(t.total_questions, 0), 2) AS pct_of_day,
+                ROW_NUMBER() OVER (PARTITION BY d.day ORDER BY d.question_count DESC, d.user_ip) AS rn
+            FROM daily_ip_counts d
+            JOIN daily_totals t ON t.day = d.day
+        )
+        SELECT
+            day,
+            total_questions,
+            user_ip AS top_ip,
+            question_count AS top_ip_questions,
+            pct_of_day
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY total_questions DESC, pct_of_day DESC
+        LIMIT 20
+    """
+
+    run_query(
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        f"Bursty Usage Risk — Top IP Share By Day (Last {days} Days)"
+    )
+
+
+def analyze_repeated_question_bursts(db, days=30):
+    """Find identical questions repeated heavily on the same day."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            DATE(created_at) AS day,
+            question,
+            COUNT(*) AS repeats,
+            COUNT(DISTINCT user_ip) AS unique_users,
+            ROUND(AVG(latency_ms), 2) AS avg_latency_ms
+        FROM qa_logs
+        WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
+        GROUP BY DATE(created_at), question
+        HAVING COUNT(*) >= 5
+        ORDER BY repeats DESC, day DESC
+        LIMIT 20
+    """
+
+    run_query(
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        f"Repeated Question Bursts (Last {days} Days)"
+    )
+
+
+def analyze_prompt_origin_usage(db, days=30):
+    """Show which question origins and prompt systems are being used."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin,
+            COUNT(*) AS event_count,
+            COUNT(DISTINCT user_ip) AS unique_users
+        FROM product_events
+        WHERE created_at >= :cutoff
+          AND event_name = 'question_submitted'
+        GROUP BY origin
+        ORDER BY event_count DESC, origin
+    """
+
+    run_query(
+        db, query, {"cutoff": cutoff},
+        f"Question Origin Breakdown (Last {days} Days)"
+    )
+
+
+def analyze_product_event_mix(db, days=30):
+    """Summarize product events to make funnel instrumentation visible."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            event_name,
+            COUNT(*) AS event_count,
+            COUNT(DISTINCT user_ip) AS unique_users
+        FROM product_events
+        WHERE created_at >= :cutoff
+        GROUP BY event_name
+        ORDER BY event_count DESC, event_name
+    """
+
+    run_query(
+        db, query, {"cutoff": cutoff},
+        f"Product Event Mix (Last {days} Days)"
     )
 
 
@@ -237,12 +397,13 @@ def analyze_hourly_patterns(db, days=7):
             AVG(latency_ms) as avg_latency
         FROM qa_logs
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY hour_of_day
         ORDER BY hour_of_day
     """
     
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Hourly Usage Patterns (Last {days} Days, UTC)"
     )
 
@@ -258,18 +419,18 @@ def generate_summary_report(db, days=7):
     
     # Overall metrics
     total_questions = db.execute(
-        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff}
+        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
     unique_users = db.execute(
-        text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff}
+        text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
     avg_latency = db.execute(
-        text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff}
+        text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
     total_episodes = db.execute(text("SELECT COUNT(*) FROM episodes")).scalar()
@@ -281,13 +442,29 @@ def generate_summary_report(db, days=7):
     print(f"   Avg Response Time: {round(avg_latency, 2) if avg_latency else 0}ms")
     print(f"   Total Episodes: {total_episodes or 0}")
     print(f"   Total Chunks: {total_chunks or 0}")
+
+    cached_questions = db.execute(
+        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
+    ).scalar()
+    unanswered_questions = db.execute(
+        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
+    ).scalar()
+    print(f"   Cached Questions: {cached_questions or 0}")
+    print(f"   Unanswered / Weak Match Logs: {unanswered_questions or 0}")
     
     # Run all analyses
     analyze_common_questions(db, days)
     analyze_cited_episodes(db, days)
     analyze_episode_diversity(db, days)
     analyze_latency_breakdown(db, days)
+    analyze_cache_performance(db, days)
     analyze_usage_trends(db, days)
+    analyze_bursty_usage(db, min(days, 30))
+    analyze_repeated_question_bursts(db, min(days, 30))
+    analyze_prompt_origin_usage(db, min(days, 30))
+    analyze_product_event_mix(db, min(days, 30))
     
     print("\n" + "="*80)
     print("✅ Report Complete")
@@ -307,13 +484,16 @@ def main():
     parser.add_argument("--diversity", action="store_true", help="Analyze episode diversity")
     parser.add_argument("--latency", action="store_true", help="Analyze response times")
     parser.add_argument("--hourly", action="store_true", help="Analyze hourly patterns")
+    parser.add_argument("--cache", action="store_true", help="Analyze cache performance")
+    parser.add_argument("--bursts", action="store_true", help="Analyze bursty traffic concentration")
+    parser.add_argument("--origins", action="store_true", help="Analyze prompt and question origin usage")
     parser.add_argument("--days", type=int, default=7, help="Number of days to analyze (default: 7)")
     
     args = parser.parse_args()
     
     # Default to --all if no specific query is selected
     if not any([args.all, args.questions, args.episodes, args.trends, args.users, 
-                args.diversity, args.latency, args.hourly]):
+                args.diversity, args.latency, args.hourly, args.cache, args.bursts, args.origins]):
         args.all = True
     
     db = SessionLocal()()  # Call SessionLocal() to get the session factory, then call it again to get a session instance
@@ -336,6 +516,14 @@ def main():
                 analyze_latency_breakdown(db, args.days)
             if args.hourly:
                 analyze_hourly_patterns(db, args.days)
+            if args.cache:
+                analyze_cache_performance(db, args.days)
+            if args.bursts:
+                analyze_bursty_usage(db, args.days)
+                analyze_repeated_question_bursts(db, args.days)
+            if args.origins:
+                analyze_prompt_origin_usage(db, args.days)
+                analyze_product_event_mix(db, args.days)
     
     except Exception as e:
         print(f"\n❌ Error running analytics: {e}\n")

@@ -12,6 +12,7 @@ from app.api.auth import admin_auth, security
 from app.core.db import get_db
 
 router = APIRouter()
+INTERNAL_USER_IP = "cache-prewarm"
 
 _ADMIN_CSS = """
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
@@ -199,16 +200,16 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
     cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
     total_questions = db.execute(
-        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff},
+        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
     ).scalar() or 0
     unique_users = db.execute(
-        text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff},
+        text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
     ).scalar() or 0
     avg_latency = db.execute(
-        text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff"),
-        {"cutoff": cutoff},
+        text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
     ).scalar() or 0
 
     try:
@@ -234,23 +235,25 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
 
     try:
         unanswered_count = db.execute(
-            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE"),
-            {"cutoff": cutoff},
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).scalar() or 0
         cached_count = db.execute(
-            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE"),
-            {"cutoff": cutoff},
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).scalar() or 0
         top_unanswered = db.execute(
             text("""
                 SELECT question, COUNT(*) as cnt
                 FROM qa_logs
-                WHERE created_at >= :cutoff AND is_answered = FALSE
+                WHERE created_at >= :cutoff
+                  AND is_answered = FALSE
+                  AND COALESCE(user_ip, '') != :internal_user_ip
                 GROUP BY question
                 ORDER BY cnt DESC
                 LIMIT 10
             """),
-            {"cutoff": cutoff},
+            {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         ).fetchall()
     except Exception:
         db.rollback()
@@ -267,17 +270,25 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
             CROSS JOIN LATERAL UNNEST(STRING_TO_ARRAY(q.episode_ids, ',')) AS episode_id
             JOIN episodes e ON e.id = episode_id::int
             WHERE q.created_at >= :cutoff
+              AND COALESCE(q.user_ip, '') != :internal_user_ip
             GROUP BY e.id, e.title
             ORDER BY citation_count DESC
             LIMIT 10
         """),
-        {"cutoff": cutoff},
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
     ).fetchall()
     runs = db.execute(
         text("SELECT id, started_at, finished_at, status, message FROM ingest_runs ORDER BY started_at DESC LIMIT 10")
     ).all()
     logs = db.execute(
-        text("SELECT id, created_at, question, latency_ms, user_ip FROM qa_logs ORDER BY created_at DESC LIMIT 15")
+        text("""
+            SELECT id, created_at, question, latency_ms, user_ip
+            FROM qa_logs
+            WHERE COALESCE(user_ip, '') != :internal_user_ip
+            ORDER BY created_at DESC
+            LIMIT 15
+        """),
+        {"internal_user_ip": INTERNAL_USER_IP},
     ).all()
 
     return AdminDashboardData(

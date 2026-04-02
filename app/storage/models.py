@@ -116,6 +116,18 @@ class UserFeedback(Base):
     user_ip: Mapped[str] = mapped_column(String(100))
 
 
+class ProductEvent(Base):
+    """Track lightweight client-side product events for funnel and prompt-origin analysis."""
+    __tablename__ = "product_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    qa_log_id: Mapped[int | None] = mapped_column(ForeignKey("qa_logs.id"), nullable=True)
+    event_name: Mapped[str] = mapped_column(String(80), index=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_ip: Mapped[str] = mapped_column(String(100), index=True)
+
+
 class PushSubscription(Base):
     """Store Web Push notification subscriptions from PWA users."""
     __tablename__ = "push_subscriptions"

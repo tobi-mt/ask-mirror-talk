@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v5.4.1
+ * Analytics Add-on for Ask Mirror Talk Widget v5.4.3
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -19,7 +19,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.4.1 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v5.4.3 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -29,6 +29,9 @@
         
         // Watch for citation links being added to the DOM
         observeDOM();
+
+        // Track lightweight product events emitted by the main widget
+        watchProductEvents();
     }
     
     /**
@@ -134,6 +137,15 @@
             subtree: true
         });
     }
+
+    function watchProductEvents() {
+        window.addEventListener('amt:product-event', function(event) {
+            const detail = event.detail || {};
+            const eventName = detail.eventName;
+            if (!eventName) return;
+            trackProductEvent(eventName, detail.metadata || {});
+        });
+    }
     
     /**
      * Add click tracking to all citation links
@@ -190,6 +202,34 @@
             
         } catch (error) {
             console.error('❌ Citation tracking failed:', error);
+        }
+    }
+
+    async function trackProductEvent(eventName, metadata = {}) {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            await originalFetch(`${API_BASE_URL}/api/client-event`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    qa_log_id: currentQALogId,
+                    event_name: eventName,
+                    metadata: Object.assign({
+                        page_path: window.location.pathname,
+                        page_url: window.location.href,
+                        referrer: document.referrer || null,
+                        utm_source: params.get('utm_source') || null,
+                        utm_medium: params.get('utm_medium') || null,
+                        utm_campaign: params.get('utm_campaign') || null,
+                        utm_content: params.get('utm_content') || null,
+                        referral_code: params.get('ref') || null,
+                    }, metadata)
+                })
+            });
+
+            console.log('✅ Product event tracked:', { eventName, metadata, qaLogId: currentQALogId });
+        } catch (error) {
+            console.error('❌ Product event tracking failed:', error);
         }
     }
     

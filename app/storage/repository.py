@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -108,6 +109,24 @@ def log_user_feedback(db: Session, qa_log_id: int, feedback_type: str, user_ip: 
     db.add(feedback)
     db.commit()
     return feedback
+
+
+def log_product_event(
+    db: Session,
+    event_name: str,
+    user_ip: str,
+    qa_log_id: int | None = None,
+    metadata: dict | None = None,
+):
+    event = models.ProductEvent(
+        qa_log_id=qa_log_id,
+        event_name=event_name,
+        metadata_json=json.dumps(metadata or {}, ensure_ascii=True),
+        user_ip=user_ip,
+    )
+    db.add(event)
+    db.commit()
+    return event
 
 
 def create_ingest_run(db: Session, status: str, message: str = "") -> models.IngestRun:

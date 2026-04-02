@@ -13,7 +13,39 @@ from app.storage.repository import log_qa
 logger = logging.getLogger(__name__)
 
 
-def answer_question(db: Session, question: str, user_ip: str, use_smart_citations: bool = True):
+def _maybe_log_qa(
+    db: Session,
+    *,
+    question: str,
+    answer: str,
+    episode_ids: list[int],
+    latency_ms: int,
+    user_ip: str,
+    is_cached: bool,
+    is_answered: bool,
+    log_interaction: bool,
+):
+    if not log_interaction:
+        return None
+    return log_qa(
+        db,
+        question=question,
+        answer=answer,
+        episode_ids=episode_ids,
+        latency_ms=latency_ms,
+        user_ip=user_ip,
+        is_cached=is_cached,
+        is_answered=is_answered,
+    )
+
+
+def answer_question(
+    db: Session,
+    question: str,
+    user_ip: str,
+    use_smart_citations: bool = True,
+    log_interaction: bool = True,
+):
     """
     Answer a user's question with intelligent episode selection.
     
@@ -25,17 +57,37 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     from app.core.db import get_session_local
 
     start_time = time.time()
-    query_embedding = embed_text(question)
-    
-    # Check cache for near-identical questions (normalize for better matching)
     cache = get_answer_cache()
     norm_q = normalize_question(question)
+    exact_cached_response = cache.get_exact(norm_q)
+    if exact_cached_response:
+        latency_ms = int((time.time() - start_time) * 1000)
+        exact_citations = exact_cached_response.get("citations", [])
+        qa_log = _maybe_log_qa(
+            db,
+            question=question,
+            answer=exact_cached_response["answer"],
+            episode_ids=[c["episode_id"] for c in exact_citations],
+            latency_ms=latency_ms,
+            user_ip=user_ip,
+            is_cached=True,
+            is_answered=len(exact_citations) > 0,
+            log_interaction=log_interaction,
+        )
+        exact_cached_response["latency_ms"] = latency_ms
+        exact_cached_response["qa_log_id"] = qa_log.id if qa_log else None
+        exact_cached_response["question"] = question
+        return exact_cached_response
+
+    query_embedding = embed_text(question)
+
+    # Check cache for near-identical questions (normalize for better matching)
     cached_response = cache.get(norm_q, query_embedding)
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         # Log the cached response too
         cached_citations = cached_response.get("citations", [])
-        qa_log = log_qa(
+        qa_log = _maybe_log_qa(
             db,
             question=question,
             answer=cached_response["answer"],
@@ -44,9 +96,10 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
             user_ip=user_ip,
             is_cached=True,
             is_answered=len(cached_citations) > 0,
+            log_interaction=log_interaction,
         )
         cached_response["latency_ms"] = latency_ms
-        cached_response["qa_log_id"] = qa_log.id
+        cached_response["qa_log_id"] = qa_log.id if qa_log else None
         cached_response["question"] = question
         return cached_response
 
@@ -131,7 +184,7 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     SessionLocal = get_session_local()
     log_db = SessionLocal()
     try:
-        qa_log = log_qa(
+        qa_log = _maybe_log_qa(
             log_db,
             question=question,
             answer=response["answer"],
@@ -140,8 +193,9 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
             user_ip=user_ip,
             is_cached=False,
             is_answered=len(response["citations"]) > 0,
+            log_interaction=log_interaction,
         )
-        qa_log_id = qa_log.id
+        qa_log_id = qa_log.id if qa_log else None
     except Exception as e:
         logger.error("Failed to log QA: %s", e)
         qa_log_id = None
@@ -166,7 +220,13 @@ def answer_question(db: Session, question: str, user_ip: str, use_smart_citation
     return result
 
 
-def answer_question_stream(db: Session, question: str, user_ip: str, context: list[dict] | None = None):
+def answer_question_stream(
+    db: Session,
+    question: str,
+    user_ip: str,
+    context: list[dict] | None = None,
+    log_interaction: bool = True,
+):
     """
     Stream an answer using SSE. Yields JSON events:
       - {"type": "chunk", "text": "..."} for each text chunk
@@ -185,16 +245,40 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
     # ── Immediately tell the client we're working ──
     yield f"data: {json.dumps({'type': 'status', 'message': 'Searching episodes…'})}\n\n"
 
-    query_embedding = embed_text(question)
-
     # Check cache first (normalize for better matching)
     cache = get_answer_cache()
     norm_q = normalize_question(question)
+    exact_cached_response = cache.get_exact(norm_q)
+    if exact_cached_response:
+        latency_ms = int((time.time() - start_time) * 1000)
+        _exact_citations = exact_cached_response.get("citations", [])
+        qa_log = _maybe_log_qa(
+            db,
+            question=question,
+            answer=exact_cached_response["answer"],
+            episode_ids=[c["episode_id"] for c in _exact_citations],
+            latency_ms=latency_ms,
+            user_ip=user_ip,
+            is_cached=True,
+            is_answered=len(_exact_citations) > 0,
+            log_interaction=log_interaction,
+        )
+        cached_episode_count = len({c["episode_id"] for c in _exact_citations if c.get("episode_id")})
+        if cached_episode_count:
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {cached_episode_count} episodes…'})}\n\n"
+        yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
+        yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
+        yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id if qa_log else None, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        return
+
+    query_embedding = embed_text(question)
+
     cached_response = cache.get(norm_q, query_embedding)
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _cached_citations = cached_response.get("citations", [])
-        qa_log = log_qa(
+        qa_log = _maybe_log_qa(
             db,
             question=question,
             answer=cached_response["answer"],
@@ -203,6 +287,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
             user_ip=user_ip,
             is_cached=True,
             is_answered=len(_cached_citations) > 0,
+            log_interaction=log_interaction,
         )
         # Stream the full cached answer as a single chunk for instant display
         cached_episode_count = len({c["episode_id"] for c in cached_response.get("citations", []) if c.get("episode_id")})
@@ -211,7 +296,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
         yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id if qa_log else None, 'latency_ms': latency_ms, 'cached': True})}\n\n"
         return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
@@ -306,7 +391,7 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
     log_db = SessionLocal()
     qa_log_id = None
     try:
-        qa_log = log_qa(
+        qa_log = _maybe_log_qa(
             log_db,
             question=question,
             answer=full_answer,
@@ -315,8 +400,9 @@ def answer_question_stream(db: Session, question: str, user_ip: str, context: li
             user_ip=user_ip,
             is_cached=False,
             is_answered=len(citations) > 0,
+            log_interaction=log_interaction,
         )
-        qa_log_id = qa_log.id
+        qa_log_id = qa_log.id if qa_log else None
     except Exception as e:
         logger.error("Failed to log QA: %s", e)
     finally:

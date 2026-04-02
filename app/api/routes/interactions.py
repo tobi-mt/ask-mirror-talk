@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -22,6 +23,12 @@ class UserFeedbackRequest(BaseModel):
     feedback_type: str
     rating: int | None = None
     comment: str | None = None
+
+
+class ClientEventRequest(BaseModel):
+    qa_log_id: int | None = None
+    event_name: str
+    metadata: dict[str, Any] | None = None
 
 
 @router.post("/api/citation/click")
@@ -80,3 +87,41 @@ def submit_feedback(
     except Exception as e:
         logger.error("Error logging user feedback: %s", e)
         raise HTTPException(status_code=500, detail="Failed to log feedback") from e
+
+
+@router.post("/api/client-event")
+def track_client_event(
+    payload: ClientEventRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Track lightweight client-side product events for funnel analysis."""
+    from app.storage.repository import log_product_event
+
+    event_name = (payload.event_name or "").strip()[:80]
+    if not event_name:
+        raise HTTPException(status_code=400, detail="Missing event_name")
+
+    user_ip = get_client_ip(request)
+
+    try:
+        log_product_event(
+            db,
+            event_name=event_name,
+            user_ip=user_ip,
+            qa_log_id=payload.qa_log_id,
+            metadata=payload.metadata or {},
+        )
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(
+            "Error logging client event: %s",
+            {
+                "event_name": event_name,
+                "qa_log_id": payload.qa_log_id,
+                "user_ip": user_ip,
+                "metadata": payload.metadata or {},
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail="Failed to log client event") from e

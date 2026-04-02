@@ -128,6 +128,9 @@ class PushSubscription(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_qotd: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_new_episodes: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_midday: Mapped[bool] = mapped_column(Boolean, default=True)
+    timezone: Mapped[str] = mapped_column(String(100), default="UTC")
+    preferred_qotd_hour: Mapped[int] = mapped_column(Integer, default=8)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -147,6 +150,19 @@ class PushMotivationMessage(Base):
     theme: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="static")  # 'static' | 'generated' | 'personalized'
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class PushMotivationHistory(Base):
+    """Track midday motivation deliveries to avoid duplicate sends."""
+    __tablename__ = "push_motivation_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int] = mapped_column(ForeignKey("push_subscriptions.id"))
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("push_motivation_messages.id"),
+        nullable=True,
+    )
 
 
 class PushQotdHistory(Base):

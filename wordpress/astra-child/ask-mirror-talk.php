@@ -12,12 +12,20 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+function ask_mirror_talk_theme_version() {
+    return '5.4.1';
+}
+
 function ask_mirror_talk_shortcode() {
     ob_start();
     ?>
     <div class="ask-mirror-talk">
         <div class="amt-heading-row">
-            <h2>Ask Mirror Talk</h2>
+            <div class="amt-heading-copy">
+                <p class="amt-heading-kicker">Premium reflection, grounded in real episodes</p>
+                <h2>Ask Mirror Talk</h2>
+                <p class="amt-heading-subtitle">Bring a question. Get a calm, thoughtful answer shaped by the Mirror Talk library and anchored with trusted references.</p>
+            </div>
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
                 <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
@@ -45,9 +53,12 @@ function ask_mirror_talk_shortcode() {
         </div>
         <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
         <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
+        <div id="amt-streak-revival-card" class="amt-streak-revival-card" style="display:none;" role="region" aria-label="Streak recovery"></div>
         <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
         <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
+        <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
+        <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
         <!-- Journal modal -->
@@ -71,23 +82,34 @@ function ask_mirror_talk_shortcode() {
             </div>
         </div>
         <form id="ask-mirror-talk-form">
-            <label for="ask-mirror-talk-input">What’s on your heart?</label>
+            <div class="amt-form-intro">
+                <div>
+                    <p class="amt-form-kicker">Start your reflection</p>
+                    <label for="ask-mirror-talk-input">What’s on your heart?</label>
+                </div>
+                <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find.</p>
+            </div>
             <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask a question..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
-            <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
-            <button type="submit" id="ask-mirror-talk-submit">Ask</button>
+            <div class="amt-form-footer">
+                <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
+                <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
+            </div>
         </form>
         <div class="ask-mirror-talk-response">
             <div class="amt-response-progress" id="amt-response-progress" aria-hidden="true"><div class="amt-response-progress-bar" id="amt-response-progress-bar"></div></div>
             <div class="amt-response-header">
-                <h3>Response</h3>
+                <h3>Your Reflection</h3>
                 <button type="button" id="amt-copy-answer-btn" class="amt-copy-answer-btn" style="display:none;" title="Copy answer" aria-label="Copy answer">⎘ Copy</button>
             </div>
+            <div id="amt-answer-context" class="amt-answer-context" style="display:none;"></div>
             <div id="ask-mirror-talk-output"></div>
+            <div id="amt-answer-utilities" class="amt-answer-utilities"></div>
             <div id="amt-mood-reactions" class="amt-mood-reactions" style="display:none;" aria-label="How did this land?"></div>
             <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
         </div>
         <div class="ask-mirror-talk-citations">
             <h3>Referenced Episodes</h3>
+            <div id="amt-citation-trust-note" class="amt-citation-trust-note" style="display:none;"></div>
             <ul id="ask-mirror-talk-citations"></ul>
         </div>
         <div id="ask-mirror-talk-followups" class="amt-followups" style="display:none;">
@@ -109,7 +131,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = '5.2.7'; // v5.2.7: update version
+    $version = ask_mirror_talk_theme_version(); // v5.4.1: PWA update and recovery fixes
     
     // Core styles
     wp_enqueue_style(
@@ -278,8 +300,8 @@ function ask_mirror_talk_serve_sw_init() {
         return;
     }
 
-    // Must match CACHE_VERSION in sw.js — the only line to change on each release
-    $sw_ver = '5.1.7';
+    // Must match CACHE_VERSION in sw.js.
+    $sw_ver = ask_mirror_talk_theme_version();
     $sw_url = '/sw.js?v=' . $sw_ver;
 
     while (ob_get_level()) {
@@ -362,10 +384,22 @@ function ask_mirror_talk_serve_sw_init() {
       reg.active     ? 'active'     : 'unknown');
   }
 
-  window.addEventListener('load', function() {
+  var lastEnforceAt = 0;
+  function enforceSWSafely() {
+    var now = Date.now();
+    if (now - lastEnforceAt < 30000) return;
+    lastEnforceAt = now;
     enforceSW().catch(function(err) {
       console.warn('[PWA] SW enforce error:', err);
     });
+  }
+
+  window.addEventListener('load', enforceSWSafely);
+  window.addEventListener('pageshow', enforceSWSafely);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+      enforceSWSafely();
+    }
   });
 })();";
     exit;
@@ -435,7 +469,7 @@ function ask_mirror_talk_serve_manifest() {
 
     http_response_code(200);
     header('Content-Type: application/manifest+json; charset=UTF-8');
-    header('Cache-Control: public, max-age=86400');
+    header('Cache-Control: no-cache, must-revalidate');
     header('X-Content-Type-Options: nosniff');
     echo json_encode( $manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT );
     exit;
@@ -453,7 +487,7 @@ add_action('init', 'ask_mirror_talk_serve_manifest', 0);
  * The combination guarantees every visit fetches a fresh PHP response.
  */
 function ask_mirror_talk_pwa_footer() {
-    $sw_init_ver = '5.1.7'; // ← bump this with every release (same as $sw_ver above)
+    $sw_init_ver = ask_mirror_talk_theme_version();
     ?>
     <script src="/sw-init?v=<?php echo esc_attr($sw_init_ver); ?>" defer></script>
     <?php

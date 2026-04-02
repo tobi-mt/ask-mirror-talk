@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.2.7 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.1 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -21,6 +21,12 @@
   const exploreToggle = document.querySelector('#amt-explore-toggle');
   const explorePanel = document.querySelector('#amt-explore-panel');
   const exploreIcons = document.querySelector('#amt-explore-icons');
+  const journeyCard = document.querySelector('#amt-journey-card');
+  const weeklyRecapCard = document.querySelector('#amt-weekly-recap');
+  const streakRevivalCard = document.querySelector('#amt-streak-revival-card');
+  const answerContext = document.querySelector('#amt-answer-context');
+  const answerUtilities = document.querySelector('#amt-answer-utilities');
+  const citationTrustNote = document.querySelector('#amt-citation-trust-note');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -29,6 +35,7 @@
 
   // ─── API URL ────────────────────────────────────────────────
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
+  let lastShownCitations = [];
 
   // ─── Nonce management ───────────────────────────────────────
   let currentNonce = AskMirrorTalk.nonce;
@@ -662,12 +669,15 @@
       closeInlinePlayer(activePlayer);
     }
 
+    lastShownCitations = Array.isArray(citationsList) ? citationsList.slice() : [];
+    updateCitationTrustNote(lastShownCitations);
+
     if (citationsList && citationsList.length > 0) {
       citations.innerHTML = "";
       
-      citationsList.forEach((citation) => {
+      citationsList.forEach((citation, index) => {
         const li = document.createElement("li");
-        li.className = "citation-item";
+        li.className = index === 0 ? "citation-item citation-item-primary" : "citation-item";
         
         const episodeTitle = citation.episode_title || "Unknown Episode";
         const startSeconds = citation.timestamp_start_seconds !== undefined 
@@ -688,6 +698,9 @@
               : timestampStart)
           : '';
         const timeHtml = timeDisplay ? `<span class="citation-time">▶ ${timeDisplay}</span>` : '';
+        const matchBadgeHtml = index === 0
+          ? '<span class="citation-match-badge">Strongest match</span>'
+          : '';
 
         if (podcastUrl) {
           const link = document.createElement("a");
@@ -712,6 +725,7 @@
 
           link.innerHTML = `
             <div class="citation-info">
+              ${matchBadgeHtml}
               <span class="citation-title">${escapeHtml(episodeTitle)}${yearHtml}</span>
               ${quoteHtml}
             </div>
@@ -811,6 +825,7 @@
 
           li.innerHTML = `
             <div class="citation-info">
+              ${matchBadgeHtml}
               <span class="citation-title">${escapeHtml(episodeTitle)}${yearHtml}</span>
               ${quoteHtml}
             </div>
@@ -829,6 +844,7 @@
     } else {
       citations.innerHTML = "";
       citationsContainer.classList.remove('amt-visible');
+      updateCitationTrustNote([]);
       setTimeout(() => {
         if (!citationsContainer.classList.contains('amt-visible')) {
           citationsContainer.style.display = 'none';
@@ -985,6 +1001,7 @@
             addSaveToEmailButton(question, answerText);
             showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
+            finalizeAnswerPresentation(question, answerText, lastShownCitations, window._amtLastTheme || null);
 
             // Gamification: record the answered question
             onQuestionAnswered(question, window._amtLastTheme || null);
@@ -1029,6 +1046,7 @@
     addShareButton(questionText, answer);
     addSaveToEmailButton(questionText, answer);
     injectFAQSchema(questionText, answer);
+    finalizeAnswerPresentation(questionText, answer, citationsList);
 
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -1042,18 +1060,12 @@
     if (existing) existing.remove();
     if (!question || !answer) return;
 
-    const shareSection = document.getElementById('amt-share-section');
-
     const section = document.createElement('div');
     section.id = 'amt-email-section';
     section.className = 'amt-email-section';
-    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email">📧 Save to email</button>`;
+    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email">📧 Email this reflection</button>`;
 
-    if (shareSection && shareSection.parentNode) {
-      shareSection.parentNode.insertBefore(section, shareSection.nextSibling);
-    } else {
-      responseContainer.appendChild(section);
-    }
+    getAnswerUtilitiesRoot().appendChild(section);
 
     section.querySelector('.amt-email-btn').addEventListener('click', () => {
       const subject = encodeURIComponent(`Mirror Talk: ${question.substring(0, 80)}`);
@@ -1078,6 +1090,222 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  const THEME_STARTERS = {
+    'Self-worth': 'How do I stop comparing myself to others?',
+    'Forgiveness': 'What does it mean to truly forgive someone?',
+    'Inner peace': 'How do I find peace when everything feels uncertain?',
+    'Purpose': 'How do I find my purpose in life?',
+    'Surrender': 'What does it look like to let go and surrender?',
+    'Leadership': 'What makes a great leader?',
+    'Relationships': 'What\'s the key to building healthy relationships?',
+    'Gratitude': 'What role does gratitude play in overcoming hardship?',
+    'Boundaries': 'How do I set boundaries without feeling guilty?',
+    'Healing': 'How do I start the healing process?',
+    'Grief': 'How do I deal with grief and loss?',
+    'Fear': 'How can I overcome fear and self-doubt?',
+    'Parenting': 'How do I raise kids who are emotionally resilient?',
+    'Growth': 'What can I learn from failure?',
+    'Communication': 'How do I have hard conversations without damaging the relationship?',
+    'Faith': 'What role does faith play in personal growth?',
+    'Identity': 'How do I discover my true identity?',
+    'Empowerment': 'How do I find my voice when I\'ve been silenced?',
+    'Transition': 'How do I move forward after a major life change?',
+    'Community': 'What does Mirror Talk teach about the power of community?'
+  };
+
+  function truncateText(text, maxLen) {
+    const value = String(text || '').trim();
+    if (value.length <= maxLen) return value;
+    return value.slice(0, Math.max(0, maxLen - 1)).trimEnd() + '…';
+  }
+
+  function getThemeStarter(theme) {
+    return THEME_STARTERS[theme] || `What does Mirror Talk say about ${String(theme || 'this theme').toLowerCase()}?`;
+  }
+
+  function inferTheme(question, answerText) {
+    const haystack = `${question || ''} ${answerText || ''}`.toLowerCase();
+    for (const theme of AMT_THEMES) {
+      if (haystack.includes(theme.toLowerCase())) return theme;
+    }
+
+    const themeKeywords = [
+      ['Relationships', ['relationship', 'marriage', 'partner', 'dating', 'friendship']],
+      ['Boundaries', ['boundary', 'boundaries', 'people pleasing', 'people-pleasing']],
+      ['Healing', ['heal', 'healing', 'recover', 'restoration']],
+      ['Grief', ['grief', 'loss', 'mourning']],
+      ['Fear', ['fear', 'anxiety', 'afraid', 'self-doubt']],
+      ['Purpose', ['purpose', 'calling', 'direction']],
+      ['Identity', ['identity', 'who am i', 'self image', 'self-image']],
+      ['Forgiveness', ['forgive', 'forgiveness', 'resentment']],
+      ['Inner peace', ['peace', 'calm', 'stillness']],
+      ['Communication', ['conversation', 'communicate', 'conflict', 'hard talk']],
+      ['Empowerment', ['voice', 'speak up', 'confidence', 'empower']],
+      ['Transition', ['transition', 'change', 'new season', 'move on']],
+      ['Self-worth', ['worthy', 'worth', 'comparison', 'confidence']],
+      ['Faith', ['faith', 'god', 'spiritual']],
+      ['Community', ['community', 'belonging', 'support system']]
+    ];
+
+    for (const [theme, keywords] of themeKeywords) {
+      if (keywords.some(keyword => haystack.includes(keyword))) return theme;
+    }
+
+    return null;
+  }
+
+  function extractInsightExcerpt(answerText) {
+    const clean = String(answerText || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^\s+|\s+$/g, '');
+    if (!clean) return '';
+
+    const sentences = clean.match(/[^.!?]+[.!?]+/g) || [];
+    const candidate = sentences.find(sentence => sentence.trim().length >= 70) || sentences[0] || clean;
+    return truncateText(candidate.trim(), 210);
+  }
+
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return 'Recently';
+
+    const diffMs = Date.now() - timestamp;
+    const minutes = Math.max(1, Math.round(diffMs / 60000));
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+
+    const days = Math.round(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+
+    return new Date(timestamp).toLocaleDateString();
+  }
+
+  function getAnswerUtilitiesRoot() {
+    return answerUtilities || responseContainer;
+  }
+
+  function updateCitationTrustNote(citationsList) {
+    if (!citationTrustNote) return;
+    const count = Array.isArray(citationsList) ? citationsList.length : 0;
+
+    if (!count) {
+      citationTrustNote.innerHTML = '';
+      citationTrustNote.style.display = 'none';
+      return;
+    }
+
+    citationTrustNote.innerHTML = `
+      <div class="amt-citation-trust-copy">
+        <strong>${count} referenced episode${count === 1 ? '' : 's'}</strong>
+        <span>The strongest match appears first. Tap <em>Preview 30s</em> to hear the exact moment behind the answer.</span>
+      </div>
+    `;
+    citationTrustNote.style.display = '';
+  }
+
+  function renderAnswerContext(question, answerText, citationsList) {
+    if (!answerContext) return;
+
+    const theme = inferTheme(question, answerText);
+    const citationCount = Array.isArray(citationsList) ? citationsList.length : 0;
+    const trustSummary = citationCount > 0
+      ? `${citationCount} episode reference${citationCount === 1 ? '' : 's'} anchored this reflection`
+      : 'Reflective answer drawn from the Mirror Talk library';
+    const contextSummary = lastDepthMessage
+      ? lastDepthMessage.replace('…', '')
+      : (citationCount > 0
+          ? 'Use the references below to preview the exact moments behind this answer.'
+          : 'Ask a follow-up if you want us to explore a narrower angle.');
+
+    answerContext.innerHTML = `
+      <div class="amt-answer-context-copy">
+        <span class="amt-answer-context-kicker">Grounded Reflection</span>
+        <p class="amt-answer-context-summary">${escapeHtml(trustSummary)}.</p>
+        <p class="amt-answer-context-detail">${escapeHtml(contextSummary)}</p>
+      </div>
+      <div class="amt-answer-context-pills">
+        ${theme ? `<span class="amt-answer-pill">${escapeHtml(theme)}</span>` : ''}
+        <span class="amt-answer-pill">${citationCount > 0 ? 'Timestamped cues' : 'Reflective guidance'}</span>
+      </div>
+    `;
+    answerContext.style.display = '';
+  }
+
+  function saveLastSession(question, answer, themeHint) {
+    const theme = themeHint || inferTheme(question, answer) || '';
+    const excerpt = extractInsightExcerpt(answer);
+    saveLastSessionRecord({
+      question,
+      answer: answer.substring(0, 2000),
+      excerpt,
+      theme,
+      time: Date.now(),
+    });
+  }
+
+  function finalizeAnswerPresentation(question, answerText, citationsList, themeHint) {
+    const theme = themeHint || inferTheme(question, answerText);
+    saveLastSession(question, answerText, theme);
+    renderAnswerContext(question, answerText, citationsList);
+    renderJourneyCard();
+  }
+
+  function renderJourneyCard() {
+    if (!journeyCard) return;
+
+    const lastSession = loadLastSession() || {};
+    const lastQ = lastSession.question || '';
+    const lastA = lastSession.answer || lastSession.excerpt || '';
+    const lastTheme = lastSession.theme || '';
+    const lastTime = parseInt(lastSession.time || '0', 10);
+
+    const stats = loadStats();
+    const hasHistory = !!lastQ || stats.totalQuestions > 0;
+    if (!hasHistory) {
+      journeyCard.innerHTML = '';
+      journeyCard.style.display = 'none';
+      return;
+    }
+
+    const exploredThemes = stats.themesExplored || new Set();
+    const unexploredThemes = AMT_THEMES.filter(theme => !exploredThemes.has(theme));
+    const nextTheme = unexploredThemes[0] || lastTheme || AMT_THEMES[0];
+    const continueQuestion = lastQ || getThemeStarter(lastTheme || nextTheme);
+    const continueLabel = lastQ ? 'Continue where you left off' : 'Pick up your reflection';
+    const continueExcerpt = extractInsightExcerpt(lastA);
+    const nextPrompt = getThemeStarter(nextTheme);
+    const continuityLine = lastTheme
+      ? `Last time you explored ${lastTheme}.`
+      : `You have explored ${stats.themesExplored.size} theme${stats.themesExplored.size === 1 ? '' : 's'} so far.`;
+    const timeLine = lastTime ? `Last visit ${formatRelativeTime(lastTime)}.` : '';
+
+    journeyCard.innerHTML = `
+      <div class="amt-journey-card-inner">
+        <div class="amt-journey-card-copy">
+          <span class="amt-journey-kicker">Continue your reflection</span>
+          <h3 class="amt-journey-title">${escapeHtml(continueLabel)}</h3>
+          <p class="amt-journey-text">${escapeHtml(continuityLine)} ${escapeHtml(timeLine)}</p>
+          ${continueExcerpt ? `<p class="amt-journey-quote">“${escapeHtml(continueExcerpt)}”</p>` : ''}
+        </div>
+        <div class="amt-journey-actions">
+          <button type="button" class="amt-journey-btn amt-journey-btn-primary" data-q="${escapeHtml(continueQuestion)}">${escapeHtml(truncateText(continueQuestion, 82))}</button>
+          <button type="button" class="amt-journey-btn amt-journey-btn-secondary" data-q="${escapeHtml(nextPrompt)}">Explore next: ${escapeHtml(nextTheme)}</button>
+        </div>
+      </div>
+    `;
+    journeyCard.style.display = '';
+
+    journeyCard.querySelectorAll('.amt-journey-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        input.value = btn.dataset.q || '';
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 180);
+      });
+    });
   }
 
   function showRelatedQuestions(qaLogId) {
@@ -1128,49 +1356,7 @@
   // ========================================
 
   function addShareButton(question, answer) {
-    // Remove previous share button if exists
-    const existing = document.getElementById('amt-share-section');
-    if (existing) existing.remove();
-
-    const shareSection = document.createElement('div');
-    shareSection.id = 'amt-share-section';
-    shareSection.className = 'amt-share-section';
-
-    const shareText = `Q: ${question}\n\n${answer}\n\nAnswered by Ask Mirror Talk`;
-    const pageUrl = window.location.href;
-
-    shareSection.innerHTML = `
-      <button class="amt-share-btn" title="Share this answer">
-        📤 Share this insight
-      </button>
-    `;
-
-    // Insert after the response container
-    responseContainer.appendChild(shareSection);
-
-    shareSection.querySelector('.amt-share-btn').addEventListener('click', async () => {
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: `Mirror Talk: ${question}`,
-            text: shareText,
-            url: pageUrl
-          });
-        } catch (e) {
-          if (e.name !== 'AbortError') console.warn('Share failed:', e);
-        }
-      } else {
-        // Fallback: copy to clipboard
-        try {
-          await navigator.clipboard.writeText(`${shareText}\n\n${pageUrl}`);
-          const btn = shareSection.querySelector('.amt-share-btn');
-          btn.textContent = '✅ Copied to clipboard!';
-          setTimeout(() => { btn.innerHTML = '📤 Share this insight'; }, 2500);
-        } catch (e) {
-          console.warn('Copy failed:', e);
-        }
-      }
-    });
+    addShareButtonV2(question, answer);
   }
 
   // ========================================
@@ -1351,6 +1537,18 @@
       citations.innerHTML = '';
       citationsContainer.style.display = 'none';
       responseContainer.style.display = 'none';
+      if (answerContext) {
+        answerContext.innerHTML = '';
+        answerContext.style.display = 'none';
+      }
+      if (answerUtilities) {
+        answerUtilities.innerHTML = '';
+      }
+      if (citationTrustNote) {
+        citationTrustNote.innerHTML = '';
+        citationTrustNote.style.display = 'none';
+      }
+      lastShownCitations = [];
       if (followupsContainer) followupsContainer.style.display = 'none';
       if (suggestionsContainer) suggestionsContainer.style.display = '';
       if (topicsContainer) topicsContainer.style.display = '';
@@ -1371,14 +1569,6 @@
   // Session Persistence — restore last Q&A for returning visitors
   // ========================================
 
-  function saveLastSession(question, answer) {
-    try {
-      localStorage.setItem('amt_last_question', question);
-      localStorage.setItem('amt_last_answer', answer.substring(0, 2000));
-      localStorage.setItem('amt_last_time', Date.now().toString());
-    } catch (e) { /* localStorage not available */ }
-  }
-
   // Save session after successful answer — MutationObserver watches output for new content
   const sessionObserver = new MutationObserver(() => {
     const q = input.value.trim();
@@ -1389,84 +1579,7 @@
   });
   sessionObserver.observe(output, { childList: true, subtree: true, characterData: true });
 
-  // On page load, show a contextual "continue your journey" hint
-  try {
-    const stats = loadStats();
-    const lastQ = localStorage.getItem('amt_last_question');
-    const lastTime = parseInt(localStorage.getItem('amt_last_time') || '0');
-    const hoursAgo = (Date.now() - lastTime) / (1000 * 60 * 60);
-
-    // Find an unexplored theme to suggest
-    const exploredThemes = stats.themesExplored || new Set();
-    const unexploredThemes = AMT_THEMES.filter(t => !exploredThemes.has(t));
-
-    if (!input.value && unexploredThemes.length > 0 && stats.totalQuestions >= 1) {
-      // Pick a pseudo-random unexplored theme based on day index for consistency
-      const dayIndex = new Date().toISOString().slice(0, 10).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-      const theme = unexploredThemes[dayIndex % unexploredThemes.length];
-
-      // Find a matching starter question from QOTD pool or topic starters
-      const themeMap = {
-        'Self-worth': "How do I stop comparing myself to others?",
-        'Forgiveness': "What does it mean to truly forgive someone?",
-        'Inner peace': "How do I find peace when everything feels uncertain?",
-        'Purpose': "How do I find my purpose in life?",
-        'Surrender': "What does it look like to let go and surrender?",
-        'Leadership': "What makes a great leader?",
-        'Relationships': "What's the key to building healthy relationships?",
-        'Gratitude': "What role does gratitude play in overcoming hardship?",
-        'Boundaries': "How do I set boundaries without feeling guilty?",
-        'Healing': "How do I start the healing process?",
-        'Grief': "How do I deal with grief and loss?",
-        'Fear': "How can I overcome fear and self-doubt?",
-        'Parenting': "How do I raise kids who are emotionally resilient?",
-        'Growth': "What can I learn from failure?",
-        'Communication': "How do I have hard conversations without damaging the relationship?",
-        'Faith': "What role does faith play in personal growth?",
-        'Identity': "How do I discover my true identity?",
-        'Empowerment': "How do I find my voice when I've been silenced?",
-        'Transition': "How do I move forward after a major life change?",
-        'Community': "What does Mirror Talk teach about the power of community?",
-      };
-      const suggestedQ = themeMap[theme] || `What does Mirror Talk say about ${theme.toLowerCase()}?`;
-
-      const resumeHint = document.createElement('div');
-      resumeHint.className = 'amt-resume-hint';
-      resumeHint.innerHTML = `
-        <div class="amt-resume-hint-inner">
-          <span class="amt-resume-label">You haven't explored <strong>${theme}</strong> yet</span>
-          <button type="button" class="amt-resume-btn">
-            ${suggestedQ}
-          </button>
-        </div>
-      `;
-      form.insertBefore(resumeHint, form.firstChild);
-
-      resumeHint.querySelector('.amt-resume-btn').addEventListener('click', () => {
-        input.value = suggestedQ;
-        resumeHint.remove();
-        input.focus();
-        form.dispatchEvent(new Event('submit', { cancelable: true }));
-      });
-    } else if (lastQ && hoursAgo < 24 && !input.value && stats.totalQuestions === 0) {
-      // Fallback for users with no gamification data yet: show last question
-      const resumeHint = document.createElement('div');
-      resumeHint.className = 'amt-resume-hint';
-      resumeHint.innerHTML = `
-        <button type="button" class="amt-resume-btn">
-          ↩ Continue: "${lastQ.substring(0, 60)}${lastQ.length > 60 ? '…' : ''}"
-        </button>
-      `;
-      form.insertBefore(resumeHint, form.firstChild);
-
-      resumeHint.querySelector('.amt-resume-btn').addEventListener('click', () => {
-        input.value = lastQ;
-        resumeHint.remove();
-        input.focus();
-        form.dispatchEvent(new Event('submit', { cancelable: true }));
-      });
-    }
-  } catch (e) { /* localStorage not available */ }
+  renderJourneyCard();
 
   // ========================================
   // PWA Install Prompt — "Add to Home Screen"
@@ -2143,7 +2256,7 @@
       if (res.ok) {
         console.log('[Push] Subscription registered successfully');
         try {
-          localStorage.setItem('amt_push_subscribed', '1');
+          _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, true, 365);
           // Bell is already shown by initNotifManageBtn, just ensure it's visible
           const bellBtn = document.getElementById('amt-notif-manage-btn');
           if (bellBtn) bellBtn.style.display = '';
@@ -2198,7 +2311,7 @@
       console.warn('[Push] Unsubscribe error:', err);
     } finally {
       try {
-        localStorage.removeItem('amt_push_subscribed');
+        _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, false, 365);
         localStorage.removeItem('amt_notif_dismiss_count');
         localStorage.removeItem('amt_notif_dismissed_permanent');
       } catch (e) {}
@@ -2361,7 +2474,8 @@
     
     // Show bell if user has visited before OR is in standalone mode (PWA installed)
     try {
-      const hasVisited = localStorage.getItem('amt_last_question');
+      const lastSession = loadLastSession();
+      const hasVisited = !!(lastSession && lastSession.question);
       if ((hasVisited || isStandalone) && hasStatsBar) {
         btn.style.display = '';
       }
@@ -2370,7 +2484,7 @@
     btn.addEventListener('click', () => {
       console.log('[Bell] Notification bell clicked');
       try {
-        const isSubscribed = localStorage.getItem('amt_push_subscribed');
+        const isSubscribed = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
         console.log('[Bell] Subscribed status:', isSubscribed);
         if (isSubscribed) {
           // User is subscribed — show management panel
@@ -2394,7 +2508,7 @@
   // The install banner is separate and handled by 'beforeinstallprompt'.
   setTimeout(() => {
     try {
-      const alreadySubscribed = localStorage.getItem('amt_push_subscribed');
+      const alreadySubscribed = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
 
       if (!alreadySubscribed) {
         showNotificationOptIn();
@@ -2402,7 +2516,8 @@
     } catch (e) {}
   }, (() => {
     try {
-      const isReturning = localStorage.getItem('amt_last_question') ||
+      const lastSession = loadLastSession();
+      const isReturning = (lastSession && lastSession.question) ||
                           window.matchMedia('(display-mode: standalone)').matches;
       return isReturning ? 5000 : 15000;
     } catch (e) { return 10000; }
@@ -2412,15 +2527,20 @@
   // Gamification — Streak, Badges, Explorer
   // ========================================
 
+  const ACTIVITY_LOG_KEY = 'amt_activity_log';
+
   const AMT_BADGES = [
     { id: 'first_step',   emoji: '🌱', name: 'First Step',         desc: 'Asked your first question',              check: s => s.totalQuestions >= 1 },
     { id: 'curious',      emoji: '🔍', name: 'Curious Mind',        desc: 'Asked 10 questions',                     check: s => s.totalQuestions >= 10 },
     { id: 'streak_3',     emoji: '🔥', name: 'On Fire',             desc: 'Kept a 3-day streak',                    check: s => s.maxStreak >= 3 },
     { id: 'streak_7',     emoji: '💫', name: 'Week Warrior',        desc: 'Kept a 7-day streak',                    check: s => s.maxStreak >= 7 },
+    { id: 'streak_14',    emoji: '🌟', name: 'Steady Heart',        desc: 'Kept a 14-day streak',                   check: s => s.maxStreak >= 14 },
     { id: 'streak_30',    emoji: '💎', name: 'Devoted',             desc: 'Kept a 30-day streak',                   check: s => s.maxStreak >= 30 },
     { id: 'explorer',     emoji: '🗺️', name: 'Explorer',            desc: 'Explored 5 different topics',            check: s => s.themesExplored.size >= 5 },
     { id: 'deep_diver',   emoji: '⚡', name: 'Deep Diver',          desc: 'Clicked a podcast citation',             check: s => s.citationsClicked >= 1 },
     { id: 'sharer',       emoji: '📤', name: 'Sharer',              desc: 'Shared an insight',                      check: s => s.sharesCount >= 1 },
+    { id: 'guide',        emoji: '🫶', name: 'Guide',               desc: 'Shared 3 reflections',                   check: s => s.sharesCount >= 3 },
+    { id: 'collector',    emoji: '🔖', name: 'Collector',           desc: 'Saved 5 insights',                       check: s => s.insightsSaved >= 5 },
     { id: 'night_owl',    emoji: '🌙', name: 'Night Owl',           desc: 'Asked a question after 10pm',            check: s => s.nightOwl },
     { id: 'wisdom_seeker',emoji: '📖', name: 'Wisdom Seeker',       desc: 'Asked 25 questions',                     check: s => s.totalQuestions >= 25 },
     { id: 'deep_session', emoji: '🌊', name: 'Deep Session',        desc: 'Asked 3 questions in a single day',      check: s => (s.dailyQuestions || 0) >= 3 },
@@ -2434,6 +2554,13 @@
     'Grief','Fear','Parenting','Growth','Communication',
     'Faith','Identity','Empowerment','Transition','Community',
   ];
+
+  const LAST_SESSION_KEY = 'amt_last_session';
+  const LAST_SESSION_COOKIE_KEY = 'amt_ls';
+  const INSIGHTS_COOKIE_KEY = 'amt_ix';
+  const REFLECTION_NOTES_COOKIE_KEY = 'amt_rn';
+  const ACTIVITY_LOG_COOKIE_KEY = 'amt_ax';
+  const PUSH_SUBSCRIBED_COOKIE_KEY = 'amt_ps';
 
   // ── Cookie helpers for cross-PWA-reinstall backup ────────────────────────
   // localStorage is wiped on iOS when the user deletes the PWA from homescreen.
@@ -2452,6 +2579,102 @@
       const m = document.cookie.match(re);
       return m ? decodeURIComponent(m[1]) : null;
     } catch (e) { return null; }
+  }
+  function _cookieDelete(name) {
+    try {
+      document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    } catch (e) {}
+  }
+  function _loadMirroredJson(localKey, cookieKey, fallback) {
+    try {
+      const raw = localStorage.getItem(localKey);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    try {
+      const cookieRaw = _cookieGet(cookieKey);
+      if (!cookieRaw) return fallback;
+      const parsed = JSON.parse(cookieRaw);
+      try { localStorage.setItem(localKey, cookieRaw); } catch (e) {}
+      return parsed;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function _loadMirroredFlag(localKey, cookieKey) {
+    try {
+      if (localStorage.getItem(localKey)) return true;
+    } catch (e) {}
+    try {
+      const cookieValue = _cookieGet(cookieKey);
+      if (!cookieValue) return false;
+      try { localStorage.setItem(localKey, cookieValue); } catch (e) {}
+      return cookieValue === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+  function _saveMirroredFlag(localKey, cookieKey, enabled, days) {
+    try {
+      if (enabled) {
+        localStorage.setItem(localKey, '1');
+        _cookieSet(cookieKey, '1', days || 365);
+      } else {
+        localStorage.removeItem(localKey);
+        _cookieDelete(cookieKey);
+      }
+    } catch (e) {}
+  }
+  function clampText(text, maxLen) {
+    return String(text || '').trim().slice(0, maxLen);
+  }
+  function compactLastSessionRecord(record) {
+    if (!record) return null;
+    return {
+      question: clampText(record.question, 180),
+      answer: clampText(record.answer, 600),
+      excerpt: clampText(record.excerpt, 220),
+      theme: clampText(record.theme, 60),
+      time: Number(record.time || Date.now()),
+    };
+  }
+  function loadLastSession() {
+    return _loadMirroredJson(LAST_SESSION_KEY, LAST_SESSION_COOKIE_KEY, null);
+  }
+  function saveLastSessionRecord(record) {
+    const compact = compactLastSessionRecord(record);
+    if (!compact) return;
+    try { localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(compact)); } catch (e) {}
+    try { _cookieSet(LAST_SESSION_COOKIE_KEY, JSON.stringify(compact), 365); } catch (e) {}
+    try {
+      localStorage.setItem('amt_last_question', compact.question);
+      localStorage.setItem('amt_last_answer', compact.answer);
+      localStorage.setItem('amt_last_excerpt', compact.excerpt);
+      localStorage.setItem('amt_last_time', String(compact.time));
+      if (compact.theme) localStorage.setItem('amt_last_theme', compact.theme);
+    } catch (e) {}
+  }
+  function compactInsightRecordForBackup(insight) {
+    const normalized = normalizeInsightRecord(insight);
+    return {
+      question: clampText(normalized.question, 120),
+      answer: '',
+      excerpt: clampText(normalized.excerpt, 180),
+      theme: clampText(normalized.theme, 40),
+      savedAt: normalized.savedAt,
+    };
+  }
+  function loadReflectionNotes() {
+    return _loadMirroredJson('amt_reflect_notes', REFLECTION_NOTES_COOKIE_KEY, []);
+  }
+  function saveReflectionNotes(notes) {
+    const allNotes = Array.isArray(notes) ? notes.slice(0, 50) : [];
+    const backup = allNotes.slice(0, 8).map(entry => ({
+      prompt: clampText(entry && entry.prompt, 120),
+      note: clampText(entry && entry.note, 280),
+      savedAt: Number((entry && entry.savedAt) || Date.now()),
+    }));
+    try { localStorage.setItem('amt_reflect_notes', JSON.stringify(allNotes)); } catch (e) {}
+    try { _cookieSet(REFLECTION_NOTES_COOKIE_KEY, JSON.stringify(backup), 365); } catch (e) {}
   }
 
   function loadStats() {
@@ -2477,6 +2700,8 @@
       earnedBadges:     new Set(),
       citationsClicked: 0,
       sharesCount:      0,
+      insightsSaved:    0,
+      lastReviveDate:   null,
       nightOwl:         false,
       dailyQuestions:   0,      // questions asked on lastSessionDate
       lastSessionDate:  null,   // 'YYYY-MM-DD' — tracks which day dailyQuestions counts
@@ -2496,7 +2721,84 @@
   }
 
   function todayStr() {
-    return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    return formatLocalDate(new Date());
+  }
+
+  function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function addLocalDays(dayStr, deltaDays) {
+    const base = parseDayStamp(dayStr);
+    if (base == null) return null;
+    const date = new Date(base);
+    date.setUTCDate(date.getUTCDate() + deltaDays);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseDayStamp(dayStr) {
+    if (!dayStr) return null;
+    const parts = String(dayStr).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+    return Date.UTC(parts[0], parts[1] - 1, parts[2]);
+  }
+
+  function dayDiff(fromDay, toDay) {
+    const fromMs = parseDayStamp(fromDay);
+    const toMs = parseDayStamp(toDay);
+    if (fromMs == null || toMs == null) return null;
+    return Math.round((toMs - fromMs) / 86400000);
+  }
+
+  function loadActivityLog() {
+    return _loadMirroredJson(ACTIVITY_LOG_KEY, ACTIVITY_LOG_COOKIE_KEY, []);
+  }
+
+  function saveActivityLog(entries) {
+    const fullEntries = Array.isArray(entries) ? entries.slice(-180) : [];
+    const backupEntries = fullEntries.slice(-21).map(entry => ({
+      type: clampText(entry.type, 24),
+      day: clampText(entry.day, 10),
+      ts: Number(entry.ts || Date.now()),
+      theme: clampText(entry.theme, 40),
+    }));
+    try { localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(fullEntries)); } catch (e) {}
+    try { _cookieSet(ACTIVITY_LOG_COOKIE_KEY, JSON.stringify(backupEntries), 365); } catch (e) {}
+  }
+
+  function logActivity(type, payload) {
+    try {
+      const entries = loadActivityLog();
+      entries.push(Object.assign({
+        type,
+        ts: Date.now(),
+        day: todayStr()
+      }, payload || {}));
+      saveActivityLog(entries);
+    } catch (e) {}
+  }
+
+  function canOfferStreakRevive(stats) {
+    if (!stats || !stats.currentStreak || stats.currentStreak < 3 || !stats.lastActiveDate) return false;
+    if (stats.lastActiveDate === todayStr()) return false;
+    if (dayDiff(stats.lastActiveDate, todayStr()) !== 2) return false;
+    if (stats.lastReviveDate && dayDiff(stats.lastReviveDate, todayStr()) !== null && dayDiff(stats.lastReviveDate, todayStr()) < 14) return false;
+    return true;
+  }
+
+  function shouldConsumeStreakRevive(stats) {
+    if (!canOfferStreakRevive(stats)) return false;
+    try {
+      return sessionStorage.getItem('amt_pending_streak_revive') === '1';
+    } catch (e) {
+      return false;
+    }
   }
 
   function recordQuestion(stats, themeHint, questionText) {
@@ -2504,21 +2806,27 @@
     const last  = stats.lastActiveDate;
 
     if (last !== today) {
-      // Check streak continuity
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yStr = yesterday.toISOString().slice(0, 10);
-
-      if (last === yStr) {
+      if (shouldConsumeStreakRevive(stats)) {
         stats.currentStreak += 1;
-      } else if (last === null) {
-        stats.currentStreak = 1;
+        stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
+        stats.lastActiveDate = today;
+        stats.lastReviveDate = today;
+        try { sessionStorage.removeItem('amt_pending_streak_revive'); } catch (e) {}
       } else {
-        // Streak broken
-        stats.currentStreak = 1;
+      // Check streak continuity
+        const yStr = addLocalDays(today, -1);
+
+        if (last === yStr) {
+          stats.currentStreak += 1;
+        } else if (last === null) {
+          stats.currentStreak = 1;
+        } else {
+          // Streak broken
+          stats.currentStreak = 1;
+        }
+        stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
+        stats.lastActiveDate = today;
       }
-      stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak);
-      stats.lastActiveDate = today;
     }
 
     stats.totalQuestions += 1;
@@ -2563,6 +2871,354 @@
     return newBadges;
   }
 
+  function getNextUnlocks(stats) {
+    const candidates = [];
+
+    const streakGoals = [3, 7, 14, 30];
+    const nextStreakGoal = streakGoals.find(goal => stats.maxStreak < goal);
+    if (nextStreakGoal) {
+      candidates.push({
+        id: 'streak',
+        label: `${nextStreakGoal - stats.maxStreak} more day${nextStreakGoal - stats.maxStreak === 1 ? '' : 's'} for your next streak badge`,
+        detail: `Next streak reward at ${nextStreakGoal} days`,
+        current: stats.maxStreak,
+        target: nextStreakGoal,
+        accent: 'gold'
+      });
+    }
+
+    if (stats.totalQuestions < 25) {
+      const target = stats.totalQuestions < 10 ? 10 : 25;
+      candidates.push({
+        id: 'questions',
+        label: `${target - stats.totalQuestions} more question${target - stats.totalQuestions === 1 ? '' : 's'} to reach ${target}`,
+        detail: target === 10 ? 'Unlock Curious Mind' : 'Unlock Wisdom Seeker',
+        current: stats.totalQuestions,
+        target,
+        accent: 'rose'
+      });
+    }
+
+    if (stats.themesExplored.size < 20) {
+      const target = stats.themesExplored.size < 5 ? 5 : 20;
+      candidates.push({
+        id: 'themes',
+        label: `${target - stats.themesExplored.size} more theme${target - stats.themesExplored.size === 1 ? '' : 's'} to explore`,
+        detail: target === 5 ? 'Unlock Explorer' : 'Unlock Completionist',
+        current: stats.themesExplored.size,
+        target,
+        accent: 'teal'
+      });
+    }
+
+    if (stats.insightsSaved < 5) {
+      candidates.push({
+        id: 'insights',
+        label: `${5 - stats.insightsSaved} more saved insight${5 - stats.insightsSaved === 1 ? '' : 's'} for Collector`,
+        detail: 'Build your private reflection vault',
+        current: stats.insightsSaved,
+        target: 5,
+        accent: 'ink'
+      });
+    }
+
+    return candidates.slice(0, 3);
+  }
+
+  function getDailyMomentumText(stats) {
+    const askedToday = stats.lastSessionDate === todayStr() ? (stats.dailyQuestions || 0) : 0;
+    if (askedToday === 0) {
+      return stats.currentStreak > 0
+        ? `Ask one question today to protect your ${stats.currentStreak}-day streak.`
+        : 'Ask one thoughtful question to begin your rhythm.';
+    }
+    if (askedToday < 3) {
+      return `${3 - askedToday} more question${3 - askedToday === 1 ? '' : 's'} today unlocks a Deep Session celebration.`;
+    }
+    return `Today already counts as a deep session with ${askedToday} question${askedToday === 1 ? '' : 's'}.`;
+  }
+
+  function trackRewardEvent(kind) {
+    try {
+      const s = loadStats();
+      if (kind === 'share') {
+        s.sharesCount = (s.sharesCount || 0) + 1;
+        logActivity('share');
+      } else if (kind === 'insight_save') {
+        s.insightsSaved = (s.insightsSaved || 0) + 1;
+        logActivity('insight_save');
+      } else {
+        return;
+      }
+
+      const newBadges = checkAndAwardBadges(s);
+      saveStats(s);
+      renderStatsBar(s);
+      renderWeeklyRecap();
+      newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
+    } catch (e) {}
+  }
+
+  function renderStreakRevivalCard(stats) {
+    if (!streakRevivalCard) return;
+
+    try {
+      if (sessionStorage.getItem('amt_streak_revive_dismissed') === todayStr()) {
+        streakRevivalCard.innerHTML = '';
+        streakRevivalCard.style.display = 'none';
+        return;
+      }
+    } catch (e) {}
+
+    if (!canOfferStreakRevive(stats)) {
+      streakRevivalCard.innerHTML = '';
+      streakRevivalCard.style.display = 'none';
+      return;
+    }
+
+    streakRevivalCard.innerHTML = `
+      <div class="amt-streak-revival-inner">
+        <div class="amt-streak-revival-copy">
+          <span class="amt-streak-revival-kicker">Reflection Pass</span>
+          <h3 class="amt-streak-revival-title">Your ${stats.currentStreak}-day streak can still be restored.</h3>
+          <p class="amt-streak-revival-text">Ask one question today and we’ll treat it as a graceful return, not a reset. This recovery pass refreshes every 14 days.</p>
+        </div>
+        <div class="amt-streak-revival-actions">
+          <button type="button" class="amt-streak-revival-btn amt-streak-revival-btn-primary">Restore my streak</button>
+          <button type="button" class="amt-streak-revival-btn amt-streak-revival-btn-secondary">Not today</button>
+        </div>
+      </div>
+    `;
+    streakRevivalCard.style.display = '';
+
+    streakRevivalCard.querySelector('.amt-streak-revival-btn-primary').addEventListener('click', () => {
+      try { sessionStorage.setItem('amt_pending_streak_revive', '1'); } catch (e) {}
+      input.focus();
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    streakRevivalCard.querySelector('.amt-streak-revival-btn-secondary').addEventListener('click', () => {
+      streakRevivalCard.style.display = 'none';
+      try { sessionStorage.setItem('amt_streak_revive_dismissed', todayStr()); } catch (e) {}
+    });
+  }
+
+  function getWeeklyRecapData() {
+    const recentEntries = loadActivityLog().filter(entry => entry && entry.ts && entry.ts >= (Date.now() - (7 * 86400000)));
+    if (!recentEntries.length) {
+      return null;
+    }
+
+    const questionEntries = recentEntries.filter(entry => entry.type === 'question');
+    const savedEntries = recentEntries.filter(entry => entry.type === 'insight_save');
+    const shareEntries = recentEntries.filter(entry => entry.type === 'share');
+    const themeCounts = {};
+    questionEntries.forEach(entry => {
+      if (entry.theme) themeCounts[entry.theme] = (themeCounts[entry.theme] || 0) + 1;
+    });
+    const topTheme = Object.entries(themeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const dayCounts = {};
+    recentEntries.forEach(entry => {
+      if (entry.day) dayCounts[entry.day] = (dayCounts[entry.day] || 0) + 1;
+    });
+    const strongestDayCount = Math.max(0, ...Object.values(dayCounts));
+
+    const latestSavedInsight = loadInsights()
+      .map(normalizeInsightRecord)
+      .filter(ins => ins.savedAt >= (Date.now() - (7 * 86400000)))
+      .sort((a, b) => b.savedAt - a.savedAt)[0];
+
+    const recapPrompt = topTheme
+      ? getThemeStarter(topTheme)
+      : 'What do I need most in this season of my life?';
+
+    return {
+      questionCount: questionEntries.length,
+      savedCount: savedEntries.length,
+      shareCount: shareEntries.length,
+      topTheme,
+      strongestDayCount,
+      latestSavedInsight,
+      recapPrompt
+    };
+  }
+
+  function buildWeeklyRecapShareCard(recap) {
+    const data = recap || getWeeklyRecapData();
+    if (!data) return null;
+
+    const W = 1200;
+    const H = 1500;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, '#eef8f5');
+    grad.addColorStop(0.55, '#e4f1ed');
+    grad.addColorStop(1, '#dbe8e4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(48,84,77,0.03)';
+    for (let i = 0; i < 3200; i++) {
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
+    }
+
+    ctx.strokeStyle = 'rgba(72,119,111,0.24)';
+    ctx.lineWidth = 4;
+    _roundRect(ctx, 44, 44, W - 88, H - 88, 30);
+    ctx.stroke();
+
+    ctx.fillStyle = '#48776f';
+    ctx.font = '600 30px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ASK MIRROR TALK', W / 2, 126);
+
+    ctx.fillStyle = '#2e2a24';
+    ctx.font = '700 68px Georgia, serif';
+    const headline = data.topTheme
+      ? `This week I kept returning to ${data.topTheme}.`
+      : 'This week I kept returning to reflection.';
+    wrapCanvasText(ctx, headline, 150, 238, 900, 86, 4);
+
+    const metrics = [
+      { label: 'Questions', value: data.questionCount },
+      { label: 'Saved', value: data.savedCount },
+      { label: 'Shared', value: data.shareCount }
+    ];
+    const cardY = 520;
+    const cardW = 250;
+    const gap = 28;
+    const startX = (W - (metrics.length * cardW + (metrics.length - 1) * gap)) / 2;
+    metrics.forEach((metric, index) => {
+      const x = startX + index * (cardW + gap);
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      _roundRect(ctx, x, cardY, cardW, 150, 24);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(72,119,111,0.18)';
+      ctx.lineWidth = 2;
+      _roundRect(ctx, x, cardY, cardW, 150, 24);
+      ctx.stroke();
+
+      ctx.fillStyle = '#48776f';
+      ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(metric.label.toUpperCase(), x + (cardW / 2), cardY + 42);
+
+      ctx.fillStyle = '#2e2a24';
+      ctx.font = '700 62px Georgia, serif';
+      ctx.fillText(String(metric.value), x + (cardW / 2), cardY + 106);
+    });
+
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    _roundRect(ctx, 108, 758, W - 216, 458, 34);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(72,119,111,0.18)';
+    ctx.lineWidth = 2;
+    _roundRect(ctx, 108, 758, W - 216, 458, 34);
+    ctx.stroke();
+
+    const subline = data.strongestDayCount >= 3
+      ? `Strongest day: ${data.strongestDayCount} moments of reflection`
+      : 'Small consistent returns are building momentum';
+    ctx.fillStyle = '#48776f';
+    ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(subline, W / 2, 826);
+
+    if (data.latestSavedInsight) {
+      ctx.fillStyle = '#355750';
+      ctx.font = '82px Georgia, serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('“', 160, 920);
+
+      ctx.fillStyle = '#2e2a24';
+      ctx.font = '500 40px Georgia, serif';
+      wrapCanvasText(ctx, data.latestSavedInsight.excerpt, 160, 970, W - 320, 58, 5);
+    }
+
+    ctx.fillStyle = '#2e2a24';
+    ctx.font = '600 30px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1328);
+
+    ctx.fillStyle = '#48776f';
+    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('A week of reflection, saved and shared through Mirror Talk.', W / 2, 1372);
+
+    return canvas.toDataURL('image/png');
+  }
+
+  function shareWeeklyRecapArtifact(recap) {
+    const data = recap || getWeeklyRecapData();
+    if (!data) return;
+
+    const dataUrl = buildWeeklyRecapShareCard(data);
+    const caption = data.topTheme
+      ? `My Ask Mirror Talk weekly recap: ${data.questionCount} questions, ${data.savedCount} saved insights, and a week centered on ${data.topTheme}.`
+      : `My Ask Mirror Talk weekly recap: ${data.questionCount} questions, ${data.savedCount} saved insights, and a stronger reflection rhythm.`;
+    showShareModal(dataUrl, `${caption}\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`, {
+      title: 'Share your weekly recap',
+      hint: 'Turn your week of reflection into a premium card that invites others into the experience.',
+      filename: 'mirror-talk-weekly-recap.png'
+    });
+  }
+
+  function renderWeeklyRecap() {
+    if (!weeklyRecapCard) return;
+
+    const recap = getWeeklyRecapData();
+    if (!recap) {
+      weeklyRecapCard.innerHTML = '';
+      weeklyRecapCard.style.display = 'none';
+      return;
+    }
+
+    weeklyRecapCard.innerHTML = `
+      <div class="amt-weekly-recap-inner">
+        <div class="amt-weekly-recap-copy">
+          <span class="amt-weekly-recap-kicker">Weekly recap</span>
+          <h3 class="amt-weekly-recap-title">${recap.topTheme ? `You kept returning to ${escapeHtml(recap.topTheme)}.` : 'Your reflection rhythm is taking shape.'}</h3>
+          <p class="amt-weekly-recap-text">${recap.questionCount} question${recap.questionCount === 1 ? '' : 's'} asked, ${recap.savedCount} insight${recap.savedCount === 1 ? '' : 's'} saved, ${recap.shareCount} reflection${recap.shareCount === 1 ? '' : 's'} shared in the last 7 days.</p>
+          <p class="amt-weekly-recap-subtext">${recap.strongestDayCount >= 3 ? `Your strongest day held ${recap.strongestDayCount} moments of reflection.` : 'Small consistent returns are building momentum.'}</p>
+          ${recap.latestSavedInsight ? `<p class="amt-weekly-recap-quote">“${escapeHtml(recap.latestSavedInsight.excerpt)}”</p>` : ''}
+        </div>
+        <div class="amt-weekly-recap-actions">
+          <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-primary" data-q="${escapeHtml(recap.recapPrompt)}">${recap.topTheme ? `Continue with ${escapeHtml(recap.topTheme)}` : 'Continue reflecting'}</button>
+          <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-secondary">Open saved insights</button>
+          <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-share">Share this week</button>
+        </div>
+      </div>
+    `;
+    weeklyRecapCard.style.display = '';
+
+    const primaryBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-primary');
+    if (primaryBtn) {
+      primaryBtn.addEventListener('click', () => {
+        input.value = primaryBtn.dataset.q || recap.recapPrompt;
+        input.focus();
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+
+    const secondaryBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-secondary');
+    if (secondaryBtn) {
+      secondaryBtn.addEventListener('click', () => {
+        const btn = document.getElementById('amt-insights-btn');
+        if (btn) btn.click();
+      });
+    }
+
+    const shareBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-share');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        shareWeeklyRecapArtifact(recap);
+      });
+    }
+  }
+
   function renderStatsBar(stats) {
     const bar = document.getElementById('amt-stats-bar');
     if (!bar) return;
@@ -2598,12 +3254,58 @@
       btn.classList.add('amt-badges-btn-hint');
       btn.addEventListener('animationend', () => btn.classList.remove('amt-badges-btn-hint'), { once: true });
     }
+
+    let prompt = bar.querySelector('.amt-stats-prompt');
+    if (!prompt) {
+      prompt = document.createElement('div');
+      prompt.className = 'amt-stats-prompt';
+      bar.appendChild(prompt);
+    }
+    prompt.innerHTML = `
+      <span class="amt-stats-prompt-kicker">Next up</span>
+      <span class="amt-stats-prompt-text">${escapeHtml(getDailyMomentumText(stats))}</span>
+    `;
   }
 
   function renderBadgeShelf(stats) {
     const shelf = document.getElementById('amt-badge-shelf');
     if (!shelf) return;
     shelf.innerHTML = '';
+
+    const nextUnlocks = getNextUnlocks(stats);
+    const overview = document.createElement('div');
+    overview.className = 'amt-badge-overview';
+    overview.innerHTML = `
+      <div class="amt-badge-overview-copy">
+        <span class="amt-badge-overview-kicker">Your momentum</span>
+        <h4 class="amt-badge-overview-title">${escapeHtml(getDailyMomentumText(stats))}</h4>
+        <p class="amt-badge-overview-subtitle">${stats.currentStreak >= 1
+          ? `You are on a ${stats.currentStreak}-day streak with ${stats.earnedBadges.size} badge${stats.earnedBadges.size === 1 ? '' : 's'} earned.`
+          : `Your first streak starts the moment you ask today.`}</p>
+      </div>
+      <div class="amt-badge-overview-actions">
+        <button type="button" class="amt-share-progress-btn amt-share-progress-btn-primary">📊 Share my progress</button>
+        ${stats.currentStreak >= 3 ? `<button type="button" class="amt-share-progress-btn amt-share-progress-btn-secondary">🔥 Share my ${stats.currentStreak}-day streak</button>` : ''}
+      </div>
+    `;
+    shelf.appendChild(overview);
+
+    const unlockGrid = document.createElement('div');
+    unlockGrid.className = 'amt-next-unlocks';
+    unlockGrid.innerHTML = nextUnlocks.map(item => {
+      const pct = Math.max(0, Math.min(100, Math.round((item.current / item.target) * 100)));
+      return `
+        <div class="amt-next-unlock-card amt-next-unlock-${item.accent}">
+          <span class="amt-next-unlock-label">${escapeHtml(item.detail)}</span>
+          <strong class="amt-next-unlock-title">${escapeHtml(item.label)}</strong>
+          <div class="amt-next-unlock-meter"><span style="width:${pct}%"></span></div>
+        </div>
+      `;
+    }).join('');
+    if (nextUnlocks.length) shelf.appendChild(unlockGrid);
+
+    const badgeGrid = document.createElement('div');
+    badgeGrid.className = 'amt-badge-grid';
 
     for (const badge of AMT_BADGES) {
       const earned = stats.earnedBadges.has(badge.id);
@@ -2622,23 +3324,15 @@
         });
         el.appendChild(shareBtn);
       }
-      shelf.appendChild(el);
+      badgeGrid.appendChild(el);
     }
+    shelf.appendChild(badgeGrid);
 
-    // Add a "Share my progress" button at the bottom of the shelf
-    const progressBtn = document.createElement('button');
-    progressBtn.className = 'amt-share-progress-btn';
-    progressBtn.innerHTML = '📊 Share my progress';
-    progressBtn.addEventListener('click', () => shareMilestone(null, 'progress'));
-    shelf.appendChild(progressBtn);
+    const progressBtn = overview.querySelector('.amt-share-progress-btn-primary');
+    if (progressBtn) progressBtn.addEventListener('click', () => shareMilestone(null, 'progress'));
 
-    if (stats.currentStreak >= 3) {
-      const streakBtn = document.createElement('button');
-      streakBtn.className = 'amt-share-progress-btn';
-      streakBtn.innerHTML = `🔥 Share my ${stats.currentStreak}-day streak`;
-      streakBtn.addEventListener('click', () => shareMilestone(null, 'streak'));
-      shelf.appendChild(streakBtn);
-    }
+    const streakBtn = overview.querySelector('.amt-share-progress-btn-secondary');
+    if (streakBtn) streakBtn.addEventListener('click', () => shareMilestone(null, 'streak'));
   }
 
   // Confetti burst (lightweight, no library)
@@ -2733,11 +3427,15 @@
     let stats = loadStats();
     const prevStreak       = stats.currentStreak;
     const prevDailyCount   = stats.dailyQuestions || 0;
+    const reviveUsed       = shouldConsumeStreakRevive(stats);
 
     stats = recordQuestion(stats, themeHint, questionText);
+    logActivity('question', { theme: themeHint || inferTheme(questionText, '') || null });
     const newBadges = checkAndAwardBadges(stats);
     saveStats(stats);
     renderStatsBar(stats);
+    renderStreakRevivalCard(stats);
+    renderWeeklyRecap();
 
     // Toggle the questions-active glow when ≥ 3 questions asked today
     const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');
@@ -2745,9 +3443,16 @@
       questionsIcon.classList.toggle('amt-questions-active', stats.dailyQuestions >= 3);
     }
 
+    const reviveDelay = reviveUsed ? 4200 : 0;
+    if (reviveUsed) {
+      showMilestoneToast('✨', 'Streak restored', `Your reflection pass kept your ${stats.currentStreak}-day streak alive.`);
+    }
+
     // Streak milestone toast
     if (stats.currentStreak !== prevStreak && STREAK_MILESTONES.has(stats.currentStreak)) {
-      showMilestoneToast('🔥', `${stats.currentStreak}-day streak!`, 'Keep the wisdom flowing.');
+      setTimeout(() => {
+        showMilestoneToast('🔥', `${stats.currentStreak}-day streak!`, 'Keep the wisdom flowing.');
+      }, reviveDelay);
     }
 
     // Daily-depth milestone toast (fires only on the exact crossing, not every question after)
@@ -2757,13 +3462,14 @@
     ) {
       const toastData = dailyDepthToast(stats.dailyQuestions);
       if (toastData) {
-        const delay = STREAK_MILESTONES.has(stats.currentStreak) ? 4200 : 0;
+        const delay = reviveDelay + (STREAK_MILESTONES.has(stats.currentStreak) ? 4200 : 0);
         setTimeout(() => showMilestoneToast(toastData.emoji, toastData.headline, toastData.sub), delay);
       }
     }
 
     // New badge toasts (queue sequentially after any other toasts)
     const baseDelay = (
+      reviveDelay +
       (STREAK_MILESTONES.has(stats.currentStreak) && stats.currentStreak !== prevStreak ? 4200 : 0) +
       (DAILY_DEPTH_MILESTONES.has(stats.dailyQuestions) && stats.dailyQuestions !== prevDailyCount ? 4200 : 0)
     );
@@ -2791,19 +3497,6 @@
       try {
         const s = loadStats();
         s.citationsClicked = (s.citationsClicked || 0) + 1;
-        const newBadges = checkAndAwardBadges(s);
-        saveStats(s);
-        newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
-      } catch (e2) {}
-    }
-  });
-
-  // Track share button clicks for the Sharer badge
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('#amt-share-section')) {
-      try {
-        const s = loadStats();
-        s.sharesCount = (s.sharesCount || 0) + 1;
         const newBadges = checkAndAwardBadges(s);
         saveStats(s);
         newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
@@ -2975,6 +3668,8 @@
         questionsIcon.classList.add('amt-questions-active');
       }
     }
+    renderStreakRevivalCard(initStats);
+    renderWeeklyRecap();
   } catch (e) {}
 
   // ========================================
@@ -3160,16 +3855,21 @@
   /**
    * Trigger image download programmatically.
    */
-  function _downloadImage(dataUrl) {
+  function _downloadImage(dataUrl, filename) {
     const a = document.createElement('a');
     a.href = dataUrl;
-    a.download = 'mirror-talk-achievement.png';
+    a.download = filename || 'mirror-talk-achievement.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   }
 
-  function showShareModal(dataUrl, caption) {
+  function showShareModal(dataUrl, caption, options) {
+    const modalOptions = options || {};
+    const modalTitle = modalOptions.title || 'Share your achievement';
+    const modalHint = modalOptions.hint || 'Platform buttons download the image first — then attach it to your post.';
+    const downloadName = modalOptions.filename || 'mirror-talk-achievement.png';
+
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
     if (existing) existing.remove();
@@ -3196,18 +3896,18 @@
     modal.className = 'amt-share-card-modal';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', 'Share your badge');
+    modal.setAttribute('aria-label', modalTitle);
 
     modal.innerHTML = `
       <div class="amt-scm-backdrop"></div>
       <div class="amt-scm-panel">
         <button class="amt-scm-close" aria-label="Close">&times;</button>
-        <h3 class="amt-scm-title">Share your achievement 🎉</h3>
+        <h3 class="amt-scm-title">${escapeHtml(modalTitle)}</h3>
         <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
-        <p class="amt-scm-hint">Platform buttons download the image first — then attach it to your post.</p>
+        <p class="amt-scm-hint">${escapeHtml(modalHint)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
-          <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="mirror-talk-achievement.png">
+          <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">
             ⬇️ Download image
           </a>
           ${divider}
@@ -3235,10 +3935,18 @@
     requestAnimationFrame(() => modal.classList.add('amt-scm-visible'));
 
     const note = modal.querySelector('.amt-scm-platform-note');
+    let hasTrackedShare = false;
+
+    function markShareComplete() {
+      if (hasTrackedShare) return;
+      hasTrackedShare = true;
+      trackRewardEvent('share');
+    }
 
     // ── Helper: download image then open platform URL ──────────────────
     function downloadThenOpen(platformUrl, platformNote) {
-      _downloadImage(dataUrl);
+      _downloadImage(dataUrl, downloadName);
+      markShareComplete();
       note.textContent = platformNote;
       note.style.display = '';
       setTimeout(() => window.open(platformUrl, '_blank', 'noopener,noreferrer'), 400);
@@ -3259,17 +3967,20 @@
     if (canNativeShare) {
       modal.querySelector('#amt-scm-native-btn').addEventListener('click', async function() {
         try {
-          const file = await _dataUrlToFile(dataUrl, 'mirror-talk-achievement.png');
+          const file = await _dataUrlToFile(dataUrl, downloadName);
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], text: caption, url: pageUrl });
+            markShareComplete();
           } else {
             // canShare exists but files not supported — fall back to text-only share
             await navigator.share({ text: shareText });
+            markShareComplete();
           }
         } catch (err) {
           if (err.name !== 'AbortError') {
             // Fallback to download
-            _downloadImage(dataUrl);
+            _downloadImage(dataUrl, downloadName);
+            markShareComplete();
             note.textContent = '📥 Image saved — paste it into your app of choice.';
             note.style.display = '';
           }
@@ -3303,7 +4014,8 @@
 
     // ── Instagram ─────────────────────────────────────────────────────────
     modal.querySelector('.amt-scm-instagram').addEventListener('click', () => {
-      _downloadImage(dataUrl);
+      _downloadImage(dataUrl, downloadName);
+      markShareComplete();
       note.textContent = '📥 Image saved! Open Instagram, tap + and choose your downloaded image for a post or story.';
       note.style.display = '';
     });
@@ -3312,21 +4024,13 @@
     modal.querySelector('.amt-scm-copy').addEventListener('click', async function() {
       try {
         await navigator.clipboard.writeText(shareText);
+        markShareComplete();
         this.textContent = '✅ Copied!';
         setTimeout(() => { this.textContent = '📋 Copy text'; }, 2500);
       } catch (e) {
         this.textContent = '⚠️ Copy failed';
       }
     });
-
-    // Track share in gamification stats
-    try {
-      const s = loadStats();
-      s.sharesCount = (s.sharesCount || 0) + 1;
-      const newBadges = checkAndAwardBadges(s);
-      saveStats(s);
-      newBadges.forEach(b => showMilestoneToast(b.emoji, `Badge unlocked: ${b.name}`, b.desc));
-    } catch (e2) {}
   }
 
   /**
@@ -3351,6 +4055,134 @@
   // Override to attach a share button for badge toasts
   window._amtShareMilestone = shareMilestone; // expose for badge shelf buttons
 
+  function normalizeInsightRecord(insight) {
+    const question = String((insight && insight.question) || '').trim();
+    const answer = String((insight && insight.answer) || '').trim();
+    const theme = String((insight && insight.theme) || inferTheme(question, answer) || 'Reflection').trim();
+    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer) || truncateText(question, 180)).trim();
+
+    return {
+      question,
+      answer,
+      theme,
+      excerpt,
+      savedAt: (insight && insight.savedAt) || Date.now()
+    };
+  }
+
+  function buildInsightShareCard(insight) {
+    const normalized = normalizeInsightRecord(insight);
+    const W = 1200;
+    const H = 1500;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, '#f7f0e4');
+    grad.addColorStop(0.55, '#efe6d9');
+    grad.addColorStop(1, '#e7dccd');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(46,42,36,0.03)';
+    for (let i = 0; i < 3200; i++) {
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
+    }
+
+    ctx.strokeStyle = 'rgba(139,115,85,0.28)';
+    ctx.lineWidth = 4;
+    _roundRect(ctx, 44, 44, W - 88, H - 88, 30);
+    ctx.stroke();
+
+    ctx.fillStyle = '#8b7355';
+    ctx.font = '600 30px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ASK MIRROR TALK', W / 2, 126);
+
+    ctx.fillStyle = '#2e2a24';
+    ctx.font = '700 76px Georgia, serif';
+    wrapCanvasText(ctx, normalized.question, 170, 238, 860, 94, 4);
+
+    ctx.fillStyle = 'rgba(46,42,36,0.1)';
+    _roundRect(ctx, 150, 450, W - 300, 56, 28);
+    ctx.fill();
+    ctx.fillStyle = '#6b665d';
+    ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(normalized.theme, W / 2, 486);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    _roundRect(ctx, 108, 560, W - 216, 548, 34);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(139,115,85,0.18)';
+    ctx.lineWidth = 2;
+    _roundRect(ctx, 108, 560, W - 216, 548, 34);
+    ctx.stroke();
+
+    ctx.fillStyle = '#8b7355';
+    ctx.font = '88px Georgia, serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('“', 160, 664);
+
+    ctx.fillStyle = '#2e2a24';
+    ctx.font = '500 42px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, 160, 720, W - 320, 60, 7);
+
+    ctx.fillStyle = '#6b665d';
+    ctx.font = '500 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1188);
+
+    ctx.fillStyle = '#2e2a24';
+    ctx.font = '600 30px Georgia, serif';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1318);
+
+    ctx.fillStyle = '#8b7355';
+    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1368);
+
+    return canvas.toDataURL('image/png');
+  }
+
+  function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    const lines = [];
+    let currentLine = '';
+
+    words.forEach(word => {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+    if (currentLine) lines.push(currentLine);
+
+    const finalLines = lines.slice(0, maxLines);
+    if (lines.length > maxLines) {
+      finalLines[maxLines - 1] = truncateText(finalLines[maxLines - 1], Math.max(12, finalLines[maxLines - 1].length - 1));
+    }
+
+    ctx.textAlign = 'left';
+    finalLines.forEach((line, index) => {
+      ctx.fillText(line, x, startY + (index * lineHeight));
+    });
+  }
+
+  function shareInsightArtifact(insight) {
+    const normalized = normalizeInsightRecord(insight);
+    const dataUrl = buildInsightShareCard(normalized);
+    const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
+    showShareModal(dataUrl, caption, {
+      title: 'Share this reflection card',
+      hint: 'Download or share a beautifully formatted reflection inspired by your answer.',
+      filename: 'mirror-talk-reflection.png'
+    });
+  }
+
   // ========================================
   // FEATURE 1: Saved Answers — "My Insights"
   // ========================================
@@ -3358,13 +4190,14 @@
   const INSIGHTS_KEY = 'amt_saved_insights';
 
   function loadInsights() {
-    try {
-      return JSON.parse(localStorage.getItem(INSIGHTS_KEY) || '[]');
-    } catch (e) { return []; }
+    return _loadMirroredJson(INSIGHTS_KEY, INSIGHTS_COOKIE_KEY, []);
   }
 
   function saveInsights(arr) {
-    try { localStorage.setItem(INSIGHTS_KEY, JSON.stringify(arr.slice(0, 30))); } catch (e) {}
+    const insights = Array.isArray(arr) ? arr.slice(0, 30) : [];
+    const backup = insights.slice(0, 5).map(compactInsightRecordForBackup);
+    try { localStorage.setItem(INSIGHTS_KEY, JSON.stringify(insights)); } catch (e) {}
+    try { _cookieSet(INSIGHTS_COOKIE_KEY, JSON.stringify(backup), 365); } catch (e) {}
   }
 
   function addSaveInsightButton(question, answerText) {
@@ -3376,22 +4209,19 @@
     section.id = 'amt-save-insight-section';
     section.className = 'amt-save-insight-section';
 
-    const insights = loadInsights();
+    const normalizedInsight = normalizeInsightRecord({
+      question,
+      answer: answerText.substring(0, 1500),
+      theme: inferTheme(question, answerText),
+      savedAt: Date.now()
+    });
+    const insights = loadInsights().map(normalizeInsightRecord);
     const alreadySaved = insights.some(i => i.question === question);
 
     section.innerHTML = `<button type="button" class="amt-save-insight-btn" title="${alreadySaved ? 'Already saved' : 'Save this insight'}">
-      ${alreadySaved ? '🔖 Saved' : '🔖 Save insight'}
+      ${alreadySaved ? '🔖 Saved to your collection' : '🔖 Save to your collection'}
     </button>`;
-
-    // Insert after email section or share section
-    const emailSection = document.getElementById('amt-email-section');
-    const shareSection = document.getElementById('amt-share-section');
-    const anchor = emailSection || shareSection;
-    if (anchor && anchor.parentNode) {
-      anchor.parentNode.insertBefore(section, anchor.nextSibling);
-    } else {
-      responseContainer.appendChild(section);
-    }
+    getAnswerUtilitiesRoot().appendChild(section);
 
     const btn = section.querySelector('.amt-save-insight-btn');
     if (alreadySaved) {
@@ -3401,10 +4231,11 @@
 
     btn.addEventListener('click', () => {
       const allInsights = loadInsights();
-      allInsights.unshift({ question, answer: answerText.substring(0, 1500), savedAt: Date.now() });
+      allInsights.unshift(normalizedInsight);
       saveInsights(allInsights);
-      btn.textContent = '🔖 Saved!';
+      btn.textContent = '🔖 Saved to your collection';
       btn.disabled = true;
+      trackRewardEvent('insight_save');
       // Update the insights button badge
       updateInsightsBadge();
     });
@@ -3420,7 +4251,7 @@
   function renderInsightsPanel() {
     const panel = document.getElementById('amt-insights-panel');
     if (!panel) return;
-    const insights = loadInsights();
+    const insights = loadInsights().map(normalizeInsightRecord);
 
     if (insights.length === 0) {
       // Hide the panel — empty state is not shown inline, it only appears when
@@ -3438,12 +4269,16 @@
       <div class="amt-insights-list">
         ${insights.map((ins, idx) => `
           <div class="amt-insight-item" data-idx="${idx}">
+            <div class="amt-insight-topline">
+              <span class="amt-insight-theme">${escapeHtml(ins.theme)}</span>
+              <span class="amt-insight-date">${formatRelativeTime(ins.savedAt)}</span>
+            </div>
             <p class="amt-insight-question">${escapeHtml(ins.question)}</p>
-            <p class="amt-insight-answer">${escapeHtml(ins.answer.substring(0, 200))}${ins.answer.length > 200 ? '…' : ''}</p>
+            <p class="amt-insight-answer">“${escapeHtml(ins.excerpt)}”</p>
             <div class="amt-insight-meta">
-              <span class="amt-insight-date">${new Date(ins.savedAt).toLocaleDateString()}</span>
-              <button type="button" class="amt-insight-ask-btn" data-q="${ins.question.replace(/"/g,'&quot;')}">Ask again</button>
-              <button type="button" class="amt-insight-delete-btn" data-idx="${idx}" aria-label="Delete">🗑</button>
+              <button type="button" class="amt-insight-ask-btn" data-q="${ins.question.replace(/"/g,'&quot;')}">Revisit</button>
+              <button type="button" class="amt-insight-share-btn" data-idx="${idx}">Share card</button>
+              <button type="button" class="amt-insight-delete-btn" data-idx="${idx}" aria-label="Delete">Remove</button>
             </div>
           </div>
         `).join('')}
@@ -3462,6 +4297,13 @@
         input.focus();
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 200);
+      });
+    });
+
+    panel.querySelectorAll('.amt-insight-share-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        shareInsightArtifact(insights[idx]);
       });
     });
 
@@ -3509,6 +4351,7 @@
     try {
       const stats = loadStats();
       if (stats.currentStreak < 1) return; // no streak to protect
+      if (sessionStorage.getItem('amt_streak_protect_dismissed') === todayStr()) return;
       const today = todayStr();
       // Already asked today — no need to warn
       if (stats.lastActiveDate === today) return;
@@ -3523,7 +4366,7 @@
       banner.innerHTML = `
         <div class="amt-streak-protect-inner">
           <span class="amt-streak-protect-icon">🔥</span>
-          <span class="amt-streak-protect-text">Your <strong>${stats.currentStreak}-day streak</strong> ends at midnight — ask one question to keep it alive.</span>
+          <span class="amt-streak-protect-text">Your <strong>${stats.currentStreak}-day streak</strong> is still alive. Ask one question before midnight to protect it and keep your rhythm going.</span>
           <button type="button" class="amt-streak-protect-cta">Ask now</button>
           <button type="button" class="amt-streak-protect-dismiss" aria-label="Dismiss">✕</button>
         </div>
@@ -3538,7 +4381,7 @@
 
       banner.querySelector('.amt-streak-protect-dismiss').addEventListener('click', () => {
         banner.style.display = 'none';
-        try { sessionStorage.setItem('amt_streak_protect_dismissed', '1'); } catch (e) {}
+        try { sessionStorage.setItem('amt_streak_protect_dismissed', todayStr()); } catch (e) {}
       });
     } catch (e) {}
   })();
@@ -3592,9 +4435,9 @@
       const note = textarea.value.trim();
       if (!note) return;
       try {
-        const existing = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]');
+        const existing = loadReflectionNotes();
         existing.unshift({ note, prompt, savedAt: Date.now() });
-        localStorage.setItem('amt_reflect_notes', JSON.stringify(existing.slice(0, 50)));
+        saveReflectionNotes(existing);
       } catch (e) {}
       // Clear the textarea and show brief confirmation so the user can add another note
       textarea.value = '';
@@ -3657,18 +4500,27 @@
     shareSection.className = 'amt-share-section amt-share-section-v2';
 
     const pageUrl = 'https://mirrortalkpodcast.com/ask-mirror-talk';
-    const answerShare = `Q: ${question}\n\n${answerText.substring(0, 600)}\n\nAnswered by Ask Mirror Talk\n${pageUrl}`;
+    const reflectionInsight = normalizeInsightRecord({
+      question,
+      answer: answerText,
+      theme: inferTheme(question, answerText),
+      savedAt: Date.now()
+    });
     const referralShare = `I've been exploring "${question.substring(0, 80)}" on Mirror Talk — ask your own question:\n${pageUrl}`;
 
     shareSection.innerHTML = `
+      <div class="amt-share-intro">
+        <span class="amt-share-kicker">Keep or pass on what mattered</span>
+        <p class="amt-share-caption">Share a premium reflection card or invite someone into the Mirror Talk experience.</p>
+      </div>
       <div class="amt-share-toggle-row">
-        <button type="button" class="amt-share-mode-btn amt-share-mode-active" data-mode="answer">📤 Share Answer</button>
+        <button type="button" class="amt-share-mode-btn amt-share-mode-active" data-mode="answer">📤 Share Card</button>
         <button type="button" class="amt-share-mode-btn" data-mode="invite">🤝 Invite a Friend</button>
       </div>
-      <button type="button" class="amt-share-btn" data-mode="answer">Share this insight</button>
+      <button type="button" class="amt-share-btn" data-mode="answer">Share this reflection card</button>
     `;
 
-    responseContainer.appendChild(shareSection);
+    getAnswerUtilitiesRoot().appendChild(shareSection);
 
     shareSection.querySelectorAll('.amt-share-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -3676,24 +4528,31 @@
         btn.classList.add('amt-share-mode-active');
         const mainBtn = shareSection.querySelector('.amt-share-btn');
         mainBtn.dataset.mode = btn.dataset.mode;
-        mainBtn.textContent = btn.dataset.mode === 'answer' ? 'Share this insight' : 'Invite a friend';
+        mainBtn.textContent = btn.dataset.mode === 'answer' ? 'Share this reflection card' : 'Invite a friend';
       });
     });
 
     shareSection.querySelector('.amt-share-btn').addEventListener('click', async function() {
       const mode = this.dataset.mode;
-      const textToShare = mode === 'invite' ? referralShare : answerShare;
-      const titleToShare = mode === 'invite' ? 'Ask Mirror Talk' : `Mirror Talk: ${question.substring(0, 60)}`;
+      if (mode === 'answer') {
+        shareInsightArtifact(reflectionInsight);
+        return;
+      }
+
+      const textToShare = referralShare;
+      const titleToShare = 'Ask Mirror Talk';
 
       if (navigator.share) {
         try {
           await navigator.share({ title: titleToShare, text: textToShare, url: pageUrl });
+          trackRewardEvent('share');
         } catch (e) {
           if (e.name !== 'AbortError') console.warn('Share failed:', e);
         }
       } else {
         try {
           await navigator.clipboard.writeText(textToShare);
+          trackRewardEvent('share');
           const btn = this;
           const origText = btn.textContent;
           btn.textContent = '✅ Copied!';
@@ -3783,8 +4642,7 @@
     }
 
     function openJournal() {
-      let notes = [];
-      try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+      let notes = loadReflectionNotes();
 
       const pageUrl = window.location.href;
 
@@ -3810,7 +4668,7 @@
         <div class="amt-journal-panel">
           <button class="amt-journal-close" aria-label="Close">✕</button>
           <h2 class="amt-journal-title">📓 My Reflection Notes</h2>
-          <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private, stored on this device</p>
+          <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private on this device, with browser recovery for reinstall</p>
           <div class="amt-journal-list">${noteItems}</div>
         </div>
       `;
@@ -3832,8 +4690,7 @@
       modal.querySelectorAll('.amt-journal-edit-btn').forEach(editBtn => {
         editBtn.addEventListener('click', () => {
           const idx = parseInt(editBtn.dataset.index, 10);
-          let notes = [];
-          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          let notes = loadReflectionNotes();
           const entry = notes[idx];
           if (!entry) return;
 
@@ -3863,10 +4720,9 @@
           editWrap.querySelector('.amt-journal-edit-save-btn').addEventListener('click', () => {
             const newText = textarea.value.trim();
             if (!newText) return;
-            let notes = [];
-            try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+            let notes = loadReflectionNotes();
             notes[idx] = { ...notes[idx], note: newText };
-            try { localStorage.setItem('amt_reflect_notes', JSON.stringify(notes)); } catch (e) {}
+            saveReflectionNotes(notes);
             close();
             setTimeout(() => openJournal(), 310);
           });
@@ -3883,8 +4739,7 @@
       modal.querySelectorAll('.amt-journal-share-btn').forEach(shareBtn => {
         shareBtn.addEventListener('click', async () => {
           const idx = parseInt(shareBtn.dataset.index, 10);
-          let notes = [];
-          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          let notes = loadReflectionNotes();
           const entry = notes[idx];
           if (!entry) return;
 
@@ -3909,10 +4764,9 @@
       modal.querySelectorAll('.amt-journal-delete-btn').forEach(delBtn => {
         delBtn.addEventListener('click', () => {
           const idx = parseInt(delBtn.dataset.index, 10);
-          let notes = [];
-          try { notes = JSON.parse(localStorage.getItem('amt_reflect_notes') || '[]'); } catch (e) {}
+          let notes = loadReflectionNotes();
           notes.splice(idx, 1);
-          try { localStorage.setItem('amt_reflect_notes', JSON.stringify(notes)); } catch (e) {}
+          saveReflectionNotes(notes);
           // Re-render
           close();
           setTimeout(() => openJournal(), 310);

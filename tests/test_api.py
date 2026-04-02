@@ -7,7 +7,7 @@ import sys
 
 BASE_URL = "https://ask-mirror-talk-production.up.railway.app"
 
-def test_endpoint(method, endpoint, data=None, description=""):
+def exercise_endpoint(method, endpoint, data=None, description=""):
     """Test a single endpoint."""
     url = f"{BASE_URL}{endpoint}"
     print(f"\n{'='*60}")
@@ -44,21 +44,21 @@ def main():
     results = []
     
     # Test 1: Health endpoint
-    results.append(("Health Check", test_endpoint(
+    results.append(("Health Check", exercise_endpoint(
         "GET", 
         "/health",
         description="Health Check - Should always work"
     )))
     
     # Test 2: Status endpoint
-    results.append(("Status Check", test_endpoint(
+    results.append(("Status Check", exercise_endpoint(
         "GET",
         "/status",
         description="Status - Database stats"
     )))
     
     # Test 3: Ask endpoint
-    results.append(("Ask Endpoint", test_endpoint(
+    results.append(("Ask Endpoint", exercise_endpoint(
         "POST",
         "/ask",
         data={"question": "What is this podcast about?"},
@@ -66,7 +66,7 @@ def main():
     )))
     
     # Test 4: Ask with empty question (should fail)
-    results.append(("Empty Question Validation", not test_endpoint(
+    results.append(("Empty Question Validation", not exercise_endpoint(
         "POST",
         "/ask",
         data={"question": ""},

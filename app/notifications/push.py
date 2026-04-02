@@ -918,10 +918,17 @@ def send_streak_protection_notification(db: Session) -> dict:
     # Only target subscribers whose local clock is at 20:00 (8 PM)
     rows = db.execute(
         text("""
-            SELECT id, endpoint, p256dh_key, auth_key
-            FROM push_subscriptions
-            WHERE active = true
-              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(timezone, 'UTC'))) = 20
+            SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key
+            FROM push_subscriptions w
+            WHERE w.active = true
+              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 20
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM qa_logs q
+                    WHERE q.user_ip = w.user_ip
+                      AND (q.created_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                          = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+              )
         """)
     ).fetchall()
 

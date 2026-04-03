@@ -221,6 +221,20 @@ def send_midday_push(
     return send_midday_motivation_notification(db)
 
 
+@router.post("/api/push/send-nightly")
+def send_nightly_push(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Admin endpoint: send nightly reflection push notification."""
+    admin_auth(credentials, request)
+
+    from app.notifications.push import send_nightly_reflection_notification
+
+    return send_nightly_reflection_notification(db)
+
+
 @router.get("/api/push/stats")
 def get_push_stats(
     request: Request,

@@ -473,13 +473,17 @@
 
 .ask-mirror-talk-citations h3 {
   margin-top: 0;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #6b665d;
   text-transform: uppercase;
   letter-spacing: 1px;
   font-weight: 600;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
+}
+
+.ask-mirror-talk-citations h3 + .amt-citation-trust-note {
+  margin-top: 0;
 }
 
 #ask-mirror-talk-citations {
@@ -493,7 +497,7 @@
   background: #fff;
   border: 1px solid #e6e2dc;
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   padding: 0;
   /* Use property-specific transitions instead of 'all' to avoid unintended animations */
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
@@ -528,7 +532,7 @@
   color: inherit;
   gap: 12px;
   cursor: pointer;
-  padding: 14px 18px;
+  padding: 16px 18px 12px;
   transition: background 0.2s ease;
 }
 
@@ -550,8 +554,8 @@
   align-self: flex-start;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(212, 168, 87, 0.14);
-  color: #7c6240;
+  background: rgba(46, 42, 36, 0.08);
+  color: #5d5040;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -592,14 +596,14 @@
 
 .citation-time {
   font-size: 13px;
-  color: #fff;
+  color: #2e2a24;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   white-space: nowrap;
-  background: #2e2a24;
+  background: #f1ebe3;
   padding: 5px 12px;
   border-radius: 20px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-weight: 500;
+  font-weight: 700;
   flex-shrink: 0;
   align-self: flex-start;
   margin-top: 2px;
@@ -611,37 +615,40 @@
 }
 
 .citation-link:hover .citation-time {
-  background: #8b7355;
+  background: #d8c4a8;
   color: #fff;
-  transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.3);
+  transform: scale(1.03);
+  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.2);
 }
 
-/* "Explore this episode" button */
-.citation-explore {
-  display: block;
-  padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 600;
+.citation-preview-btn {
+  margin: 0 18px 14px;
+  padding: 9px 12px;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid #ddd4c7;
+  background: #fffaf3;
   color: #2e2a24;
-  text-decoration: none;
-  text-align: center;
-  border-top: 1px solid #f0ede8;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: 0.3px;
-  transition: all 0.2s ease;
-  background: #faf8f4;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.citation-explore:hover {
-  color: #fff;
+.citation-preview-btn:hover {
   background: #2e2a24;
-  text-decoration: none;
+  border-color: #2e2a24;
+  color: #fff;
 }
 
 .amt-citation-trust-note {
-  margin-bottom: 12px;
-  padding: 12px 14px;
+  margin-bottom: 14px;
+  padding: 13px 14px;
   border: 1px solid rgba(212, 206, 198, 0.9);
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(250,248,244,0.95), rgba(245,242,237,0.92));
@@ -654,7 +661,7 @@
 .amt-citation-trust-copy {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .amt-citation-trust-level {
@@ -683,6 +690,10 @@
 
 .amt-citation-trust-copy strong {
   color: #2e2a24;
+}
+
+.amt-citation-trust-copy span:last-child {
+  color: #5f5a53;
 }
 
 /* ========================================
@@ -1329,24 +1340,24 @@
   transform: translateY(-1px);
 }
 
-.amt-player-external {
+.amt-player-full {
   margin-left: auto;
   font-size: 12px;
   color: #8b7355;
-  text-decoration: none;
   font-weight: 600;
   padding: 6px 12px;
   border: 1px solid #d4cec6;
   border-radius: 6px;
   transition: all 0.2s ease;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #fff;
+  cursor: pointer;
 }
 
-.amt-player-external:hover {
+.amt-player-full:hover {
   background: #f5f2ed;
   color: #2e2a24;
   border-color: #2e2a24;
-  text-decoration: none;
 }
 
 /* ========================================
@@ -1417,10 +1428,6 @@
     align-self: flex-start;
   }
 
-  .citation-explore {
-    text-align: center;
-  }
-
   .amt-topics-list {
     gap: 6px;
   }
@@ -1438,7 +1445,7 @@
     flex-wrap: wrap;
   }
 
-  .amt-player-external {
+  .amt-player-full {
     margin-left: 0;
     flex: 1;
     text-align: center;
@@ -1777,22 +1784,6 @@
     transform: none;            /* no hover scale on touch */
   }
 
-  /* Explore button — full-width CTA on mobile */
-  .citation-explore {
-    text-align: center;
-    padding: 10px 14px;
-    font-size: 13px;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .citation-explore:hover {
-    background: transparent;
-  }
-
-  .citation-explore:active {
-    background: #faf8f4;
-  }
-
   /* ── Inline Audio Player ────────────── */
   .amt-inline-player {
     padding: 12px 14px;
@@ -1827,7 +1818,7 @@
     transform: none;
   }
 
-  .amt-player-external {
+  .amt-player-full {
     margin-left: 0;
     flex: 1 1 100%;
     text-align: center;
@@ -1836,7 +1827,7 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .amt-player-external:hover {
+  .amt-player-full:hover {
     transform: none;
   }
 

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.49 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.53 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -213,6 +213,15 @@
           form.dispatchEvent(new Event('submit', { cancelable: true }));
         });
 
+        try {
+          localStorage.setItem('amt_latest_qotd', JSON.stringify({
+            question: String(data.question || '').slice(0, 500),
+            theme: String(data.theme || '').slice(0, 80),
+            date: todayStr ? todayStr() : null,
+            savedAt: Date.now()
+          }));
+        } catch (e) {}
+
         qotdContainer.style.display = '';
       })
       .catch(err => {
@@ -223,12 +232,12 @@
 
   // ─── Auto-submit helper ──────────────────────────────────────
   // Used by both the URL ?autoask= path and the SW postMessage path.
-  function autoSubmitQuestion(question) {
+  function autoSubmitQuestion(question, origin, metadata) {
     if (!question || !form) return;
     // Don't fire a second concurrent request if one is already in-flight
     // (guards the postMessage fallback path for old iOS Safari < 15.4).
     if (submitBtn && submitBtn.disabled) return;
-    setQuestionOrigin('notification_autoask');
+    setQuestionOrigin(origin || 'notification_autoask', metadata || {});
     input.value = question;
     // Hide the QOTD card so the answer takes centre stage
     if (qotdContainer) qotdContainer.style.display = 'none';
@@ -240,10 +249,110 @@
     }, 300);
   }
 
+  function loadLatestQotd() {
+    try {
+      const raw = localStorage.getItem('amt_latest_qotd');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.question ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function buildNightReflectionPrompt() {
+    const today = todayStr();
+    const lastSession = loadLastSession() || null;
+    const activity = loadActivityLog().filter(entry => entry && entry.day === today);
+    const notes = loadReflectionNotes().filter(entry => {
+      if (!entry || !entry.savedAt) return false;
+      return formatLocalDate(new Date(entry.savedAt)) === today;
+    });
+    const insights = loadInsights().map(normalizeInsightRecord).filter(entry => {
+      if (!entry || !entry.savedAt) return false;
+      return formatLocalDate(new Date(entry.savedAt)) === today;
+    });
+    const recap = getWeeklyRecapData ? getWeeklyRecapData() : null;
+    const latestQotd = loadLatestQotd();
+
+    const todayTheme = (
+      activity.find(entry => entry.type === 'question' && entry.theme)?.theme ||
+      (lastSession && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today ? lastSession.theme : '') ||
+      (insights[0] && insights[0].theme) ||
+      (latestQotd && latestQotd.theme) ||
+      ''
+    );
+
+    if (lastSession && lastSession.question && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today) {
+      return {
+        question: todayTheme
+          ? `What stayed with me most from today's reflection on ${todayTheme}, and why is it still with me tonight?`
+          : `What stayed with me most from today's reflection, and why is it still with me tonight?`,
+        strategy: 'today_last_session',
+        theme: todayTheme || null
+      };
+    }
+
+    if (notes.length > 0) {
+      return {
+        question: todayTheme
+          ? `What from today still wants my attention tonight, especially around ${todayTheme}?`
+          : `What from today still wants my attention tonight?`,
+        strategy: 'today_note',
+        theme: todayTheme || null
+      };
+    }
+
+    if (insights.length > 0) {
+      return {
+        question: todayTheme
+          ? `What truth from today's saved insight on ${todayTheme} do I need to carry into tomorrow?`
+          : `What truth from today's saved insight do I need to carry into tomorrow?`,
+        strategy: 'today_saved_insight',
+        theme: todayTheme || null
+      };
+    }
+
+    if (recap && recap.topTheme) {
+      return {
+        question: `What keeps returning for me around ${recap.topTheme}, and what is it asking me to notice before the day ends?`,
+        strategy: 'weekly_recap',
+        theme: recap.topTheme
+      };
+    }
+
+    if (latestQotd && latestQotd.question) {
+      return {
+        question: `What is today's question still trying to show me: ${latestQotd.question}`,
+        strategy: 'qotd_fallback',
+        theme: latestQotd.theme || null
+      };
+    }
+
+    return {
+      question: 'What from today is still asking for my attention before the day ends?',
+      strategy: 'default',
+      theme: null
+    };
+  }
+
+  function autoStartNightReflection() {
+    const resolved = buildNightReflectionPrompt();
+    emitProductEvent('night_reflection_opened', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+    autoSubmitQuestion(resolved.question, 'night_reflection', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+  }
+
   // ─── Handle ?autoask= URL param (notification click → new tab) ─
   (function checkAutoAsk() {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('autoask');
+    const nightReflection = params.get('night_reflection');
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
@@ -262,6 +371,23 @@
       } else {
         // Tiny delay to let the widget's own init finish
         setTimeout(() => autoSubmitQuestion(question), 100);
+      }
+      return;
+    }
+
+    if (nightReflection === '1') {
+      const remainingParams = params.toString()
+        .replace(/night_reflection=[^&]*&?/, '')
+        .replace(/&$/, '');
+      const cleanUrl = window.location.pathname +
+        (remainingParams ? `?${remainingParams}` : '') +
+        window.location.hash;
+      history.replaceState(null, '', cleanUrl || window.location.pathname);
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => autoStartNightReflection());
+      } else {
+        setTimeout(() => autoStartNightReflection(), 120);
       }
     }
   })();
@@ -509,11 +635,11 @@
         count,
         hasReferences: true,
         level: 'Strong grounding',
-        trustLead: `${count} referenced episodes support this reflection`,
-        trustDetail: 'The strongest reference appears first. Preview the moment or open the timestamp to verify what the answer is drawing from.',
+        trustLead: `${count} episode references support this reflection`,
+        trustDetail: 'The strongest source moment appears first. Preview it, then open the full episode if you want the wider conversation.',
         contextKicker: 'Grounded in Mirror Talk',
         contextSummary: `${count} episode references support this reflection.`,
-        contextDetail: 'Use the references below to verify the strongest moment and go deeper if it resonates.',
+        contextDetail: 'Use the source moments below to verify the answer, listen to the strongest clip, or open the full episode.',
         supportPill: 'Strong grounding'
       };
     }
@@ -522,11 +648,11 @@
         count,
         hasReferences: true,
         level: 'Some grounding',
-        trustLead: `${count} referenced episode${count === 1 ? '' : 's'} support${count === 1 ? 's' : ''} this reflection`,
-        trustDetail: 'You have direct source moments below, but narrowing the question may surface an even stronger match.',
+        trustLead: `${count} episode reference${count === 1 ? '' : 's'} support${count === 1 ? 's' : ''} this reflection`,
+        trustDetail: 'You have direct source moments below. A narrower follow-up can still surface a tighter match.',
         contextKicker: 'Grounded in Mirror Talk',
         contextSummary: `${count} episode reference${count === 1 ? '' : 's'} support this reflection.`,
-        contextDetail: 'Use the references below to verify the source moments, or ask a narrower follow-up for a tighter match.',
+        contextDetail: 'Use the source moments below to verify the answer, then tighten the question if you want a sharper match.',
         supportPill: 'Partial grounding'
       };
     }
@@ -731,7 +857,7 @@
   /**
    * Create and show an inline audio player below the clicked citation
    */
-  function showInlinePlayer(citationItem, audioUrl, startSeconds, endSeconds, episodeTitle) {
+  function showInlinePlayer(citationItem, audioUrl, startSeconds, endSeconds, episodeTitle, episodeUrl) {
     // If clicking the same citation that's already playing, toggle it
     const existingPlayer = citationItem.querySelector('.amt-inline-player');
     if (existingPlayer) {
@@ -761,7 +887,7 @@
         <div class="amt-player-actions">
           <button class="amt-player-skip-back" title="Back 10s">⏪ 10s</button>
           <button class="amt-player-skip-fwd" title="Forward 10s">10s ⏩</button>
-          <a href="${audioUrl}#t=${startSeconds}" target="_blank" rel="noopener noreferrer" class="amt-player-external" title="Open in new tab">↗ Open</a>
+          <button type="button" class="amt-player-full" title="Play full episode">Play full episode</button>
         </div>
       </div>
     `;
@@ -789,13 +915,16 @@
     }
 
     // Optional: pause at end timestamp
+    let stopAtExcerpt = null;
     if (endSeconds && endSeconds > startSeconds) {
-      audio.addEventListener('timeupdate', function checkEnd() {
+      stopAtExcerpt = function checkEnd() {
         if (audio.currentTime >= endSeconds) {
           audio.pause();
           audio.removeEventListener('timeupdate', checkEnd);
+          stopAtExcerpt = null;
         }
-      });
+      };
+      audio.addEventListener('timeupdate', stopAtExcerpt);
     }
 
     // Close button
@@ -813,6 +942,21 @@
     playerEl.querySelector('.amt-player-skip-fwd').addEventListener('click', (e) => {
       e.stopPropagation();
       audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + 10);
+    });
+
+    playerEl.querySelector('.amt-player-full').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (stopAtExcerpt) {
+        audio.removeEventListener('timeupdate', stopAtExcerpt);
+        stopAtExcerpt = null;
+      }
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+      emitProductEvent('citation_action_used', {
+        action: 'play_full_episode_inline',
+        episode_title: episodeTitle,
+        source: 'inline_player'
+      });
     });
 
     // Prevent clicks inside player from triggering citation link
@@ -927,8 +1071,14 @@
             const start = parseFloat(this.getAttribute('data-start')) || 0;
             const end = parseFloat(this.getAttribute('data-end')) || 0;
             const title = this.querySelector('.citation-title')?.textContent || episodeTitle;
+            emitProductEvent('citation_action_used', {
+              action: url ? 'listen_from_timestamp' : 'open_reference_link',
+              position: index + 1,
+              episode_id: citation.episode_id || null,
+              has_audio: !!url
+            });
             if (url) {
-              showInlinePlayer(li, url, start, end, title);
+              showInlinePlayer(li, url, start, end, title, podcastUrl);
             } else {
               window.open(this.href, '_blank');
             }
@@ -941,22 +1091,22 @@
             const previewBtn = document.createElement('button');
             previewBtn.type = 'button';
             previewBtn.className = 'citation-preview-btn';
-            previewBtn.title = 'Preview 30 seconds';
-            previewBtn.innerHTML = '⏯ Preview 30s';
+            previewBtn.title = 'Preview the strongest 30 seconds';
+            previewBtn.innerHTML = 'Preview 30s';
             previewBtn.addEventListener('click', (e) => {
               e.stopPropagation();
               const existingPreview = li.querySelector('.amt-preview-audio');
               if (existingPreview) {
                 existingPreview.pause();
                 existingPreview.remove();
-                previewBtn.innerHTML = '⏯ Preview 30s';
+                previewBtn.innerHTML = 'Preview 30s';
                 return;
               }
               // Stop any preview playing in another citation item
               document.querySelectorAll('.amt-preview-audio').forEach(otherAudio => {
                 otherAudio.pause();
                 const otherBtn = otherAudio.closest('.citation-item')?.querySelector('.citation-preview-btn');
-                if (otherBtn) otherBtn.innerHTML = '⏯ Preview 30s';
+                if (otherBtn) otherBtn.innerHTML = 'Preview 30s';
                 otherAudio.remove();
               });
               const previewAudio = document.createElement('audio');
@@ -964,7 +1114,12 @@
               previewAudio.style.display = 'none';
               previewAudio.src = audioUrl;
               li.appendChild(previewAudio);
-              previewBtn.innerHTML = '⏹ Stop preview';
+              previewBtn.innerHTML = 'Stop preview';
+              emitProductEvent('citation_action_used', {
+                action: 'preview_clip',
+                position: index + 1,
+                episode_id: citation.episode_id || null
+              });
               const clipStart = startSeconds || 0;
               const clipEnd = clipStart + 30;
               previewAudio.addEventListener('loadedmetadata', () => {
@@ -979,28 +1134,18 @@
                 if (previewAudio.currentTime >= clipEnd) {
                   previewAudio.pause();
                   previewAudio.remove();
-                  previewBtn.innerHTML = '⏯ Preview 30s';
+                  previewBtn.innerHTML = 'Preview 30s';
                   previewAudio.removeEventListener('timeupdate', stopAt);
                 }
               });
               previewAudio.addEventListener('ended', () => {
                 previewAudio.remove();
-                previewBtn.innerHTML = '⏯ Preview 30s';
+                previewBtn.innerHTML = 'Preview 30s';
               });
             });
             li.appendChild(previewBtn);
           }
 
-          // "Explore this episode" button — links to full episode page
-          if (podcastUrl) {
-            const exploreBtn = document.createElement("a");
-            exploreBtn.href = podcastUrl;
-            exploreBtn.target = "_blank";
-            exploreBtn.rel = "noopener noreferrer";
-            exploreBtn.className = "citation-explore";
-            exploreBtn.textContent = "Explore this episode ↗";
-            li.appendChild(exploreBtn);
-          }
         } else {
           const quoteText = citation.text || '';
           const quoteHtml = quoteText
@@ -3909,7 +4054,7 @@
 
   // Track citation clicks for the Deep Diver badge
   document.addEventListener('click', (e) => {
-    if (e.target.closest('.citation-link') || e.target.closest('.citation-explore')) {
+    if (e.target.closest('.citation-link')) {
       try {
         const s = loadStats();
         s.citationsClicked = (s.citationsClicked || 0) + 1;

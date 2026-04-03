@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.49';
+    return '5.4.53';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -114,7 +114,7 @@ function ask_mirror_talk_shortcode() {
             <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
         </div>
         <div class="ask-mirror-talk-citations">
-            <h3>Referenced Episodes</h3>
+            <h3>Verify The Answer</h3>
             <div id="amt-citation-trust-note" class="amt-citation-trust-note" style="display:none;"></div>
             <ul id="ask-mirror-talk-citations"></ul>
         </div>
@@ -137,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.49: keep the stable 5.4.43 baseline and make stacked mobile share CTAs feel like real compact buttons
+    $version = ask_mirror_talk_theme_version(); // v5.4.53: add nightly reflection deep-link resolution using local history, recap, or QOTD fallback
     
     // Core styles
     wp_enqueue_style(

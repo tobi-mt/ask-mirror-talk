@@ -223,6 +223,15 @@ def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str
     return title, _clip_sentence(body, 118)
 
 
+def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
+    title = "Before the day ends"
+    if is_returning and recent_theme:
+        body = f"Return to what stayed with you today, especially in your {recent_theme.lower()} season."
+    else:
+        body = "Return to what stayed with you today."
+    return title, _clip_sentence(body, 118)
+
+
 def _new_episode_copy(episode_title: str) -> tuple[str, str]:
     title = "Fresh listening"
     body = f"{episode_title} is ready. Open the episode and carry one clear insight with you."
@@ -1125,6 +1134,95 @@ def send_streak_protection_notification(db: Session) -> dict:
         "total_subscribers": len(rows),
     }
     logger.info("Streak protection result: %s", result_summary)
+    return result_summary
+
+
+def send_nightly_reflection_notification(db: Session) -> dict:
+    """
+    Send a nightly reflection nudge at local 21:00 (9 PM).
+
+    This first version intentionally reuses the existing reflection-oriented
+    opt-in (notify_midday) instead of adding a new preference column, so the
+    feature can ship without a schema change. The app resolves the actual
+    prompt locally after open using same-day history, weekly recap, or QOTD.
+    """
+    today = datetime.now(timezone.utc).date()
+
+    rows = db.execute(
+        text("""
+            SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key,
+                   COALESCE(w.user_ip, '') AS user_ip
+            FROM push_subscriptions w
+            WHERE w.active = true
+              AND w.notify_midday = true
+              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 21
+        """)
+    ).fetchall()
+
+    if not rows:
+        logger.info("No nightly reflection subscribers due at this hour")
+        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+
+    logger.info("Sending nightly reflection notification to %d subscribers", len(rows))
+
+    base_url = (
+        f"/ask-mirror-talk/"
+        f"?utm_source=push&utm_medium=night_reflection&utm_campaign={today.isoformat()}"
+        f"&night_reflection=1"
+        f"#ask-mirror-talk-form"
+    )
+    tag = f"night-reflection-{today.isoformat()}"
+    actions = [
+        {"action": "ask", "title": "Return now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+        {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+    ]
+
+    sent = 0
+    failed = 0
+    expired_ids: list[int] = []
+
+    for row in rows:
+        sub_id, endpoint, p256dh, auth, user_ip = row
+        recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
+        recent_theme = _primary_theme_from_questions(recent_questions)
+        is_returning = bool(recent_questions)
+        title, body = _night_reflection_copy(recent_theme=recent_theme, is_returning=is_returning)
+        subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
+
+        result = send_push_notification(
+            subscription_info=subscription_info,
+            title=title,
+            body=body,
+            url=base_url,
+            tag=tag,
+            data={"date": today.isoformat(), "type": "night_reflection"},
+            actions=actions,
+            vibrate=[70, 35, 70],
+            require_interaction=False,
+        )
+        if result == "sent":
+            sent += 1
+        elif result == "expired":
+            expired_ids.append(sub_id)
+            failed += 1
+        else:
+            failed += 1
+
+    if expired_ids:
+        db.execute(
+            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
+            {"ids": expired_ids},
+        )
+        db.commit()
+        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    result_summary = {
+        "sent": sent,
+        "failed": failed,
+        "expired": len(expired_ids),
+        "total_subscribers": len(rows),
+    }
+    logger.info("Nightly reflection result: %s", result_summary)
     return result_summary
 
 

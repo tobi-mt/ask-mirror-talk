@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.43 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.46 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -432,25 +432,12 @@
   }
 
   function restoreExploreContent() {
-    const hasTopicItems = !!(topicsList && topicsList.children.length > 0);
-    const hasSuggestionItems = !!(suggestionsList && suggestionsList.children.length > 0);
-
-    if (topicsContainer && hasTopicItems) {
+    if (topicsContainer && topicsList && topicsList.children.length > 0) {
       topicsContainer.style.display = '';
     }
-    if (suggestionsContainer && hasSuggestionItems) {
+    if (suggestionsContainer && suggestionsList && suggestionsList.children.length > 0) {
       suggestionsContainer.style.display = '';
     }
-
-    // If the lists were somehow cleared during the answer flow, repopulate them
-    // instead of leaving the expander visible but empty after the next tap.
-    if (!hasTopicItems) {
-      loadTopics();
-    }
-    if (!hasSuggestionItems) {
-      loadSuggestedQuestions();
-    }
-
     updateExploreExpander();
   }
 
@@ -1662,7 +1649,6 @@
 
   function openStrongestReference() {
     if (!citationsContainer || citationsContainer.style.display === 'none') return;
-    emitProductEvent('continuation_action_used', { action: 'strongest_reference_opened' });
     citationsContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const previewBtn = citationsContainer.querySelector('.citation-preview-btn');
     if (previewBtn) {
@@ -1679,15 +1665,7 @@
     if (!continuationStrip) return;
 
     const activeTheme = themeHint || inferTheme(question, answerText) || 'Growth';
-    const lastSession = loadLastSession() || {};
-    const stats = loadStats();
-    const exploredThemes = Array.from((stats && stats.themesExplored) || []);
-    const themeCandidates = [
-      lastSession.theme,
-      ...exploredThemes,
-      ...AMT_THEMES,
-    ].filter(Boolean);
-    const nextTheme = themeCandidates.find(theme => theme !== activeTheme) || activeTheme;
+    const nextTheme = getStarterThemes(5).find(theme => theme !== activeTheme) || activeTheme;
     const deeperQuestion = `Go deeper on ${activeTheme.toLowerCase()}: ${getThemeStarter(activeTheme)}`;
     const tomorrowQuestion = getThemeStarter(nextTheme);
     const meta = getCitationSupportMeta(citationsList);
@@ -1712,7 +1690,6 @@
       btn.addEventListener('click', () => {
         const action = btn.dataset.action;
         if (action === 'deeper') {
-          emitProductEvent('continuation_action_used', { action: hasReferences ? 'go_deeper' : 'refine_question', theme: activeTheme });
           if (!hasReferences) emitProductEvent('low_match_action', { action: 'refine_question', theme: activeTheme });
           submitQuestionFromPrompt(deeperQuestion);
           return;
@@ -1722,7 +1699,6 @@
           return;
         }
         if (action === 'tomorrow') {
-          emitProductEvent('continuation_action_used', { action: 'come_back_with_theme', theme: nextTheme });
           if (!hasReferences) emitProductEvent('low_match_action', { action: 'come_back_with_theme', theme: nextTheme });
           focusFormWithQuestion(tomorrowQuestion);
         }
@@ -4804,12 +4780,6 @@
     const section = document.getElementById('amt-reflect-section');
     if (!section) return;
 
-    if (continuationStrip && continuationStrip.parentNode === responseContainer) {
-      responseContainer.insertBefore(section, continuationStrip);
-    } else if (answerUtilities && answerUtilities.parentNode === responseContainer) {
-      responseContainer.insertBefore(section, answerUtilities);
-    }
-
     const prompt = REFLECT_PROMPTS[Math.floor(Math.random() * REFLECT_PROMPTS.length)];
 
     section.innerHTML = `
@@ -4833,17 +4803,13 @@
       const isOpen = wrap.style.display !== 'none';
       wrap.style.display = isOpen ? 'none' : '';
       this.textContent = isOpen ? 'Jot a note ↓' : 'Hide note ↑';
-      if (!isOpen) {
-        emitProductEvent('reflection_note_opened', { prompt });
-        section.querySelector('.amt-reflect-textarea').focus();
-      }
+      if (!isOpen) section.querySelector('.amt-reflect-textarea').focus();
     });
 
     section.querySelector('.amt-reflect-save-btn').addEventListener('click', () => {
       const textarea = section.querySelector('.amt-reflect-textarea');
       const note = textarea.value.trim();
       if (!note) return;
-      emitProductEvent('reflection_note_saved', { prompt, length: note.length });
       try {
         const existing = loadReflectionNotes();
         existing.unshift({ note, prompt, savedAt: Date.now() });
@@ -4939,7 +4905,6 @@
     `;
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
-    emitProductEvent('share_panel_shown', { mode: 'reflection_or_invite' });
 
     shareSection.querySelectorAll('.amt-share-btn').forEach(btn => {
       btn.addEventListener('click', async function() {

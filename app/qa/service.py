@@ -59,7 +59,7 @@ def _log_qa_with_fresh_session(
     SessionLocal = get_session_local()
     log_db = SessionLocal()
     try:
-        return _maybe_log_qa(
+        qa_log = _maybe_log_qa(
             log_db,
             question=question,
             answer=answer,
@@ -70,6 +70,7 @@ def _log_qa_with_fresh_session(
             is_answered=is_answered,
             log_interaction=log_interaction,
         )
+        return qa_log.id if qa_log else None
     except Exception as exc:
         logger.error("Failed to log QA during %s: %s", context, exc, exc_info=True)
         return None
@@ -101,7 +102,7 @@ def answer_question(
     if exact_cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         exact_citations = exact_cached_response.get("citations", [])
-        qa_log = _log_qa_with_fresh_session(
+        qa_log_id = _log_qa_with_fresh_session(
             question=question,
             answer=exact_cached_response["answer"],
             episode_ids=[c["episode_id"] for c in exact_citations],
@@ -113,7 +114,7 @@ def answer_question(
             context="qa_exact_cache_logging",
         )
         exact_cached_response["latency_ms"] = latency_ms
-        exact_cached_response["qa_log_id"] = qa_log.id if qa_log else None
+        exact_cached_response["qa_log_id"] = qa_log_id
         exact_cached_response["question"] = question
         return exact_cached_response
 
@@ -125,7 +126,7 @@ def answer_question(
         latency_ms = int((time.time() - start_time) * 1000)
         # Log the cached response too
         cached_citations = cached_response.get("citations", [])
-        qa_log = _log_qa_with_fresh_session(
+        qa_log_id = _log_qa_with_fresh_session(
             question=question,
             answer=cached_response["answer"],
             episode_ids=[c["episode_id"] for c in cached_citations],
@@ -137,7 +138,7 @@ def answer_question(
             context="qa_similarity_cache_logging",
         )
         cached_response["latency_ms"] = latency_ms
-        cached_response["qa_log_id"] = qa_log.id if qa_log else None
+        cached_response["qa_log_id"] = qa_log_id
         cached_response["question"] = question
         return cached_response
 
@@ -219,7 +220,7 @@ def answer_question(
 
     # ── Phase 3: Log with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
-    qa_log = _log_qa_with_fresh_session(
+    qa_log_id = _log_qa_with_fresh_session(
         question=question,
         answer=response["answer"],
         episode_ids=[c["episode_id"] for c in response["citations"]],
@@ -230,7 +231,6 @@ def answer_question(
         log_interaction=log_interaction,
         context="qa_logging_phase",
     )
-    qa_log_id = qa_log.id if qa_log else None
 
     # Cache this response for future similar questions
     result = {
@@ -282,7 +282,7 @@ def answer_question_stream(
     if exact_cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _exact_citations = exact_cached_response.get("citations", [])
-        qa_log = _log_qa_with_fresh_session(
+        qa_log_id = _log_qa_with_fresh_session(
             question=question,
             answer=exact_cached_response["answer"],
             episode_ids=[c["episode_id"] for c in _exact_citations],
@@ -299,7 +299,7 @@ def answer_question_stream(
         yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id if qa_log else None, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
         return
 
     query_embedding = embed_text(question)
@@ -308,7 +308,7 @@ def answer_question_stream(
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _cached_citations = cached_response.get("citations", [])
-        qa_log = _log_qa_with_fresh_session(
+        qa_log_id = _log_qa_with_fresh_session(
             question=question,
             answer=cached_response["answer"],
             episode_ids=[c["episode_id"] for c in _cached_citations],
@@ -326,7 +326,7 @@ def answer_question_stream(
         yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log.id if qa_log else None, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
         return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
@@ -417,7 +417,7 @@ def answer_question_stream(
 
     # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
-    qa_log = _log_qa_with_fresh_session(
+    qa_log_id = _log_qa_with_fresh_session(
         question=question,
         answer=full_answer,
         episode_ids=[c["episode_id"] for c in citations],
@@ -428,7 +428,6 @@ def answer_question_stream(
         log_interaction=log_interaction,
         context="qa_stream_logging_phase",
     )
-    qa_log_id = qa_log.id if qa_log else None
 
     # ── Collect follow-ups (background thread should be done by now) ──
     try:

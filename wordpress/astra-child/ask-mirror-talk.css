@@ -4739,20 +4739,15 @@ body.amt-light-mode .amt-suggestions-label {
   gap: 8px;
   margin-top: 10px;
   align-items: stretch;
-  justify-content: center;
 }
 
 .amt-share-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 1 220px;
-  min-height: 42px;
-  border-radius: 12px;
-  padding: 10px 16px;
+  flex: 1 1 160px;
+  min-height: 46px;
+  border-radius: 14px;
+  padding: 11px 16px;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.25;
 }
 
 .amt-share-btn-primary {
@@ -5374,6 +5369,7 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-answer-utilities > .amt-email-section,
   .amt-answer-utilities > .amt-save-insight-section,
   .amt-share-section-v2,
+  .amt-share-actions-row > *,
   .amt-continuation-btn,
   .amt-reflect-toggle,
   .amt-reflect-save-btn {
@@ -5387,18 +5383,6 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-reflect-save-btn {
     text-align: center;
     justify-content: center;
-  }
-
-  .amt-share-actions-row {
-    justify-content: center;
-  }
-
-  .amt-share-btn {
-    width: min(100%, 240px) !important;
-    max-width: 240px;
-    flex: 0 1 240px !important;
-    margin-left: auto;
-    margin-right: auto;
   }
 
   .amt-citation-trust-note,
@@ -5429,6 +5413,7 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-suggestion-btn,
   .amt-followup-btn,
   .amt-continuation-btn,
+  .amt-share-btn,
   .amt-share-progress-btn,
   .amt-journal-share-btn,
   .amt-journal-delete-btn,
@@ -5437,14 +5422,6 @@ body.amt-light-mode .amt-suggestions-label {
     max-width: 100%;
     text-align: center;
     justify-content: center;
-  }
-
-  .amt-share-btn {
-    width: min(100%, 220px) !important;
-    max-width: 220px;
-    flex: 0 1 220px !important;
-    min-height: 40px;
-    padding: 10px 14px;
   }
 
   .amt-stats-bar {

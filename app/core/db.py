@@ -106,7 +106,34 @@ def get_db():
     try:
         yield session
     finally:
-        session.close()
+        safe_close_session(session, context="fastapi_dependency")
+
+
+def safe_close_session(session, *, context: str = "session"):
+    """
+    Close a SQLAlchemy session defensively.
+
+    Neon/PgBouncer can terminate connections that sit idle inside a transaction.
+    When that happens, SQLAlchemy may raise during rollback/reset while the
+    connection is being returned to the pool. We don't want those cleanup-time
+    exceptions to leak or spam logs as hard failures.
+    """
+    if session is None:
+        return
+
+    try:
+        session.rollback()
+    except Exception as exc:
+        logger.warning("DB session rollback failed during %s cleanup: %s", context, exc)
+        try:
+            session.invalidate()
+        except Exception:
+            pass
+    finally:
+        try:
+            session.close()
+        except Exception as exc:
+            logger.warning("DB session close failed during %s cleanup: %s", context, exc)
 
 
 def init_db():

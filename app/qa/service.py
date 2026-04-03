@@ -54,7 +54,7 @@ def answer_question(
       Phase 2 — Answer generation (OpenAI): session CLOSED to avoid idle-in-transaction timeout
       Phase 3 — Logging: fresh session
     """
-    from app.core.db import get_session_local
+    from app.core.db import get_session_local, safe_close_session
 
     start_time = time.time()
     cache = get_answer_cache()
@@ -173,7 +173,7 @@ def answer_question(
     # ── Release DB session before long OpenAI call ──
     # Neon serverless kills idle-in-transaction connections after 30s;
     # OpenAI generation routinely takes 10-25s.
-    db.close()
+    safe_close_session(db, context="qa_retrieval_phase")
 
     # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
     response = compose_answer(question, chunk_payloads,
@@ -200,7 +200,7 @@ def answer_question(
         logger.error("Failed to log QA: %s", e)
         qa_log_id = None
     finally:
-        log_db.close()
+        safe_close_session(log_db, context="qa_logging_phase")
 
     # Cache this response for future similar questions
     result = {
@@ -238,7 +238,7 @@ def answer_question_stream(
     the long-running OpenAI streaming to prevent idle-in-transaction timeouts.
     """
     import json
-    from app.core.db import get_session_local
+    from app.core.db import get_session_local, safe_close_session
 
     start_time = time.time()
 
@@ -342,7 +342,7 @@ def answer_question_stream(
 
     # ── Release the original DB session before the long streaming phase ──
     # This prevents Neon's idle-in-transaction timeout from killing the connection.
-    db.close()
+    safe_close_session(db, context="qa_stream_retrieval_phase")
 
     # ── Phase 2: OpenAI streaming — no DB needed ──
     # Tell the user how deep we're searching — builds trust and feels thorough
@@ -406,7 +406,7 @@ def answer_question_stream(
     except Exception as e:
         logger.error("Failed to log QA: %s", e)
     finally:
-        log_db.close()
+        safe_close_session(log_db, context="qa_stream_logging_phase")
 
     # ── Collect follow-ups (background thread should be done by now) ──
     try:

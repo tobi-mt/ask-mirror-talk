@@ -4743,6 +4743,9 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 1 220px;
   min-height: 42px;
   border-radius: 12px;
@@ -5391,8 +5394,9 @@ body.amt-light-mode .amt-suggestions-label {
   }
 
   .amt-share-btn {
-    width: min(100%, 280px);
-    flex: 0 1 280px;
+    width: min(100%, 240px) !important;
+    max-width: 240px;
+    flex: 0 1 240px !important;
     margin-left: auto;
     margin-right: auto;
   }
@@ -5436,9 +5440,9 @@ body.amt-light-mode .amt-suggestions-label {
   }
 
   .amt-share-btn {
-    width: min(100%, 260px);
-    max-width: 260px;
-    flex: 0 1 260px;
+    width: min(100%, 220px) !important;
+    max-width: 220px;
+    flex: 0 1 220px !important;
     min-height: 40px;
     padding: 10px 14px;
   }

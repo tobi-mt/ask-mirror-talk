@@ -364,6 +364,44 @@ def analyze_prompt_origin_usage(db, days=30):
     )
 
 
+def analyze_feature_engagement(db, days=30):
+    """Show which engagement surfaces are actually being used."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            event_name,
+            COALESCE(
+                metadata_json::jsonb->>'action',
+                metadata_json::jsonb->>'origin',
+                metadata_json::jsonb->>'method',
+                metadata_json::jsonb->>'theme',
+                '—'
+            ) AS detail,
+            COUNT(*) AS event_count,
+            COUNT(DISTINCT user_ip) AS unique_users
+        FROM product_events
+        WHERE created_at >= :cutoff
+          AND event_name IN (
+              'question_origin_selected',
+              'question_submitted',
+              'continuation_action_used',
+              'share_cta_used',
+              'share_panel_shown',
+              'reflection_note_opened',
+              'reflection_note_saved',
+              'low_match_action'
+          )
+        GROUP BY event_name, detail
+        ORDER BY event_name, event_count DESC, detail
+    """
+
+    run_query(
+        db, query, {"cutoff": cutoff},
+        f"Feature Engagement Breakdown (Last {days} Days)"
+    )
+
+
 def analyze_product_event_mix(db, days=30):
     """Summarize product events to make funnel instrumentation visible."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -464,6 +502,7 @@ def generate_summary_report(db, days=7):
     analyze_bursty_usage(db, min(days, 30))
     analyze_repeated_question_bursts(db, min(days, 30))
     analyze_prompt_origin_usage(db, min(days, 30))
+    analyze_feature_engagement(db, min(days, 30))
     analyze_product_event_mix(db, min(days, 30))
     
     print("\n" + "="*80)

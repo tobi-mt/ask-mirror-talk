@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.41';
+    return '5.4.43';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -137,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.41: restore Explore content reliably after an answered question
+    $version = ask_mirror_talk_theme_version(); // v5.4.43: move reflection earlier, improve analytics segmentation, and tighten share CTA sizing
     
     // Core styles
     wp_enqueue_style(

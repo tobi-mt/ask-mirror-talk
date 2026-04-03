@@ -39,6 +39,44 @@ def _maybe_log_qa(
     )
 
 
+def _log_qa_with_fresh_session(
+    *,
+    question: str,
+    answer: str,
+    episode_ids: list[int],
+    latency_ms: int,
+    user_ip: str,
+    is_cached: bool,
+    is_answered: bool,
+    log_interaction: bool,
+    context: str,
+):
+    if not log_interaction:
+        return None
+
+    from app.core.db import get_session_local, safe_close_session
+
+    SessionLocal = get_session_local()
+    log_db = SessionLocal()
+    try:
+        return _maybe_log_qa(
+            log_db,
+            question=question,
+            answer=answer,
+            episode_ids=episode_ids,
+            latency_ms=latency_ms,
+            user_ip=user_ip,
+            is_cached=is_cached,
+            is_answered=is_answered,
+            log_interaction=log_interaction,
+        )
+    except Exception as exc:
+        logger.error("Failed to log QA during %s: %s", context, exc, exc_info=True)
+        return None
+    finally:
+        safe_close_session(log_db, context=context)
+
+
 def answer_question(
     db: Session,
     question: str,
@@ -63,8 +101,7 @@ def answer_question(
     if exact_cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         exact_citations = exact_cached_response.get("citations", [])
-        qa_log = _maybe_log_qa(
-            db,
+        qa_log = _log_qa_with_fresh_session(
             question=question,
             answer=exact_cached_response["answer"],
             episode_ids=[c["episode_id"] for c in exact_citations],
@@ -73,6 +110,7 @@ def answer_question(
             is_cached=True,
             is_answered=len(exact_citations) > 0,
             log_interaction=log_interaction,
+            context="qa_exact_cache_logging",
         )
         exact_cached_response["latency_ms"] = latency_ms
         exact_cached_response["qa_log_id"] = qa_log.id if qa_log else None
@@ -87,8 +125,7 @@ def answer_question(
         latency_ms = int((time.time() - start_time) * 1000)
         # Log the cached response too
         cached_citations = cached_response.get("citations", [])
-        qa_log = _maybe_log_qa(
-            db,
+        qa_log = _log_qa_with_fresh_session(
             question=question,
             answer=cached_response["answer"],
             episode_ids=[c["episode_id"] for c in cached_citations],
@@ -97,6 +134,7 @@ def answer_question(
             is_cached=True,
             is_answered=len(cached_citations) > 0,
             log_interaction=log_interaction,
+            context="qa_similarity_cache_logging",
         )
         cached_response["latency_ms"] = latency_ms
         cached_response["qa_log_id"] = qa_log.id if qa_log else None
@@ -181,26 +219,18 @@ def answer_question(
 
     # ── Phase 3: Log with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
-    SessionLocal = get_session_local()
-    log_db = SessionLocal()
-    try:
-        qa_log = _maybe_log_qa(
-            log_db,
-            question=question,
-            answer=response["answer"],
-            episode_ids=[c["episode_id"] for c in response["citations"]],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=False,
-            is_answered=len(response["citations"]) > 0,
-            log_interaction=log_interaction,
-        )
-        qa_log_id = qa_log.id if qa_log else None
-    except Exception as e:
-        logger.error("Failed to log QA: %s", e)
-        qa_log_id = None
-    finally:
-        safe_close_session(log_db, context="qa_logging_phase")
+    qa_log = _log_qa_with_fresh_session(
+        question=question,
+        answer=response["answer"],
+        episode_ids=[c["episode_id"] for c in response["citations"]],
+        latency_ms=latency_ms,
+        user_ip=user_ip,
+        is_cached=False,
+        is_answered=len(response["citations"]) > 0,
+        log_interaction=log_interaction,
+        context="qa_logging_phase",
+    )
+    qa_log_id = qa_log.id if qa_log else None
 
     # Cache this response for future similar questions
     result = {
@@ -252,8 +282,7 @@ def answer_question_stream(
     if exact_cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _exact_citations = exact_cached_response.get("citations", [])
-        qa_log = _maybe_log_qa(
-            db,
+        qa_log = _log_qa_with_fresh_session(
             question=question,
             answer=exact_cached_response["answer"],
             episode_ids=[c["episode_id"] for c in _exact_citations],
@@ -262,6 +291,7 @@ def answer_question_stream(
             is_cached=True,
             is_answered=len(_exact_citations) > 0,
             log_interaction=log_interaction,
+            context="qa_stream_exact_cache_logging",
         )
         cached_episode_count = len({c["episode_id"] for c in _exact_citations if c.get("episode_id")})
         if cached_episode_count:
@@ -278,8 +308,7 @@ def answer_question_stream(
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _cached_citations = cached_response.get("citations", [])
-        qa_log = _maybe_log_qa(
-            db,
+        qa_log = _log_qa_with_fresh_session(
             question=question,
             answer=cached_response["answer"],
             episode_ids=[c["episode_id"] for c in _cached_citations],
@@ -288,6 +317,7 @@ def answer_question_stream(
             is_cached=True,
             is_answered=len(_cached_citations) > 0,
             log_interaction=log_interaction,
+            context="qa_stream_similarity_cache_logging",
         )
         # Stream the full cached answer as a single chunk for instant display
         cached_episode_count = len({c["episode_id"] for c in cached_response.get("citations", []) if c.get("episode_id")})
@@ -387,26 +417,18 @@ def answer_question_stream(
 
     # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
-    SessionLocal = get_session_local()
-    log_db = SessionLocal()
-    qa_log_id = None
-    try:
-        qa_log = _maybe_log_qa(
-            log_db,
-            question=question,
-            answer=full_answer,
-            episode_ids=[c["episode_id"] for c in citations],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=False,
-            is_answered=len(citations) > 0,
-            log_interaction=log_interaction,
-        )
-        qa_log_id = qa_log.id if qa_log else None
-    except Exception as e:
-        logger.error("Failed to log QA: %s", e)
-    finally:
-        safe_close_session(log_db, context="qa_stream_logging_phase")
+    qa_log = _log_qa_with_fresh_session(
+        question=question,
+        answer=full_answer,
+        episode_ids=[c["episode_id"] for c in citations],
+        latency_ms=latency_ms,
+        user_ip=user_ip,
+        is_cached=False,
+        is_answered=len(citations) > 0,
+        log_interaction=log_interaction,
+        context="qa_stream_logging_phase",
+    )
+    qa_log_id = qa_log.id if qa_log else None
 
     # ── Collect follow-ups (background thread should be done by now) ──
     try:

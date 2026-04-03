@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v5.4.3
+ * Analytics Add-on for Ask Mirror Talk Widget v5.4.22
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -13,13 +13,15 @@
     
     const API_BASE_URL = 'https://ask-mirror-talk-production.up.railway.app';
     let currentQALogId = null;
+    let productEventTrackingEnabled = true;
+    let productEventEndpointMissing = false;
     
     // Store original fetch at module scope so trackCitationClick and submitFeedback can use it
     const originalFetch = window.fetch.bind(window);
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.4.3 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v5.4.22 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -206,9 +208,13 @@
     }
 
     async function trackProductEvent(eventName, metadata = {}) {
+        if (!productEventTrackingEnabled) {
+            return;
+        }
+
         try {
             const params = new URLSearchParams(window.location.search);
-            await originalFetch(`${API_BASE_URL}/api/client-event`, {
+            const response = await originalFetch(`${API_BASE_URL}/api/client-event`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -226,6 +232,19 @@
                     }, metadata)
                 })
             });
+
+            if (response.status === 404) {
+                productEventTrackingEnabled = false;
+                if (!productEventEndpointMissing) {
+                    productEventEndpointMissing = true;
+                    console.info('ℹ️ Product event endpoint is not live yet; disabling client-event tracking for this page load');
+                }
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`client-event returned ${response.status}`);
+            }
 
             console.log('✅ Product event tracked:', { eventName, metadata, qaLogId: currentQALogId });
         } catch (error) {

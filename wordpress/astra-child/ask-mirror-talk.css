@@ -125,9 +125,11 @@
   font-weight: 600;
 }
 
-.amt-intent-starter-chip:hover {
+.ask-mirror-talk .amt-intent-starter-chip:hover,
+.ask-mirror-talk .amt-intent-starter-chip:focus-visible {
   border-color: #8b7355;
   background: #fff;
+  color: #2e2a24;
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
 }
@@ -163,15 +165,95 @@
   font-weight: 600;
 }
 
-.amt-theme-starter-chip:hover {
+.ask-mirror-talk .amt-theme-starter-chip:hover,
+.ask-mirror-talk .amt-theme-starter-chip:focus-visible {
   border-color: #8b7355;
   background: #fff;
+  color: #2e2a24;
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
 }
 
 .amt-theme-starter-chip-theme {
   white-space: nowrap;
+}
+
+.amt-question-coach {
+  margin: 10px 0 4px;
+}
+
+.amt-question-coach-inner {
+  padding: 14px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(212, 206, 198, 0.92);
+  background: linear-gradient(135deg, rgba(250,248,244,0.96), rgba(244,239,232,0.94));
+}
+
+.amt-question-coach-kicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-text {
+  margin: 0 0 10px;
+  color: #6b665d;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amt-question-coach-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #ddd4c9;
+  background: rgba(255,255,255,0.92);
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.ask-mirror-talk .amt-question-coach-btn:hover,
+.ask-mirror-talk .amt-question-coach-btn:focus-visible {
+  border-color: #8b7355;
+  background: #fff;
+  color: #2e2a24;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
+}
+
+.amt-question-coach-btn-label {
+  color: #8b7355;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-btn-text {
+  color: #2e2a24;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-campaign-welcome {
@@ -740,8 +822,28 @@
   gap: 3px;
 }
 
+.amt-citation-trust-level {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(53, 87, 80, 0.10);
+  color: #355750;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .amt-citation-trust-copy-soft {
   gap: 5px;
+}
+
+.amt-citation-trust-level-soft {
+  background: rgba(139, 115, 85, 0.12);
+  color: #8b7355;
 }
 
 .amt-citation-trust-copy strong {
@@ -1050,6 +1152,17 @@
   font-family: Georgia, serif;
 }
 
+.amt-scm-context {
+  margin: -4px 0 12px;
+  color: rgba(245,230,200,0.72);
+  font-size: 13px;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 .amt-scm-preview {
   display: block;
   width: 100%;
@@ -1063,6 +1176,15 @@
   font-size: 12px;
   text-align: center;
   margin: 0 0 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-scm-invite {
+  margin: -2px 0 14px;
+  color: rgba(245,230,200,0.62);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -2065,6 +2187,7 @@
 .amt-journey-btn-secondary:hover {
   border-color: #8b7355;
   background: #faf8f4;
+  color: #2e2a24;
 }
 
 .amt-weekly-recap {
@@ -2101,6 +2224,26 @@
   color: #2e2a24;
   font-size: 22px;
   line-height: 1.2;
+}
+
+.amt-weekly-recap-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.amt-weekly-recap-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(72,119,111,0.10);
+  color: #355750;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-weekly-recap-text,
@@ -2162,6 +2305,8 @@
 
 .amt-weekly-recap-btn-secondary:hover {
   border-color: #48776f;
+  color: #2e2a24;
+  background: rgba(255,255,255,0.94);
 }
 
 .amt-weekly-recap-btn-share {
@@ -2173,6 +2318,7 @@
 .amt-weekly-recap-btn-share:hover {
   border-color: #355750;
   background: rgba(72,119,111,0.14);
+  color: #355750;
 }
 
 .amt-resume-hint {
@@ -3177,6 +3323,13 @@
 .amt-stats-prompt-text {
   color: rgba(255,255,255,0.9);
   font-size: 13px;
+  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-stats-prompt-subtext {
+  color: rgba(255,255,255,0.58);
+  font-size: 12px;
   line-height: 1.45;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -4308,6 +4461,7 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-reflect-toggle:hover {
   border-color: #8b7355;
   color: #2e2a24;
+  background: #faf8f4;
 }
 
 .amt-reflect-note-wrap {
@@ -4734,6 +4888,15 @@ body.amt-light-mode .amt-suggestions-label {
   padding: 16px;
 }
 
+.amt-share-helper {
+  margin: 12px 0 0;
+  color: #8b7355;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 .amt-share-actions-row {
   display: flex;
   flex-wrap: wrap;
@@ -4761,6 +4924,7 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-share-btn-secondary:hover {
   border-color: #8b7355;
   background: #faf7f2;
+  color: #2e2a24;
 }
 
 /* ── About Modal ─────────────────────────────────────────── */

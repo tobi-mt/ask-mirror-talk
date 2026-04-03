@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.3 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.22 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -31,6 +31,7 @@
   const citationTrustNote = document.querySelector('#amt-citation-trust-note');
   const intentStartersContainer = document.querySelector('#amt-intent-starters');
   const themeStartersContainer = document.querySelector('#amt-theme-starters');
+  const questionCoach = document.querySelector('#amt-question-coach');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -503,6 +504,16 @@
     exploreExpander.style.display = hasContent ? '' : 'none';
   }
 
+  function restoreExploreContent() {
+    if (topicsContainer && topicsList && topicsList.children.length > 0) {
+      topicsContainer.style.display = '';
+    }
+    if (suggestionsContainer && suggestionsList && suggestionsList.children.length > 0) {
+      suggestionsContainer.style.display = '';
+    }
+    updateExploreExpander();
+  }
+
   if (exploreToggle && explorePanel) {
     exploreToggle.addEventListener('click', () => {
       const isOpen = exploreToggle.getAttribute('aria-expanded') === 'true';
@@ -512,10 +523,16 @@
   }
 
   // ─── Follow-up Questions ────────────────────────────────────
-  function showFollowUpQuestions(questions) {
+  function showFollowUpQuestions(questions, options) {
     if (!followupsContainer || !followupsList || !questions || questions.length === 0) {
       if (followupsContainer) followupsContainer.style.display = 'none';
       return;
+    }
+
+    const label = (options && options.label) || 'You might also want to ask:';
+    const labelEl = followupsContainer.querySelector('.amt-followups-label');
+    if (labelEl) {
+      labelEl.textContent = label;
     }
 
     followupsList.innerHTML = '';
@@ -540,7 +557,50 @@
   function ensureLowMatchFollowUps(question, theme) {
     if (!followupsContainer || !followupsList) return;
     if (followupsContainer.style.display !== 'none' && followupsList.children.length > 0) return;
-    showFollowUpQuestions(generateLowMatchPrompts(question, theme));
+    showFollowUpQuestions(generateLowMatchPrompts(question, theme), {
+      label: 'Try reframing with:'
+    });
+  }
+
+  function getCitationSupportMeta(citationsList) {
+    const count = Array.isArray(citationsList) ? citationsList.length : 0;
+    if (count >= 4) {
+      return {
+        count,
+        hasReferences: true,
+        level: 'Strong grounding',
+        trustLead: `${count} referenced episodes support this reflection`,
+        trustDetail: 'The strongest reference appears first. Preview the moment or open the timestamp to verify what the answer is drawing from.',
+        contextKicker: 'Grounded in Mirror Talk',
+        contextSummary: `${count} episode references support this reflection.`,
+        contextDetail: 'Use the references below to verify the strongest moment and go deeper if it resonates.',
+        supportPill: 'Strong grounding'
+      };
+    }
+    if (count > 0) {
+      return {
+        count,
+        hasReferences: true,
+        level: 'Some grounding',
+        trustLead: `${count} referenced episode${count === 1 ? '' : 's'} support${count === 1 ? 's' : ''} this reflection`,
+        trustDetail: 'You have direct source moments below, but narrowing the question may surface an even stronger match.',
+        contextKicker: 'Grounded in Mirror Talk',
+        contextSummary: `${count} episode reference${count === 1 ? '' : 's'} support this reflection.`,
+        contextDetail: 'Use the references below to verify the source moments, or ask a narrower follow-up for a tighter match.',
+        supportPill: 'Partial grounding'
+      };
+    }
+    return {
+      count,
+      hasReferences: false,
+      level: 'Broader reflection',
+      trustLead: 'No direct episode moment surfaced this time',
+      trustDetail: 'This answer may still be useful, but it is less grounded than usual. Try a narrower follow-up for a stronger match.',
+      contextKicker: 'Broader Mirror Talk reflection',
+      contextSummary: 'This reflection is shaped by the library, but without a direct source moment yet.',
+      contextDetail: 'A more specific follow-up will usually surface a clearer episode match and stronger citations.',
+      supportPill: 'Needs a narrower question'
+    };
   }
 
   // Rotating loading messages for engagement
@@ -642,6 +702,7 @@
   // Show loading state
   function setLoading(isLoading) {
     if (isLoading) {
+      try { delete output.dataset.amtPostAnswerApplied; } catch (e) {}
       submitBtn.disabled = true;
       submitBtn.textContent = 'Thinking…';
       input.disabled = true;
@@ -1189,6 +1250,10 @@
             showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
             finalizeAnswerPresentation(question, answerText, lastShownCitations, window._amtLastTheme || null);
+            restoreExploreContent();
+            showReflectPrompt();
+            initCopyAnswerButton(answerText);
+            setTimeout(() => showMoodReactions(), 400);
 
             // Gamification: record the answered question
             onQuestionAnswered(question, window._amtLastTheme || null);
@@ -1196,6 +1261,7 @@
 
             // Conversation memory: append this turn
             appendConversationTurn(question, answerText);
+            runPostAnswerExtras(question, answerText);
 
             // Scroll response into view only if it's not already visible.
             // Using 'nearest' avoids yanking the user back if they've already scrolled down.
@@ -1224,6 +1290,7 @@
       return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
     });
     output.innerHTML = htmlParagraphs.join('');
+    output.classList.add('amt-complete');
 
     showCitations(citationsList);
     showFollowUpQuestions(followUpQuestions);
@@ -1234,6 +1301,14 @@
     addSaveToEmailButton(questionText, answer);
     injectFAQSchema(questionText, answer);
     finalizeAnswerPresentation(questionText, answer, citationsList);
+    restoreExploreContent();
+    showReflectPrompt();
+    initCopyAnswerButton(answer);
+    setTimeout(() => showMoodReactions(), 400);
+    onQuestionAnswered(questionText, window._amtLastTheme || null);
+    window._amtLastTheme = null;
+    appendConversationTurn(questionText, answer);
+    runPostAnswerExtras(questionText, answer);
 
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -1413,6 +1488,76 @@
     });
   }
 
+  function sanitizeQuestionFragment(value) {
+    return String(value || '')
+      .replace(/[?!.]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function buildQuestionCoachPrompts(rawInput) {
+    const fragment = sanitizeQuestionFragment(rawInput);
+    if (!fragment || fragment.length < 4) return [];
+
+    const lower = fragment.toLowerCase();
+    const prompts = [];
+    const addPrompt = (label, questionText) => {
+      const cleanQuestion = String(questionText || '').trim();
+      if (!cleanQuestion) return;
+      if (prompts.some(item => item.question === cleanQuestion)) return;
+      prompts.push({ label, question: cleanQuestion });
+    };
+
+    if (!/[?]$/.test(String(rawInput || '').trim()) || fragment.length < 26) {
+      addPrompt('Make it more specific', `How do I navigate ${lower} with honesty and clarity?`);
+    }
+
+    addPrompt('Ask for a first step', `What is the first step I should take with ${lower}?`);
+    addPrompt('Ground it in Mirror Talk', `What does Mirror Talk say about ${lower}?`);
+
+    if (lower.includes('feel ') || lower.includes('feeling')) {
+      addPrompt('Explore the feeling', `What might this feeling be trying to show me about ${lower}?`);
+    }
+
+    return prompts.slice(0, 2);
+  }
+
+  function renderQuestionCoach(rawInput) {
+    if (!questionCoach) return;
+
+    const prompts = buildQuestionCoachPrompts(rawInput);
+    if (!prompts.length) {
+      questionCoach.innerHTML = '';
+      questionCoach.style.display = 'none';
+      return;
+    }
+
+    questionCoach.innerHTML = `
+      <div class="amt-question-coach-inner">
+        <span class="amt-question-coach-kicker">Shape the question</span>
+        <p class="amt-question-coach-text">Turn this into a stronger prompt with one tap.</p>
+        <div class="amt-question-coach-actions">
+          ${prompts.map(item => `
+            <button type="button" class="amt-question-coach-btn" data-question="${escapeHtml(item.question)}">
+              <span class="amt-question-coach-btn-label">${escapeHtml(item.label)}</span>
+              <span class="amt-question-coach-btn-text">${escapeHtml(item.question)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    questionCoach.style.display = '';
+
+    questionCoach.querySelectorAll('.amt-question-coach-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const suggestedQuestion = btn.dataset.question || '';
+        emitProductEvent('question_coach_used', { suggestion: suggestedQuestion });
+        setQuestionOrigin('question_coach');
+        focusFormWithQuestion(suggestedQuestion);
+      });
+    });
+  }
+
   function inferTheme(question, answerText) {
     const haystack = `${question || ''} ${answerText || ''}`.toLowerCase();
     for (const theme of AMT_THEMES) {
@@ -1477,14 +1622,15 @@
 
   function updateCitationTrustNote(citationsList) {
     if (!citationTrustNote) return;
-    const count = Array.isArray(citationsList) ? citationsList.length : 0;
+    const meta = getCitationSupportMeta(citationsList);
 
-    if (!count) {
+    if (!meta.hasReferences) {
       emitProductEvent('low_match_shown', { citations: 0 });
       citationTrustNote.innerHTML = `
         <div class="amt-citation-trust-copy amt-citation-trust-copy-soft">
-          <strong>No direct episode moment surfaced this time</strong>
-          <span>This answer may still be useful, but it is less grounded than usual. Try a narrower follow-up for a stronger match.</span>
+          <span class="amt-citation-trust-level amt-citation-trust-level-soft">${escapeHtml(meta.level)}</span>
+          <strong>${escapeHtml(meta.trustLead)}</strong>
+          <span>${escapeHtml(meta.trustDetail)}</span>
         </div>
       `;
       citationTrustNote.style.display = '';
@@ -1493,8 +1639,9 @@
 
     citationTrustNote.innerHTML = `
       <div class="amt-citation-trust-copy">
-        <strong>${count} referenced episode${count === 1 ? '' : 's'}</strong>
-        <span>The strongest match appears first. Tap <em>Preview 30s</em> or open the timestamp to verify the moment behind the answer.</span>
+        <span class="amt-citation-trust-level">${escapeHtml(meta.level)}</span>
+        <strong>${escapeHtml(meta.trustLead)}</strong>
+        <span>${escapeHtml(meta.trustDetail)}</span>
       </div>
     `;
     citationTrustNote.style.display = '';
@@ -1504,26 +1651,22 @@
     if (!answerContext) return;
 
     const theme = inferTheme(question, answerText);
-    const citationCount = Array.isArray(citationsList) ? citationsList.length : 0;
-    const lowMatch = !hasStrongSupport(citationsList);
-    const trustSummary = citationCount > 0
-      ? `${citationCount} episode reference${citationCount === 1 ? '' : 's'} support${citationCount === 1 ? 's' : ''} this reflection`
-      : 'A broader reflection shaped by the Mirror Talk library';
-    const contextSummary = lastDepthMessage
+    const meta = getCitationSupportMeta(citationsList);
+    const lowMatch = !meta.hasReferences;
+    const contextDetail = lastDepthMessage
       ? lastDepthMessage.replace('…', '')
-      : (citationCount > 0
-          ? 'Use the references below to preview or open the exact moments behind this answer.'
-          : 'A narrower follow-up will usually surface a stronger episode match.');
+      : meta.contextDetail;
 
     answerContext.innerHTML = `
       <div class="amt-answer-context-copy${lowMatch ? ' amt-answer-context-copy-soft' : ''}">
-        <span class="amt-answer-context-kicker">Grounded in Mirror Talk</span>
-        <p class="amt-answer-context-summary">${escapeHtml(trustSummary)}.</p>
-        <p class="amt-answer-context-detail">${escapeHtml(contextSummary)}</p>
+        <span class="amt-answer-context-kicker">${escapeHtml(meta.contextKicker)}</span>
+        <p class="amt-answer-context-summary">${escapeHtml(meta.contextSummary)}</p>
+        <p class="amt-answer-context-detail">${escapeHtml(contextDetail)}</p>
       </div>
       <div class="amt-answer-context-pills">
         ${theme ? `<span class="amt-answer-pill">${escapeHtml(theme)}</span>` : ''}
-        <span class="amt-answer-pill">${citationCount > 0 ? 'Timestamped cues' : 'Broader guidance'}</span>
+        <span class="amt-answer-pill">${escapeHtml(meta.supportPill)}</span>
+        <span class="amt-answer-pill">${meta.hasReferences ? 'Timestamped cues' : 'Recovery prompts ready'}</span>
       </div>
     `;
     answerContext.style.display = '';
@@ -1670,13 +1813,14 @@
     const nextTheme = getStarterThemes(5).find(theme => theme !== activeTheme) || activeTheme;
     const deeperQuestion = `Go deeper on ${activeTheme.toLowerCase()}: ${getThemeStarter(activeTheme)}`;
     const tomorrowQuestion = getThemeStarter(nextTheme);
-    const hasReferences = hasStrongSupport(citationsList);
+    const meta = getCitationSupportMeta(citationsList);
+    const hasReferences = meta.hasReferences;
 
     continuationStrip.innerHTML = `
       <div class="amt-continuation-strip-inner">
         <div class="amt-continuation-strip-copy">
           <span class="amt-continuation-kicker">Keep the reflection moving</span>
-          <p class="amt-continuation-text">${hasReferences ? 'Go deeper, verify the strongest moment, or carry a fresh question into tomorrow.' : 'Try a narrower follow-up for a stronger match, or carry a fresh question into tomorrow.'}</p>
+          <p class="amt-continuation-text">${hasReferences ? 'Go deeper, verify the strongest moment, or carry a fresh question into tomorrow.' : 'Refine the question, recover a stronger match, or carry a clearer theme into tomorrow.'}</p>
         </div>
         <div class="amt-continuation-actions">
           <button type="button" class="amt-continuation-btn amt-continuation-btn-primary" data-action="deeper">${hasReferences ? 'Go deeper on this' : 'Refine this question'}</button>
@@ -1874,6 +2018,7 @@
     if (!this.value) {
       this.setAttribute('placeholder', 'e.g. How do I deal with grief? What does the Bible say about forgiveness?');
     }
+    renderQuestionCoach(this.value);
   });
 
   input.addEventListener('blur', function() {
@@ -1896,6 +2041,8 @@
       charCounter.textContent = `${len} / 500`;
       charCounter.classList.toggle('amt-char-counter-warn', len > 450);
     }
+
+    renderQuestionCoach(this.value);
 
     if (this.value.trim() === '') {
       output.innerHTML = '';
@@ -1926,6 +2073,10 @@
       if (oldEmail) oldEmail.remove();
       const oldRelated = document.getElementById('amt-related-section');
       if (oldRelated) oldRelated.remove();
+      if (questionCoach) {
+        questionCoach.innerHTML = '';
+        questionCoach.style.display = 'none';
+      }
       conversationContext = []; // reset conversation thread
     }
   });
@@ -1944,10 +2095,8 @@
   });
   sessionObserver.observe(output, { childList: true, subtree: true, characterData: true });
 
-  renderJourneyCard();
   renderCampaignWelcome();
   renderIntentStarterChips();
-  renderThemeStarterChips();
 
   const initialCampaignPrompt = resolveCampaignPrompt(activeCampaignContext);
   if (initialCampaignPrompt && !input.value.trim()) {
@@ -3054,13 +3203,40 @@
     try { _cookieSet(REFLECTION_NOTES_COOKIE_KEY, JSON.stringify(backup), 365); } catch (e) {}
   }
 
+  // These depend on gamification/session constants being initialized first.
+  renderJourneyCard();
+  renderThemeStarterChips();
+
+  function normalizeStats(raw) {
+    const parsed = raw && typeof raw === 'object' ? raw : {};
+    const themes = parsed.themesExplored instanceof Set
+      ? [...parsed.themesExplored]
+      : (Array.isArray(parsed.themesExplored) ? parsed.themesExplored : []);
+    const badges = parsed.earnedBadges instanceof Set
+      ? [...parsed.earnedBadges]
+      : (Array.isArray(parsed.earnedBadges) ? parsed.earnedBadges : []);
+    return {
+      totalQuestions:   Number(parsed.totalQuestions || 0),
+      currentStreak:    Number(parsed.currentStreak || 0),
+      maxStreak:        Number(parsed.maxStreak || 0),
+      lastActiveDate:   parsed.lastActiveDate || null,
+      themesExplored:   new Set(themes),
+      earnedBadges:     new Set(badges),
+      citationsClicked: Number(parsed.citationsClicked || 0),
+      sharesCount:      Number(parsed.sharesCount || 0),
+      insightsSaved:    Number(parsed.insightsSaved || 0),
+      lastReviveDate:   parsed.lastReviveDate || null,
+      nightOwl:         !!parsed.nightOwl,
+      dailyQuestions:   Number(parsed.dailyQuestions || 0),
+      lastSessionDate:  parsed.lastSessionDate || null,
+    };
+  }
+
   function loadStats() {
     try {
       const raw = localStorage.getItem('amt_gamification') || _cookieGet('amt_gx');
       if (raw) {
-        const parsed = JSON.parse(raw);
-        parsed.themesExplored = new Set(parsed.themesExplored || []);
-        parsed.earnedBadges   = new Set(parsed.earnedBadges   || []);
+        const parsed = normalizeStats(JSON.parse(raw));
         // Cookie recovery: re-hydrate localStorage so future writes work normally
         if (!localStorage.getItem('amt_gamification')) {
           try { localStorage.setItem('amt_gamification', raw); } catch (e) {}
@@ -3068,21 +3244,7 @@
         return parsed;
       }
     } catch (e) {}
-    return {
-      totalQuestions:   0,
-      currentStreak:    0,
-      maxStreak:        0,
-      lastActiveDate:   null,   // 'YYYY-MM-DD'
-      themesExplored:   new Set(),
-      earnedBadges:     new Set(),
-      citationsClicked: 0,
-      sharesCount:      0,
-      insightsSaved:    0,
-      lastReviveDate:   null,
-      nightOwl:         false,
-      dailyQuestions:   0,      // questions asked on lastSessionDate
-      lastSessionDate:  null,   // 'YYYY-MM-DD' — tracks which day dailyQuestions counts
-    };
+    return normalizeStats({});
   }
 
   function saveStats(s) {
@@ -3409,6 +3571,10 @@
       ? getThemeStarter(topTheme)
       : 'What do I need most in this season of my life?';
 
+    if (questionEntries.length < 2 && savedEntries.length === 0 && shareEntries.length === 0) {
+      return null;
+    }
+
     return {
       questionCount: questionEntries.length,
       savedCount: savedEntries.length,
@@ -3558,6 +3724,11 @@
         <div class="amt-weekly-recap-copy">
           <span class="amt-weekly-recap-kicker">Weekly recap</span>
           <h3 class="amt-weekly-recap-title">${recap.topTheme ? `You kept returning to ${escapeHtml(recap.topTheme)}.` : 'Your reflection rhythm is taking shape.'}</h3>
+          <div class="amt-weekly-recap-metrics">
+            <span class="amt-weekly-recap-pill">${recap.questionCount} question${recap.questionCount === 1 ? '' : 's'}</span>
+            <span class="amt-weekly-recap-pill">${recap.savedCount} saved</span>
+            <span class="amt-weekly-recap-pill">${recap.shareCount} shared</span>
+          </div>
           <p class="amt-weekly-recap-text">${recap.questionCount} question${recap.questionCount === 1 ? '' : 's'} asked, ${recap.savedCount} insight${recap.savedCount === 1 ? '' : 's'} saved, ${recap.shareCount} reflection${recap.shareCount === 1 ? '' : 's'} shared in the last 7 days.</p>
           <p class="amt-weekly-recap-subtext">${recap.strongestDayCount >= 3 ? `Your strongest day held ${recap.strongestDayCount} moments of reflection.` : 'Small consistent returns are building momentum.'}</p>
           ${recap.latestSavedInsight ? `<p class="amt-weekly-recap-quote">“${escapeHtml(recap.latestSavedInsight.excerpt)}”</p>` : ''}
@@ -3641,6 +3812,7 @@
     prompt.innerHTML = `
       <span class="amt-stats-prompt-kicker">Next up</span>
       <span class="amt-stats-prompt-text">${escapeHtml(getDailyMomentumText(stats))}</span>
+      <span class="amt-stats-prompt-subtext">${stats.currentStreak >= 3 ? 'Your streak is active and your return rhythm is building.' : 'Small consistent returns matter more than intensity.'}</span>
     `;
   }
 
@@ -4244,8 +4416,10 @@
   function showShareModal(dataUrl, caption, options) {
     const modalOptions = options || {};
     const modalTitle = modalOptions.title || 'Share your achievement';
-    const modalHint = modalOptions.hint || 'Platform buttons download the image first — then attach it to your post.';
+    const modalHint = modalOptions.hint || 'On supported phones, share the image directly from the system share sheet. Platform buttons fall back only when direct sharing is unavailable.';
     const downloadName = modalOptions.filename || 'mirror-talk-achievement.png';
+    const shareContextLabel = modalOptions.contextLabel || 'Reflection card';
+    const invitePrompt = modalOptions.invitePrompt || 'Share the reflection itself, or pass on a direct Mirror Talk link to someone who needs it.';
 
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
@@ -4262,7 +4436,8 @@
     const encodedUrl  = encodeURIComponent(pageUrl);
 
     // Detect Web Share API with file support (best path — native OS share sheet)
-    const canNativeShare = !!(navigator.canShare);
+    const canNativeShare = !!navigator.share;
+    const canNativeShareFiles = !!navigator.canShare;
 
     const nativeShareBtn = canNativeShare
       ? `<button class="amt-scm-btn amt-scm-native" id="amt-scm-native-btn">
@@ -4285,8 +4460,10 @@
       <div class="amt-scm-panel">
         <button class="amt-scm-close" aria-label="Close">&times;</button>
         <h3 class="amt-scm-title">${escapeHtml(modalTitle)}</h3>
+        <p class="amt-scm-context">${escapeHtml(shareContextLabel)}</p>
         <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
         <p class="amt-scm-hint">${escapeHtml(modalHint)}</p>
+        <p class="amt-scm-invite">${escapeHtml(invitePrompt)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
           <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">
@@ -4325,6 +4502,20 @@
       trackRewardEvent('share');
     }
 
+    async function shareViaSystemSheet(platformName) {
+      const file = await _dataUrlToFile(dataUrl, downloadName);
+      const sharePayload = canNativeShareFiles && navigator.canShare({ files: [file] })
+        ? { files: [file], text: caption, url: pageUrl }
+        : { text: shareText, url: pageUrl };
+
+      await navigator.share(sharePayload);
+      markShareComplete();
+      if (platformName) {
+        note.textContent = `✅ Share sheet opened. Choose ${platformName} if it appears in your available apps.`;
+        note.style.display = '';
+      }
+    }
+
     // ── Helper: download image then open platform URL ──────────────────
     function downloadThenOpen(platformUrl, platformNote) {
       _downloadImage(dataUrl, downloadName);
@@ -4349,15 +4540,7 @@
     if (canNativeShare) {
       modal.querySelector('#amt-scm-native-btn').addEventListener('click', async function() {
         try {
-          const file = await _dataUrlToFile(dataUrl, downloadName);
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], text: caption, url: pageUrl });
-            markShareComplete();
-          } else {
-            // canShare exists but files not supported — fall back to text-only share
-            await navigator.share({ text: shareText });
-            markShareComplete();
-          }
+          await shareViaSystemSheet();
         } catch (err) {
           if (err.name !== 'AbortError') {
             // Fallback to download
@@ -4371,7 +4554,15 @@
     }
 
     // ── Twitter / X ───────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-twitter').addEventListener('click', function() {
+    modal.querySelector('.amt-scm-twitter').addEventListener('click', async function() {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('X');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
       downloadThenOpen(
         this.dataset.url,
         '📥 Image saved! Attach it to your tweet — Twitter doesn\'t support auto-upload from web.'
@@ -4379,7 +4570,15 @@
     });
 
     // ── Facebook ──────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-facebook').addEventListener('click', function() {
+    modal.querySelector('.amt-scm-facebook').addEventListener('click', async function() {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('Facebook');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
       downloadThenOpen(
         this.dataset.url,
         '📥 Image saved! On Facebook, create a post and upload the downloaded image.'
@@ -4387,7 +4586,15 @@
     });
 
     // ── WhatsApp ──────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-whatsapp').addEventListener('click', function() {
+    modal.querySelector('.amt-scm-whatsapp').addEventListener('click', async function() {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('WhatsApp');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
       downloadThenOpen(
         this.dataset.url,
         '📥 Image saved! In WhatsApp, tap the attachment icon to add it to your message.'
@@ -4395,7 +4602,15 @@
     });
 
     // ── Instagram ─────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-instagram').addEventListener('click', () => {
+    modal.querySelector('.amt-scm-instagram').addEventListener('click', async () => {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('Instagram');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
       _downloadImage(dataUrl, downloadName);
       markShareComplete();
       note.textContent = '📥 Image saved! Open Instagram, tap + and choose your downloaded image for a post or story.';
@@ -4560,8 +4775,10 @@
     const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
     showShareModal(dataUrl, caption, {
       title: 'Share this reflection card',
-      hint: 'Download or share a beautifully formatted reflection inspired by your answer.',
-      filename: 'mirror-talk-reflection.png'
+      hint: 'Share a polished reflection card inspired by your answer. On supported phones, the image can go straight into the system share sheet.',
+      filename: 'mirror-talk-reflection.png',
+      contextLabel: normalized.theme || 'Saved reflection',
+      invitePrompt: 'Use the card to share the insight itself, or invite someone into Ask Mirror Talk from the next action.'
     });
   }
 
@@ -4882,6 +5099,12 @@
     shareSection.id = 'amt-share-section';
     shareSection.className = 'amt-share-section amt-share-section-v2';
 
+    const reflectionInsight = normalizeInsightRecord({
+      question,
+      answer: answerText,
+      theme: inferTheme(question, answerText),
+      savedAt: Date.now()
+    });
     const pageUrl = buildTrackedPageUrl({
       source: 'invite_friend',
       medium: 'share',
@@ -4890,23 +5113,18 @@
       theme: reflectionInsight.theme || '',
       question: question
     });
-    const reflectionInsight = normalizeInsightRecord({
-      question,
-      answer: answerText,
-      theme: inferTheme(question, answerText),
-      savedAt: Date.now()
-    });
-    const referralShare = `I've been exploring "${question.substring(0, 80)}" on Mirror Talk. Start with this reflection path or ask your own question:\n${pageUrl}`;
+    const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
         <span class="amt-share-kicker">Keep or pass on what mattered</span>
-        <p class="amt-share-caption">Share this reflection as a premium card, or invite someone into the Mirror Talk experience.</p>
+        <p class="amt-share-caption">Turn this answer into a polished reflection card, or send someone a direct path into the Mirror Talk experience.</p>
       </div>
       <div class="amt-share-actions-row">
         <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
         <button type="button" class="amt-share-btn amt-share-btn-secondary" data-action="invite">Invite a friend</button>
       </div>
+      <p class="amt-share-helper">Best on mobile: the reflection card can open your system share sheet with the image attached.</p>
     `;
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
@@ -5360,15 +5578,26 @@
 
   // Replace addShareButton globally within this scope
   // (The original is still bound in the SSE done handler — we override it here)
+  function runPostAnswerExtras(question, ans) {
+    if (!output) return;
+    if (output.dataset.amtPostAnswerApplied === '1') return;
+    output.dataset.amtPostAnswerApplied = '1';
+    window._amtPostAnswerExtras(question, ans);
+  }
+
+  function safePostAnswerStep(fn) {
+    try {
+      fn();
+    } catch (e) {
+      console.warn('Post-answer extra failed:', e);
+    }
+  }
+
   window._amtPostAnswerExtras = function(question, ans) {
-    // Feature 1: save insight button (called inside V2 share)
-    addShareButtonV2(question, ans);
-    // Feature 3: reflect prompt
-    setTimeout(() => showReflectPrompt(), 600);
-    // Feature 9: copy button
-    initCopyAnswerButton(ans);
-    // Feature 8: mood reactions
-    setTimeout(() => showMoodReactions(), 400);
+    safePostAnswerStep(() => addShareButtonV2(question, ans));
+    setTimeout(() => safePostAnswerStep(() => showReflectPrompt()), 600);
+    safePostAnswerStep(() => initCopyAnswerButton(ans));
+    setTimeout(() => safePostAnswerStep(() => showMoodReactions()), 400);
   };
 
   // Hook into 'done' SSE event by patching the form submit handler
@@ -5384,7 +5613,7 @@
       if (question && ans.length > 20) {
         // Remove old share section to let V2 replace it
         setTimeout(() => {
-          window._amtPostAnswerExtras(question, ans);
+          runPostAnswerExtras(question, ans);
         }, 200);
       }
     }

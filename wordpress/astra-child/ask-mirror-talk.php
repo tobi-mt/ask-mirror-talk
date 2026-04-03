@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.3';
+    return '5.4.22';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -98,6 +98,7 @@ function ask_mirror_talk_shortcode() {
             <div id="amt-intent-starters" class="amt-intent-starters" style="display:none;" aria-label="Suggested question intents"></div>
             <div id="amt-theme-starters" class="amt-theme-starters" style="display:none;" aria-label="Suggested reflection starters"></div>
             <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
+            <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>
             <div class="amt-form-footer">
                 <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
                 <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
@@ -140,7 +141,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.3: campaign entry and growth attribution
+    $version = ask_mirror_talk_theme_version(); // v5.4.22: softens service-worker enforcement in normal browser tabs
     
     // Core styles
     wp_enqueue_style(
@@ -167,14 +168,8 @@ function ask_mirror_talk_enqueue_assets() {
         true
     );
     
-    // Enhanced UX scripts
-    wp_enqueue_script(
-        'ask-mirror-talk-enhanced',
-        $theme_uri . '/ask-mirror-talk-enhanced.js',
-        array('ask-mirror-talk'),
-        $version,
-        true
-    );
+    // Keep the optional enhanced JS layer disabled for now while we stabilize
+    // the core widget runtime.
 
     // Analytics add-on: citation click tracking + feedback buttons
     wp_enqueue_script(
@@ -330,6 +325,12 @@ function ask_mirror_talk_serve_sw_init() {
 
   var SW_VER = '{$sw_ver}';
   var SW_URL = '{$sw_url}';
+  var isStandalone = false;
+
+  try {
+    isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+  } catch (e) {}
 
   // Clean up stale RESET_KEY flags written by the 5.0.4 strategy
   try {
@@ -339,13 +340,45 @@ function ask_mirror_talk_serve_sw_init() {
   } catch (e) {}
 
   async function enforceSW() {
-    // Unregister any SW at a different script URL (old version or old URL format)
+    async function canLoadScript(url) {
+      try {
+        var res = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
+        return res.ok;
+      } catch (e) {
+        return false;
+      }
+    }
+
     var allRegs = await navigator.serviceWorker.getRegistrations();
+    var hasActiveRegistration = allRegs.some(function(r) {
+      return !!(r && (r.active || r.waiting || r.installing));
+    });
+
+    var targetUrl = SW_URL;
+    if (!(await canLoadScript(targetUrl))) {
+      targetUrl = '/sw.js';
+      if (!(await canLoadScript(targetUrl))) {
+        if (hasActiveRegistration || navigator.serviceWorker.controller) {
+          console.info('[PWA] Keeping existing service worker; latest script is not reachable yet');
+          return;
+        }
+        throw new TypeError('Service worker script unavailable');
+      }
+      console.info('[PWA] Falling back to unversioned service worker URL');
+    }
+
+    // Unregister any SW at a different script URL (old version or old URL format)
     var unregisteredAny = false;
     await Promise.all(allRegs.map(function(r) {
       var sw = r.active || r.installing || r.waiting;
       var url = sw ? sw.scriptURL : '';
-      if (url.indexOf('v=' + SW_VER) === -1) {
+      var matchesVersioned = url.indexOf('v=' + SW_VER) !== -1;
+      var matchesFallback = targetUrl === '/sw.js' && /\/sw\.js(?:\?|$)/.test(url);
+      if (!matchesVersioned && !matchesFallback) {
         console.log('[PWA] Unregistering stale SW:', url || '(unknown)');
         unregisteredAny = true;
         return r.unregister();
@@ -354,7 +387,7 @@ function ask_mirror_talk_serve_sw_init() {
     }));
 
     // Register at versioned URL — LiteSpeed cache miss guaranteed
-    var reg = await navigator.serviceWorker.register(SW_URL, {
+    var reg = await navigator.serviceWorker.register(targetUrl, {
       scope: '/',
       updateViaCache: 'none'
     });
@@ -393,12 +426,32 @@ function ask_mirror_talk_serve_sw_init() {
       reg.active     ? 'active'     : 'unknown');
   }
 
+  async function passiveUpdate() {
+    try {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(function(reg) { return reg.update(); }));
+      console.log('[PWA] Passive SW update check complete');
+    } catch (err) {
+      console.info('[PWA] Passive SW update skipped:', err && err.message ? err.message : err);
+    }
+  }
+
   var lastEnforceAt = 0;
   function enforceSWSafely() {
     var now = Date.now();
     if (now - lastEnforceAt < 30000) return;
     lastEnforceAt = now;
+
+    if (!isStandalone && navigator.serviceWorker.controller) {
+      passiveUpdate();
+      return;
+    }
+
     enforceSW().catch(function(err) {
+      if (navigator.serviceWorker.controller) {
+        console.info('[PWA] SW enforce skipped; existing worker remains active');
+        return;
+      }
       console.warn('[PWA] SW enforce error:', err);
     });
   }

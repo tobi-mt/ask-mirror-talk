@@ -83,6 +83,7 @@ def get_engine():
             db_url,
             pool_pre_ping=True,
             pool_recycle=120,
+            pool_reset_on_return=None,
             pool_size=2,
             max_overflow=3,
             pool_timeout=30,

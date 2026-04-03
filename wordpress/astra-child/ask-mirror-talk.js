@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.26 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.34 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -42,60 +42,9 @@
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
-  const PENDING_AUTOASK_KEY = 'amt_pending_autoask';
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
   let activeCampaignContext = null;
-
-  function isStandaloneMode() {
-    try {
-      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-        window.navigator.standalone === true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function looksLikeIsoDate(value) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
-  }
-
-  function humanizeCampaignLabel(value) {
-    const raw = String(value || '').trim();
-    if (!raw || looksLikeIsoDate(raw)) return '';
-    return raw
-      .replace(/[_-]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/\b\w/g, (match) => match.toUpperCase());
-  }
-
-  function rememberPendingAutoAsk(question, metadata) {
-    const cleanQuestion = sanitizeCampaignValue(question, 500);
-    if (!cleanQuestion) return;
-    try {
-      localStorage.setItem(PENDING_AUTOASK_KEY, JSON.stringify({
-        question: cleanQuestion,
-        source: metadata && metadata.source ? metadata.source : 'push',
-        createdAt: Date.now()
-      }));
-    } catch (e) {}
-  }
-
-  function consumePendingAutoAsk() {
-    try {
-      const raw = localStorage.getItem(PENDING_AUTOASK_KEY);
-      if (!raw) return null;
-      localStorage.removeItem(PENDING_AUTOASK_KEY);
-      const parsed = JSON.parse(raw);
-      if (!parsed || !parsed.question) return null;
-      if (parsed.createdAt && (Date.now() - parsed.createdAt > 10 * 60 * 1000)) return null;
-      return parsed;
-    } catch (e) {
-      try { localStorage.removeItem(PENDING_AUTOASK_KEY); } catch (err) {}
-      return null;
-    }
-  }
 
   function hasStrongSupport(citationsList) {
     return Array.isArray(citationsList) && citationsList.length > 0;
@@ -164,25 +113,6 @@
     };
   }
 
-  function shouldShowCampaignWelcome(context) {
-    if (!context) return false;
-
-    const stats = loadStats();
-    const lastSession = loadLastSession() || {};
-    const insightsCount = loadInsights().length;
-    const hasReturnHistory = (
-      stats.totalQuestions > 0 ||
-      stats.currentStreak > 0 ||
-      insightsCount > 0 ||
-      !!lastSession.question ||
-      !!lastSession.theme
-    );
-
-    if (hasReturnHistory) return false;
-
-    return !!(context.question || context.intent || context.theme || context.campaign || context.ref);
-  }
-
   function buildTrackedPageUrl(overrides) {
     const data = Object.assign({}, activeCampaignContext || {}, overrides || {});
     const url = new URL(BASE_PAGE_URL);
@@ -206,6 +136,55 @@
     }
     if (context.theme) return getThemeStarter(context.theme);
     return '';
+  }
+
+  function looksLikeIsoDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+  }
+
+  function humanizeCampaignLabel(value) {
+    const raw = String(value || '').trim();
+    if (!raw || looksLikeIsoDate(raw)) return '';
+    return raw
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  function shouldShowCampaignWelcome(context) {
+    if (!context) return false;
+
+    let hasReturnHistory = false;
+    try {
+      const rawStats = localStorage.getItem('amt_gamification') || '';
+      const rawLastSession = localStorage.getItem('amt_last_session') || '';
+      const rawInsights = localStorage.getItem('amt_saved_insights') || '';
+      const rawLegacyQuestion = localStorage.getItem('amt_last_question') || '';
+      const rawLegacyTheme = localStorage.getItem('amt_last_theme') || '';
+      const cookieJar = String(document.cookie || '');
+      const rawStatsCookie = /(?:^|;\s*)amt_gx=/.test(cookieJar);
+      const rawLastSessionCookie = /(?:^|;\s*)amt_ls=/.test(cookieJar);
+      const rawInsightsCookie = /(?:^|;\s*)amt_ix=/.test(cookieJar);
+
+      hasReturnHistory =
+        rawStats.includes('"totalQuestions":') ||
+        rawStats.includes('"currentStreak":') ||
+        rawStats.includes('"maxStreak":') ||
+        rawLastSession.includes('"question":') ||
+        rawLastSession.includes('"theme":') ||
+        rawInsights.includes('"question":') ||
+        rawInsights.includes('"excerpt":') ||
+        rawStatsCookie ||
+        rawLastSessionCookie ||
+        rawInsightsCookie ||
+        !!rawLegacyQuestion ||
+        !!rawLegacyTheme;
+    } catch (e) {}
+
+    if (hasReturnHistory) return false;
+
+    return !!(context.question || context.intent || context.theme || context.campaign || context.ref);
   }
 
   function renderCampaignWelcome() {
@@ -376,7 +355,6 @@
     // Don't fire a second concurrent request if one is already in-flight
     // (guards the postMessage fallback path for old iOS Safari < 15.4).
     if (submitBtn && submitBtn.disabled) return;
-    rememberPendingAutoAsk(question, { source: 'push' });
     setQuestionOrigin('notification_autoask');
     input.value = question;
     // Hide the QOTD card so the answer takes centre stage
@@ -396,7 +374,6 @@
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
-      rememberPendingAutoAsk(question, { source: 'url_autoask' });
       // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
       const remainingParams = params.toString()
         .replace(/autoask=[^&]*&?/, '')
@@ -412,16 +389,6 @@
       } else {
         // Tiny delay to let the widget's own init finish
         setTimeout(() => autoSubmitQuestion(question), 100);
-      }
-      return;
-    }
-
-    const pending = consumePendingAutoAsk();
-    if (pending && pending.question) {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => autoSubmitQuestion(pending.question));
-      } else {
-        setTimeout(() => autoSubmitQuestion(pending.question), 100);
       }
     }
   })();
@@ -446,7 +413,6 @@
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
         // QOTD notification clicked while app was open — auto-submit the question.
-        rememberPendingAutoAsk(event.data.question, { source: event.data.source || 'push' });
         autoSubmitQuestion(event.data.question);
       } else if (event.data && event.data.type === 'NAVIGATE_TO_FORM') {
         // Midday motivation notification clicked while app was open — scroll
@@ -1318,6 +1284,15 @@
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
 
+            // Show depth indicator (e.g. "Drawing from 6 episodes…")
+            if (lastDepthMessage) {
+              const depthEl = document.createElement('div');
+              depthEl.className = 'amt-depth-indicator';
+              depthEl.textContent = lastDepthMessage.replace('…', '');
+              // Append after the response text, before share button
+              output.appendChild(depthEl);
+            }
+
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
               latency_ms: event.latency_ms,
@@ -1404,7 +1379,7 @@
     const section = document.createElement('div');
     section.id = 'amt-email-section';
     section.className = 'amt-email-section';
-    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email"><span aria-hidden="true">📧</span><span>Email this reflection</span></button>`;
+    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email">📧 Email this reflection</button>`;
 
     getAnswerUtilitiesRoot().appendChild(section);
 
@@ -3831,7 +3806,8 @@
     const secondaryBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-secondary');
     if (secondaryBtn) {
       secondaryBtn.addEventListener('click', () => {
-        openInsightsPanel({ scrollIntoView: true, pulse: true });
+        const btn = document.getElementById('amt-insights-btn');
+        if (btn) btn.click();
       });
     }
 
@@ -4492,7 +4468,7 @@
   function showShareModal(dataUrl, caption, options) {
     const modalOptions = options || {};
     const modalTitle = modalOptions.title || 'Share your achievement';
-    const modalHint = modalOptions.hint || 'On supported phones and homescreen installs, Share image opens your system share sheet so you can choose Instagram, Facebook, WhatsApp, Messages, or Mail.';
+    const modalHint = modalOptions.hint || 'On supported phones, share the image directly from the system share sheet. Platform buttons fall back only when direct sharing is unavailable.';
     const downloadName = modalOptions.filename || 'mirror-talk-achievement.png';
     const shareContextLabel = modalOptions.contextLabel || 'Reflection card';
     const invitePrompt = modalOptions.invitePrompt || 'Share the reflection itself, or pass on a direct Mirror Talk link to someone who needs it.';
@@ -4508,6 +4484,8 @@
       ref: 'share_modal'
     });
     const shareText = caption + '\n\n' + pageUrl;
+    const encodedText = encodeURIComponent(shareText);
+    const encodedUrl  = encodeURIComponent(pageUrl);
 
     // Detect Web Share API with file support (best path — native OS share sheet)
     const canNativeShare = !!navigator.share;
@@ -4515,11 +4493,11 @@
 
     const nativeShareBtn = canNativeShare
       ? `<button class="amt-scm-btn amt-scm-native" id="amt-scm-native-btn">
-           Share image
+           📲 Share with image
          </button>`
       : '';
     const divider = canNativeShare
-      ? `<div class="amt-scm-divider"><span>or keep a copy for later</span></div>`
+      ? `<div class="amt-scm-divider"><span>or share to a specific platform</span></div>`
       : '';
 
     const modal = document.createElement('div');
@@ -4540,12 +4518,25 @@
         <p class="amt-scm-invite">${escapeHtml(invitePrompt)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
-          <button class="amt-scm-btn amt-scm-link" id="amt-scm-link-btn">Share link</button>
-          <button class="amt-scm-btn amt-scm-copy" id="amt-scm-copy-btn">Copy caption</button>
-          ${divider}
           <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">
-            Download image
+            ⬇️ Download image
           </a>
+          ${divider}
+          <button class="amt-scm-btn amt-scm-twitter" data-url="https://twitter.com/intent/tweet?text=${encodedText}">
+            𝕏 Twitter / X
+          </button>
+          <button class="amt-scm-btn amt-scm-facebook" data-url="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}">
+            📘 Facebook
+          </button>
+          <button class="amt-scm-btn amt-scm-whatsapp" data-url="https://wa.me/?text=${encodedText}">
+            💬 WhatsApp
+          </button>
+          <button class="amt-scm-btn amt-scm-instagram">
+            📸 Instagram
+          </button>
+          <button class="amt-scm-btn amt-scm-copy">
+            📋 Copy text
+          </button>
         </div>
         <p class="amt-scm-platform-note" style="display:none;"></p>
       </div>
@@ -4577,6 +4568,15 @@
       }
     }
 
+    // ── Helper: download image then open platform URL ──────────────────
+    function downloadThenOpen(platformUrl, platformNote) {
+      _downloadImage(dataUrl, downloadName);
+      markShareComplete();
+      note.textContent = platformNote;
+      note.style.display = '';
+      setTimeout(() => window.open(platformUrl, '_blank', 'noopener,noreferrer'), 400);
+    }
+
     // ── Close handlers ──────────────────────────────────────────────────
     const close = () => {
       modal.classList.remove('amt-scm-visible');
@@ -4598,39 +4598,86 @@
             // Fallback to download
             _downloadImage(dataUrl, downloadName);
             markShareComplete();
-            note.textContent = 'Image saved. Open Instagram, Facebook, WhatsApp, or any app you like and attach it there.';
+            note.textContent = '📥 Image saved — paste it into your app of choice.';
             note.style.display = '';
           }
         }
       });
     }
 
-    modal.querySelector('#amt-scm-link-btn').addEventListener('click', async function() {
+    // ── Twitter / X ───────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-twitter').addEventListener('click', async function() {
       if (canNativeShare) {
         try {
-          await navigator.share({ title: modalTitle, text: caption, url: pageUrl });
-          markShareComplete();
+          await shareViaSystemSheet('X');
           return;
         } catch (err) {
           if (err.name === 'AbortError') return;
         }
       }
-      try {
-        await navigator.clipboard.writeText(pageUrl);
-        markShareComplete();
-        note.textContent = 'Link copied. Paste it anywhere you want to invite someone in.';
-        note.style.display = '';
-      } catch (e) {}
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! Attach it to your tweet — Twitter doesn\'t support auto-upload from web.'
+      );
     });
 
-    modal.querySelector('#amt-scm-copy-btn').addEventListener('click', async function() {
+    // ── Facebook ──────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-facebook').addEventListener('click', async function() {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('Facebook');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! On Facebook, create a post and upload the downloaded image.'
+      );
+    });
+
+    // ── WhatsApp ──────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-whatsapp').addEventListener('click', async function() {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('WhatsApp');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      downloadThenOpen(
+        this.dataset.url,
+        '📥 Image saved! In WhatsApp, tap the attachment icon to add it to your message.'
+      );
+    });
+
+    // ── Instagram ─────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-instagram').addEventListener('click', async () => {
+      if (canNativeShare) {
+        try {
+          await shareViaSystemSheet('Instagram');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      _downloadImage(dataUrl, downloadName);
+      markShareComplete();
+      note.textContent = '📥 Image saved! Open Instagram, tap + and choose your downloaded image for a post or story.';
+      note.style.display = '';
+    });
+
+    // ── Copy text ─────────────────────────────────────────────────────────
+    modal.querySelector('.amt-scm-copy').addEventListener('click', async function() {
       try {
         await navigator.clipboard.writeText(shareText);
         markShareComplete();
-        this.textContent = 'Copied';
-        setTimeout(() => { this.textContent = 'Copy caption'; }, 2500);
+        this.textContent = '✅ Copied!';
+        setTimeout(() => { this.textContent = '📋 Copy text'; }, 2500);
       } catch (e) {
-        this.textContent = 'Copy failed';
+        this.textContent = '⚠️ Copy failed';
       }
     });
   }
@@ -4674,76 +4721,75 @@
 
   function buildInsightShareCard(insight) {
     const normalized = normalizeInsightRecord(insight);
-    const W = 1080;
-    const H = 1350;
+    const W = 1200;
+    const H = 1500;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
     const grad = ctx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0, '#fbf6ee');
-    grad.addColorStop(0.58, '#f2e7d8');
-    grad.addColorStop(1, '#eadcc8');
+    grad.addColorStop(0, '#f7f0e4');
+    grad.addColorStop(0.55, '#efe6d9');
+    grad.addColorStop(1, '#e7dccd');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = 'rgba(46,42,36,0.025)';
-    for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = 'rgba(46,42,36,0.03)';
+    for (let i = 0; i < 3200; i++) {
       ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
     }
 
     ctx.strokeStyle = 'rgba(139,115,85,0.28)';
-    ctx.lineWidth = 3;
-    _roundRect(ctx, 42, 42, W - 84, H - 84, 28);
+    ctx.lineWidth = 4;
+    _roundRect(ctx, 44, 44, W - 88, H - 88, 30);
     ctx.stroke();
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '600 28px Georgia, serif';
+    ctx.font = '600 30px Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText('ASK MIRROR TALK', W / 2, 112);
+    ctx.fillText('ASK MIRROR TALK', W / 2, 126);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '700 64px Georgia, serif';
-    wrapCanvasText(ctx, normalized.question, 120, 210, W - 240, 78, 4);
+    ctx.font = '700 76px Georgia, serif';
+    wrapCanvasText(ctx, normalized.question, 170, 238, 860, 94, 4);
 
-    const themePillWidth = Math.min(W - 220, Math.max(280, 190 + (normalized.theme.length * 10)));
-    ctx.fillStyle = 'rgba(46,42,36,0.08)';
-    _roundRect(ctx, (W - themePillWidth) / 2, 406, themePillWidth, 52, 26);
+    ctx.fillStyle = 'rgba(46,42,36,0.1)';
+    _roundRect(ctx, 150, 450, W - 300, 56, 28);
     ctx.fill();
     ctx.fillStyle = '#6b665d';
-    ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(normalized.theme, W / 2, 440);
+    ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(normalized.theme, W / 2, 486);
 
     ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    _roundRect(ctx, 94, 514, W - 188, 500, 32);
+    _roundRect(ctx, 108, 560, W - 216, 548, 34);
     ctx.fill();
     ctx.strokeStyle = 'rgba(139,115,85,0.18)';
     ctx.lineWidth = 2;
-    _roundRect(ctx, 94, 514, W - 188, 500, 32);
+    _roundRect(ctx, 108, 560, W - 216, 548, 34);
     ctx.stroke();
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '82px Georgia, serif';
+    ctx.font = '88px Georgia, serif';
     ctx.textAlign = 'left';
-    ctx.fillText('“', 140, 610);
+    ctx.fillText('“', 160, 664);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '500 38px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, 140, 662, W - 280, 54, 8);
+    ctx.font = '500 42px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, 160, 720, W - 320, 60, 7);
 
     ctx.fillStyle = '#6b665d';
     ctx.font = '500 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1108);
+    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1188);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '600 28px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1204);
+    ctx.font = '600 30px Georgia, serif';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1318);
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '500 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1248);
+    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1368);
 
     return canvas.toDataURL('image/png');
   }
@@ -4853,31 +4899,6 @@
     btn.style.display = count > 0 ? '' : 'none';
   }
 
-  function openInsightsPanel(options) {
-    const panel = document.getElementById('amt-insights-panel');
-    if (!panel) return;
-
-    const insights = loadInsights();
-    if (insights.length === 0) {
-      panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
-      panel.style.display = '';
-    } else {
-      renderInsightsPanel();
-    }
-
-    if (options && options.pulse) {
-      panel.classList.remove('amt-insights-panel-pulse');
-      void panel.offsetWidth;
-      panel.classList.add('amt-insights-panel-pulse');
-    }
-
-    if (options && options.scrollIntoView) {
-      setTimeout(() => {
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
-    }
-  }
-
   function renderInsightsPanel() {
     const panel = document.getElementById('amt-insights-panel');
     if (!panel) return;
@@ -4959,7 +4980,13 @@
       if (panel.style.display !== 'none') {
         panel.style.display = 'none';
       } else {
-        openInsightsPanel();
+        const insights = loadInsights();
+        if (insights.length === 0) {
+          panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
+          panel.style.display = '';
+        } else {
+          renderInsightsPanel();
+        }
       }
     });
   })();
@@ -5139,7 +5166,6 @@
       question: question
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
-    const standalone = isStandaloneMode();
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
@@ -5150,7 +5176,7 @@
         <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
         <button type="button" class="amt-share-btn amt-share-btn-secondary" data-action="invite">Invite a friend</button>
       </div>
-      ${standalone ? '' : `<p class="amt-share-helper">Best on phone or homescreen: Share this reflection opens your system share sheet with the image attached when available.</p>`}
+      <p class="amt-share-helper">Best on mobile: the reflection card can open your system share sheet with the image attached.</p>
     `;
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
@@ -5407,10 +5433,11 @@
   // ========================================
 
   const MOOD_REACTIONS = [
-    { emoji: '✨', label: 'Grounded' },
-    { emoji: '🫶', label: 'Seen' },
-    { emoji: '🤔', label: 'Challenged' },
-    { emoji: '🌱', label: 'Not yet' },
+    { emoji: '😮', label: 'Surprising' },
+    { emoji: '💡', label: 'Insightful' },
+    { emoji: '😢', label: 'Moving' },
+    { emoji: '🙏', label: 'Grateful' },
+    { emoji: '❤️', label: 'Loving it' },
   ];
 
   function showMoodReactions() {

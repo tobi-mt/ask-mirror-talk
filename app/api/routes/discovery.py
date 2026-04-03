@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.db import get_db
+from app.core.db import get_db, get_session_local, safe_close_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -92,9 +92,12 @@ def get_question_of_the_day():
 
 
 @router.get("/api/suggested-questions")
-def get_suggested_questions(db: Session = Depends(get_db)):
+def get_suggested_questions():
     """Return suggested starter questions for the widget."""
+    db = None
     try:
+        SessionLocal = get_session_local()
+        db = SessionLocal()
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         popular = db.execute(
             text("""
@@ -114,6 +117,8 @@ def get_suggested_questions(db: Session = Depends(get_db)):
     except Exception as e:
         logger.warning("Could not fetch popular questions: %s", e)
         popular_questions = []
+    finally:
+        safe_close_session(db, context="discovery_suggested_questions")
 
     curated = [
         "How do I deal with grief and loss?",
@@ -136,7 +141,7 @@ def get_suggested_questions(db: Session = Depends(get_db)):
 
 
 @router.get("/api/topics")
-def get_topics(db: Session = Depends(get_db)):
+def get_topics():
     """Return browseable topics with episode counts."""
     db_topic_to_slugs: dict[str, list[str]] = {
         "faith": ["faith"],
@@ -146,7 +151,10 @@ def get_topics(db: Session = Depends(get_db)):
         "general": [],
     }
 
+    db = None
     try:
+        SessionLocal = get_session_local()
+        db = SessionLocal()
         rows = db.execute(
             text("""
                 SELECT topic, COUNT(DISTINCT episode_id) AS ep_count
@@ -163,6 +171,8 @@ def get_topics(db: Session = Depends(get_db)):
     except Exception as e:
         logger.warning("Could not query topic counts: %s", e)
         db_counts = {}
+    finally:
+        safe_close_session(db, context="discovery_topics")
 
     return {
         "topics": [{**topic, "episode_count": db_counts.get(topic["slug"], 0)} for topic in TOPIC_CATALOG]

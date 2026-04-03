@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 
 from app.core.config import settings
-from app.core.db import get_session_local
+from app.core.db import get_session_local, safe_close_session
 from app.core.logging import setup_logging
 from app.api.routes.ask import router as ask_router
 from app.api.routes.discovery import router as discovery_router, QOTD_POOL, TOPIC_CATALOG
@@ -71,7 +71,7 @@ async def _prewarm_cache():
     except Exception as e:
         logger.warning("  ✗ DB history prewarm failed: %s", e)
     finally:
-        hist_db.close()
+        safe_close_session(hist_db, context="cache_prewarm_history")
 
     # ── Phase 2: prewarm QOTD + topic queries via full answer pipeline ──
     # Collect unique questions: all QOTD + all topic queries
@@ -96,7 +96,7 @@ async def _prewarm_cache():
                 warmed += 1
                 logger.info("  ✓ Pre-warmed (%d/%d): %.50s…", warmed, len(questions), question)
             finally:
-                db.close()
+                safe_close_session(db, context="cache_prewarm_question")
             # Small delay to avoid hammering the OpenAI API
             await asyncio.sleep(0.5)
         except Exception as e:

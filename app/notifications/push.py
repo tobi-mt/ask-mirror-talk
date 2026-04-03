@@ -21,6 +21,18 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+_THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "Grief": ("grief", "loss", "mourning"),
+    "Courage": ("courage", "fear", "brave"),
+    "Relationships": ("relationship", "love", "trust", "partner", "marriage"),
+    "Self-worth": ("self-worth", "compare", "comparison", "worthy", "confidence"),
+    "Healing": ("healing", "trauma", "wound", "pain"),
+    "Purpose": ("purpose", "calling", "direction", "meaning"),
+    "Inner peace": ("peace", "stillness", "calm", "uncertain"),
+    "Boundaries": ("boundaries", "people-pleasing", "guilty"),
+    "Faith": ("faith", "doubt", "god", "spiritual"),
+}
+
 
 def _get_vapid_private_key_b64() -> str:
     """
@@ -122,6 +134,90 @@ def send_push_notification(
     except Exception as e:
         logger.error("Push notification error: %s", e, exc_info=True)
         return "failed"
+
+
+def _recent_user_questions(db: Session, user_ip: str | None, days: int = 21, limit: int = 5) -> list[str]:
+    if not user_ip:
+        return []
+    rows = db.execute(
+        text("""
+            SELECT question
+            FROM qa_logs
+            WHERE user_ip = :ip
+              AND created_at >= NOW() - make_interval(days => :days)
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """),
+        {"ip": user_ip, "days": days, "limit": limit},
+    ).fetchall()
+    return [str(r[0]).strip() for r in rows if r and r[0]]
+
+
+def _primary_theme_from_questions(questions: list[str]) -> str | None:
+    scores: dict[str, int] = {}
+    haystack = " \n".join(questions).lower()
+    for theme, keywords in _THEME_KEYWORDS.items():
+        hits = sum(haystack.count(keyword) for keyword in keywords)
+        if hits:
+            scores[theme] = hits
+    if not scores:
+        return None
+    return max(scores, key=scores.get)
+
+
+def _strip_midday_cta(body: str) -> str:
+    clean = re.sub(r'\s*[Aa]sk Mirror Talk .+?[\.\!\?]*\s*$', '', body or '').strip()
+    return clean or (body or '').strip()
+
+
+def _clip_sentence(text_value: str, max_len: int = 118) -> str:
+    text_value = re.sub(r"\s+", " ", (text_value or "").strip())
+    if len(text_value) <= max_len:
+        return text_value
+    clipped = text_value[: max_len - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return f"{clipped}…"
+
+
+def _qotd_copy(question: str, theme: str, hook: str | None, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
+    title = "✨ Today's reflection"
+    if hook:
+        body = f"{question} {hook} is today's Mirror Talk path."
+    else:
+        body = question
+    if is_returning and recent_theme and recent_theme.lower() != theme.lower():
+        body = f"{question} A grounded answer is ready for the season you've been in lately."
+    elif is_returning:
+        body = f"{question} Today's answer is grounded in the kind of questions you've been returning to."
+    else:
+        body = f"{question} Open Mirror Talk for today's grounded answer."
+    return title, _clip_sentence(body, 132)
+
+
+def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
+    clean_title = re.sub(r"^[^\w]+", "", (title or "").strip())
+    clean_title = re.sub(r"\s+", " ", clean_title)
+    final_title = clean_title if clean_title else "☀️ Midday reset"
+    clean_body = _strip_midday_cta(body)
+    if is_returning and recent_theme:
+        clean_body = f"{clean_body} Stay close to what matters in your {recent_theme.lower()} season."
+    return final_title, _clip_sentence(clean_body, 132)
+
+
+def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
+    title = "🔥 Keep your streak"
+    if is_returning and recent_theme:
+        body = f"One honest question tonight keeps your reflection rhythm alive, especially around {recent_theme.lower()}."
+    elif is_returning:
+        body = "One honest question tonight keeps your reflection rhythm alive."
+    else:
+        body = "Ask one thoughtful question tonight to keep your Mirror Talk streak alive."
+    return title, _clip_sentence(body, 118)
+
+
+def _new_episode_copy(episode_title: str) -> tuple[str, str]:
+    title = "🎙️ New episode"
+    body = f"{episode_title} is ready. Open the episode and take one insight with you."
+    return title, _clip_sentence(body, 128)
 
 
 def _load_pool_from_db(db: Session) -> list[dict]:
@@ -283,7 +379,9 @@ def send_qotd_notification(db: Session) -> dict:
     # AND who have NOT already received a QOTD today (in their own timezone).
     rows = db.execute(
         text("""
-            SELECT id, endpoint, p256dh_key, auth_key, COALESCE(timezone, 'UTC') AS timezone
+            SELECT id, endpoint, p256dh_key, auth_key,
+                   COALESCE(user_ip, '') AS user_ip,
+                   COALESCE(timezone, 'UTC') AS timezone
             FROM push_subscriptions w
             WHERE active = true
               AND notify_qotd = true
@@ -340,7 +438,7 @@ def send_qotd_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth, _tz = row
+        sub_id, endpoint, p256dh, auth, user_ip, _tz = row
 
         # Which questions has this subscriber already received?
         seen_rows = db.execute(
@@ -358,18 +456,26 @@ def send_qotd_notification(db: Session) -> dict:
             continue
 
         qotd = next_qotd
-        title = f"{qotd['emoji']} {qotd['theme']}"
-        body = f"{qotd['question']} Mirror Talk has explored this deeply — the answer might surprise you."
+        recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
+        recent_theme = _primary_theme_from_questions(recent_questions)
+        is_returning = bool(recent_questions)
+        title, body = _qotd_copy(
+            question=qotd["question"],
+            theme=qotd["theme"],
+            hook=qotd.get("hook"),
+            recent_theme=recent_theme,
+            is_returning=is_returning,
+        )
 
         actions = [
             {
                 "action": "answer",
-                "title": "💬 Get Answer",
+                "title": "Get today’s answer",
                 "icon": "/wp-content/themes/astra-child/pwa-icon-192.png",
             },
             {
                 "action": "save",
-                "title": "🔖 Save for Later",
+                "title": "Save for later",
                 "icon": "/wp-content/themes/astra-child/pwa-icon-192.png",
             },
         ]
@@ -397,9 +503,10 @@ def send_qotd_notification(db: Session) -> dict:
                 "theme": qotd["theme"],
                 "qotd_id": qotd["id"],
                 "date": today.isoformat(),
+                "type": "qotd",
             },
             actions=actions,
-            vibrate=[200, 100, 200],
+            vibrate=[160, 60, 180],
             require_interaction=True,
         )
 
@@ -591,7 +698,7 @@ Return only the JSON array, no other text."""
     return inserted
 
 
-def _generate_personalized_motivation(questions: list[str]) -> tuple[str, str] | None:
+def _generate_personalized_motivation(questions: list[str]) -> dict | None:
     """
     Generate a single (title, body) midday message tailored to a subscriber's
     recent questions.  Called per-subscriber when qa_logs history is available.
@@ -611,11 +718,12 @@ def _generate_personalized_motivation(questions: list[str]) -> tuple[str, str] |
 Write ONE midday motivational push notification that speaks directly to the emotional themes behind their questions — without referencing the specific questions literally. It should feel uncannily relevant, like the message was written just for them.
 
 Rules:
-- Title: 3–5 words max, warm and direct. No "Mirror Talk" in the title.
-- Body: 1–2 sentences. Start with a grounded emotional insight that resonates with their themes, then end with "Ask Mirror Talk [a specific, relevant follow-up question]."
-- The message should feel like a wise friend noticed what they've been wrestling with.
+- Title: 2–4 words max, calm, premium, and emotionally precise. No "Mirror Talk" in the title.
+- Body: 1 short sentence only. No hashtags. No exclamation marks unless absolutely necessary.
+- Question: one clear follow-up question that naturally continues the emotional theme.
+- The overall tone should feel like a wise friend who notices what they have been carrying.
 
-Respond with a single JSON object with keys: "title", "body", "emoji" (single emoji for title), "theme" (one word).
+Respond with a single JSON object with keys: "title", "body", "question", "emoji" (single emoji for title), "theme" (one word).
 Return only the JSON object, no other text."""
 
     client = OpenAI(api_key=api_key)
@@ -633,10 +741,11 @@ Return only the JSON object, no other text."""
                 raw = raw[4:]
         import json as _json
         data = _json.loads(raw.strip())
-        title = f"{data.get('emoji', '✨')} {data['title']}".strip()
+        title = f"{data.get('emoji', '☀️')} {data['title']}".strip()
         body = data["body"].strip()
-        if title and body:
-            return title, body
+        question = data.get("question", "").strip()
+        if title and body and question:
+            return {"title": title, "body": body, "question": question, "theme": data.get("theme")}
     except Exception as e:
         logger.warning("Personalized motivation generation failed: %s", e)
     return None
@@ -655,6 +764,24 @@ def _extract_question_from_body(body: str) -> str | None:
         q = match.group(1).strip().rstrip('.!?')
         return (q[0].upper() + q[1:]) if q else None
     return None
+
+
+def _fallback_midday_question(title: str, body: str) -> str:
+    """Return a gentle, askable question when a midday message lacks an explicit CTA."""
+    haystack = f"{title} {body}".lower()
+    theme_prompts = [
+        (("grief", "loss"), "What would support me most as I move through grief today?"),
+        (("fear", "courage", "brave"), "What does courage look like in this moment of my life?"),
+        (("relationship", "love", "trust"), "What would help me show up more honestly in my relationships today?"),
+        (("self-worth", "compare", "comparison"), "How do I return to my own worth instead of comparing myself to others?"),
+        (("peace", "stillness", "calm"), "How do I find peace when life feels noisy or uncertain?"),
+        (("purpose", "direction", "calling"), "What small step would move me closer to purpose today?"),
+        (("healing", "trauma", "wound"), "What is one gentle way I can support my own healing today?"),
+    ]
+    for keywords, question in theme_prompts:
+        if any(keyword in haystack for keyword in keywords):
+            return question
+    return "What is this message inviting me to notice in my life today?"
 
 
 def send_midday_motivation_notification(db: Session) -> dict:
@@ -740,35 +867,29 @@ def send_midday_motivation_notification(db: Session) -> dict:
 
         title: str | None = None
         body: str | None = None
+        question_for_open: str | None = None
         msg_id: int | None = None
+        recent_questions = _recent_user_questions(db, user_ip, days=14, limit=5)
+        recent_theme = _primary_theme_from_questions(recent_questions)
+        is_returning = bool(recent_questions)
 
         # ── 1. Try personalization ──────────────────────────────────────────
-        if user_ip:
-            recent = db.execute(
-                text("""
-                    SELECT question FROM qa_logs
-                    WHERE user_ip = :ip
-                      AND created_at >= NOW() - INTERVAL '14 days'
-                    ORDER BY created_at DESC
-                    LIMIT 5
-                """),
-                {"ip": user_ip},
-            ).fetchall()
-            if recent:
-                questions = [r[0] for r in recent]
-                personalized = _generate_personalized_motivation(questions)
-                if personalized:
-                    title, body = personalized
-                    # Store in pool so history can reference it by ID
-                    msg_id = db.execute(
-                        text("""
-                            INSERT INTO push_motivation_messages (title, body, source)
-                            VALUES (:t, :b, 'personalized') RETURNING id
-                        """),
-                        {"t": title, "b": body},
-                    ).scalar()
-                    db.flush()
-                    logger.debug("Subscriber %d → personalized motivation (msg %d)", sub_id, msg_id)
+        if recent_questions:
+            personalized = _generate_personalized_motivation(recent_questions)
+            if personalized:
+                title = personalized["title"]
+                body = personalized["body"]
+                question_for_open = personalized["question"]
+                # Store in pool so history can reference it by ID
+                msg_id = db.execute(
+                    text("""
+                        INSERT INTO push_motivation_messages (title, body, source)
+                        VALUES (:t, :b, 'personalized') RETURNING id
+                    """),
+                    {"t": title, "b": body},
+                ).scalar()
+                db.flush()
+                logger.debug("Subscriber %d → personalized motivation (msg %d)", sub_id, msg_id)
 
         # ── 2. Fall back to shared pool ─────────────────────────────────────
         if title is None:
@@ -795,15 +916,15 @@ def send_midday_motivation_notification(db: Session) -> dict:
         # "Ask Mirror Talk <question>" CTAs).  When present, pack it into
         # data.question and bake it into the notification URL as ?autoask=
         # so the SW can auto-submit it whether the tab is open or not.
-        extracted_q = _extract_question_from_body(body or "")
+        extracted_q = question_for_open or _extract_question_from_body(body or "") or _fallback_midday_question(title or "", body or "")
+        title, body = _midday_copy(title or "", body or "", recent_theme=recent_theme, is_returning=is_returning)
         notify_data: dict = {"date": today.date().isoformat(), "type": "midday_motivation"}
         notify_url = url
-        if extracted_q:
-            notify_data["question"] = extracted_q
-            clean = url.split('#')[0].rstrip('&?')
-            sep = '&' if '?' in clean else '?'
-            hash_part = '#ask-mirror-talk-form'
-            notify_url = f"{clean}{sep}autoask={quote(extracted_q)}{hash_part}"
+        notify_data["question"] = extracted_q
+        clean = url.split('#')[0].rstrip('&?')
+        sep = '&' if '?' in clean else '?'
+        hash_part = '#ask-mirror-talk-form'
+        notify_url = f"{clean}{sep}autoask={quote(extracted_q)}{hash_part}"
 
         result = send_push_notification(
             subscription_info=subscription_info,
@@ -813,10 +934,10 @@ def send_midday_motivation_notification(db: Session) -> dict:
             tag=f"midday-{today.date().isoformat()}",
             data=notify_data,
             actions=[
-                {"action": "ask", "title": "💬 Ask Mirror Talk", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
-                {"action": "dismiss", "title": "Thanks 🙏", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+                {"action": "ask", "title": "Reflect now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+                {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
             ],
-            vibrate=[100, 50, 100],
+            vibrate=[90, 40, 90],
             require_interaction=False,
         )
 
@@ -918,7 +1039,8 @@ def send_streak_protection_notification(db: Session) -> dict:
     # Only target subscribers whose local clock is at 20:00 (8 PM)
     rows = db.execute(
         text("""
-            SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key
+            SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key,
+                   COALESCE(w.user_ip, '') AS user_ip
             FROM push_subscriptions w
             WHERE w.active = true
               AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 20
@@ -938,14 +1060,6 @@ def send_streak_protection_notification(db: Session) -> dict:
 
     logger.info("Sending streak-protection notification to %d subscribers", len(rows))
 
-    streak_messages = [
-        ("🔥 Don't break your streak!", "Keep the wisdom flowing — one question keeps it alive."),
-        ("⏰ Still time today!", "Your daily Mirror Talk reflection is waiting for you."),
-        ("💪 Stay consistent!", "A moment of reflection today keeps your streak alive."),
-        ("✨ Your wisdom awaits", "Take 60 seconds to ask Mirror Talk something meaningful."),
-    ]
-    title, body = streak_messages[today.toordinal() % len(streak_messages)]
-
     url = (
         f"/ask-mirror-talk/"
         f"?utm_source=push&utm_medium=streak&utm_campaign={today.isoformat()}"
@@ -953,7 +1067,7 @@ def send_streak_protection_notification(db: Session) -> dict:
     )
     tag = f"streak-{today.isoformat()}"
     actions = [
-        {"action": "ask", "title": "💬 Ask Now", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
+        {"action": "ask", "title": "Keep streak alive", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
         {"action": "dismiss", "title": "Later", "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"},
     ]
 
@@ -962,7 +1076,11 @@ def send_streak_protection_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth = row
+        sub_id, endpoint, p256dh, auth, user_ip = row
+        recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
+        recent_theme = _primary_theme_from_questions(recent_questions)
+        is_returning = bool(recent_questions)
+        title, body = _streak_copy(recent_theme=recent_theme, is_returning=is_returning)
         subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
         result = send_push_notification(
             subscription_info=subscription_info,
@@ -970,9 +1088,9 @@ def send_streak_protection_notification(db: Session) -> dict:
             body=body,
             url=url,
             tag=tag,
-            data={"date": today.isoformat()},
+            data={"date": today.isoformat(), "type": "streak"},
             actions=actions,
-            vibrate=[100, 50, 100],
+            vibrate=[120, 40, 120],
             require_interaction=False,
         )
         if result == "sent":
@@ -1018,26 +1136,24 @@ def send_new_episode_notification(
     Returns:
         dict with sent/failed/expired counts
     """
-    # Create premium title with visual appeal
-    title = f"🎙️ Fresh Wisdom: New Episode!"
-    body = f'"{episode_title}" — Discover insights now. Tap to explore!'
+    title, body = _new_episode_copy(episode_title)
     
     # Action buttons
     actions = [
         {
             "action": "explore",
-            "title": "🔍 Explore Now",
+            "title": "Open episode",
             "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
         },
         {
             "action": "remind",
-            "title": "🔔 Remind Me Later",
+            "title": "Save for later",
             "icon": "/wp-content/themes/astra-child/pwa-icon-192.png"
         }
     ]
     
     # Energetic vibration pattern
-    vibrate = [150, 75, 150, 75, 150]
+    vibrate = [140, 60, 140, 60, 140]
     
     return _broadcast_notification(
         db=db,

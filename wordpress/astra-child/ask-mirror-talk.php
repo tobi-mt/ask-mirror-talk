@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.24';
+    return '5.4.26';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -141,7 +141,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.24: broader mobile responsive hardening pass
+    $version = ask_mirror_talk_theme_version(); // v5.4.26: returning-user onboarding suppression + latest stabilization
     
     // Core styles
     wp_enqueue_style(

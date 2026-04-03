@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.24 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.26 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -42,9 +42,60 @@
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
+  const PENDING_AUTOASK_KEY = 'amt_pending_autoask';
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
   let activeCampaignContext = null;
+
+  function isStandaloneMode() {
+    try {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+        window.navigator.standalone === true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function looksLikeIsoDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+  }
+
+  function humanizeCampaignLabel(value) {
+    const raw = String(value || '').trim();
+    if (!raw || looksLikeIsoDate(raw)) return '';
+    return raw
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  }
+
+  function rememberPendingAutoAsk(question, metadata) {
+    const cleanQuestion = sanitizeCampaignValue(question, 500);
+    if (!cleanQuestion) return;
+    try {
+      localStorage.setItem(PENDING_AUTOASK_KEY, JSON.stringify({
+        question: cleanQuestion,
+        source: metadata && metadata.source ? metadata.source : 'push',
+        createdAt: Date.now()
+      }));
+    } catch (e) {}
+  }
+
+  function consumePendingAutoAsk() {
+    try {
+      const raw = localStorage.getItem(PENDING_AUTOASK_KEY);
+      if (!raw) return null;
+      localStorage.removeItem(PENDING_AUTOASK_KEY);
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.question) return null;
+      if (parsed.createdAt && (Date.now() - parsed.createdAt > 10 * 60 * 1000)) return null;
+      return parsed;
+    } catch (e) {
+      try { localStorage.removeItem(PENDING_AUTOASK_KEY); } catch (err) {}
+      return null;
+    }
+  }
 
   function hasStrongSupport(citationsList) {
     return Array.isArray(citationsList) && citationsList.length > 0;
@@ -113,6 +164,25 @@
     };
   }
 
+  function shouldShowCampaignWelcome(context) {
+    if (!context) return false;
+
+    const stats = loadStats();
+    const lastSession = loadLastSession() || {};
+    const insightsCount = loadInsights().length;
+    const hasReturnHistory = (
+      stats.totalQuestions > 0 ||
+      stats.currentStreak > 0 ||
+      insightsCount > 0 ||
+      !!lastSession.question ||
+      !!lastSession.theme
+    );
+
+    if (hasReturnHistory) return false;
+
+    return !!(context.question || context.intent || context.theme || context.campaign || context.ref);
+  }
+
   function buildTrackedPageUrl(overrides) {
     const data = Object.assign({}, activeCampaignContext || {}, overrides || {});
     const url = new URL(BASE_PAGE_URL);
@@ -141,18 +211,23 @@
   function renderCampaignWelcome() {
     if (!campaignWelcome) return;
     activeCampaignContext = loadCampaignContext();
-    if (!activeCampaignContext) {
+    if (!shouldShowCampaignWelcome(activeCampaignContext)) {
       campaignWelcome.innerHTML = '';
       campaignWelcome.style.display = 'none';
       return;
     }
 
     const prompt = resolveCampaignPrompt(activeCampaignContext);
-    const title = activeCampaignContext.campaign
-      ? `Start with ${activeCampaignContext.campaign}`
+    const utilitySource = ['pwa', 'push'].includes(String(activeCampaignContext.source || '').toLowerCase()) ||
+      ['qotd', 'midday', 'homescreen', 'shortcut'].includes(String(activeCampaignContext.medium || '').toLowerCase());
+    const campaignLabel = utilitySource ? '' : humanizeCampaignLabel(activeCampaignContext.campaign);
+    const title = prompt
+      ? 'Start with a guided question'
       : activeCampaignContext.theme
         ? `${activeCampaignContext.theme} reflection path`
-        : 'Start with a guided question';
+        : campaignLabel
+          ? `Start with ${campaignLabel}`
+          : 'Start with a guided question';
     const body = prompt
       ? `You landed on a curated Mirror Talk path. Start with this question, or shape it into something more personal before you ask.`
       : `You landed on a curated Mirror Talk path. Begin with a question that feels true to this moment.`;
@@ -163,10 +238,10 @@
           <span class="amt-campaign-kicker">New here?</span>
           <h3 class="amt-campaign-title">${escapeHtml(title)}</h3>
           <p class="amt-campaign-text">${escapeHtml(body)}</p>
-          ${(activeCampaignContext.source && activeCampaignContext.source !== 'pwa') ? `<p class="amt-campaign-meta">Source: ${escapeHtml(activeCampaignContext.source)}${activeCampaignContext.ref ? ` · ${escapeHtml(activeCampaignContext.ref)}` : ''}</p>` : ''}
+          ${(!utilitySource && activeCampaignContext.source) ? `<p class="amt-campaign-meta">${escapeHtml(humanizeCampaignLabel(activeCampaignContext.source))}${activeCampaignContext.ref ? ` · ${escapeHtml(activeCampaignContext.ref)}` : ''}</p>` : ''}
         </div>
         <div class="amt-campaign-actions">
-          ${prompt ? `<button type="button" class="amt-campaign-btn amt-campaign-btn-primary" data-action="prefill">${escapeHtml(truncateText(prompt, 88))}</button>` : ''}
+          ${prompt ? `<button type="button" class="amt-campaign-btn amt-campaign-btn-primary" data-action="prefill">${escapeHtml(truncateText(prompt, 72))}</button>` : ''}
           <button type="button" class="amt-campaign-btn amt-campaign-btn-secondary" data-action="focus">Ask in your own words</button>
         </div>
       </div>
@@ -301,6 +376,7 @@
     // Don't fire a second concurrent request if one is already in-flight
     // (guards the postMessage fallback path for old iOS Safari < 15.4).
     if (submitBtn && submitBtn.disabled) return;
+    rememberPendingAutoAsk(question, { source: 'push' });
     setQuestionOrigin('notification_autoask');
     input.value = question;
     // Hide the QOTD card so the answer takes centre stage
@@ -320,6 +396,7 @@
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
+      rememberPendingAutoAsk(question, { source: 'url_autoask' });
       // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
       const remainingParams = params.toString()
         .replace(/autoask=[^&]*&?/, '')
@@ -335,6 +412,16 @@
       } else {
         // Tiny delay to let the widget's own init finish
         setTimeout(() => autoSubmitQuestion(question), 100);
+      }
+      return;
+    }
+
+    const pending = consumePendingAutoAsk();
+    if (pending && pending.question) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => autoSubmitQuestion(pending.question));
+      } else {
+        setTimeout(() => autoSubmitQuestion(pending.question), 100);
       }
     }
   })();
@@ -359,6 +446,7 @@
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
         // QOTD notification clicked while app was open — auto-submit the question.
+        rememberPendingAutoAsk(event.data.question, { source: event.data.source || 'push' });
         autoSubmitQuestion(event.data.question);
       } else if (event.data && event.data.type === 'NAVIGATE_TO_FORM') {
         // Midday motivation notification clicked while app was open — scroll
@@ -1230,15 +1318,6 @@
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
 
-            // Show depth indicator (e.g. "Drawing from 6 episodes…")
-            if (lastDepthMessage) {
-              const depthEl = document.createElement('div');
-              depthEl.className = 'amt-depth-indicator';
-              depthEl.textContent = lastDepthMessage.replace('…', '');
-              // Append after the response text, before share button
-              output.appendChild(depthEl);
-            }
-
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
               latency_ms: event.latency_ms,
@@ -1325,7 +1404,7 @@
     const section = document.createElement('div');
     section.id = 'amt-email-section';
     section.className = 'amt-email-section';
-    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email">📧 Email this reflection</button>`;
+    section.innerHTML = `<button class="amt-email-btn" type="button" title="Save to email"><span aria-hidden="true">📧</span><span>Email this reflection</span></button>`;
 
     getAnswerUtilitiesRoot().appendChild(section);
 
@@ -1653,9 +1732,7 @@
     const theme = inferTheme(question, answerText);
     const meta = getCitationSupportMeta(citationsList);
     const lowMatch = !meta.hasReferences;
-    const contextDetail = lastDepthMessage
-      ? lastDepthMessage.replace('…', '')
-      : meta.contextDetail;
+    const contextDetail = meta.contextDetail;
 
     answerContext.innerHTML = `
       <div class="amt-answer-context-copy${lowMatch ? ' amt-answer-context-copy-soft' : ''}">
@@ -3754,8 +3831,7 @@
     const secondaryBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-secondary');
     if (secondaryBtn) {
       secondaryBtn.addEventListener('click', () => {
-        const btn = document.getElementById('amt-insights-btn');
-        if (btn) btn.click();
+        openInsightsPanel({ scrollIntoView: true, pulse: true });
       });
     }
 
@@ -4416,7 +4492,7 @@
   function showShareModal(dataUrl, caption, options) {
     const modalOptions = options || {};
     const modalTitle = modalOptions.title || 'Share your achievement';
-    const modalHint = modalOptions.hint || 'On supported phones, share the image directly from the system share sheet. Platform buttons fall back only when direct sharing is unavailable.';
+    const modalHint = modalOptions.hint || 'On supported phones and homescreen installs, Share image opens your system share sheet so you can choose Instagram, Facebook, WhatsApp, Messages, or Mail.';
     const downloadName = modalOptions.filename || 'mirror-talk-achievement.png';
     const shareContextLabel = modalOptions.contextLabel || 'Reflection card';
     const invitePrompt = modalOptions.invitePrompt || 'Share the reflection itself, or pass on a direct Mirror Talk link to someone who needs it.';
@@ -4432,8 +4508,6 @@
       ref: 'share_modal'
     });
     const shareText = caption + '\n\n' + pageUrl;
-    const encodedText = encodeURIComponent(shareText);
-    const encodedUrl  = encodeURIComponent(pageUrl);
 
     // Detect Web Share API with file support (best path — native OS share sheet)
     const canNativeShare = !!navigator.share;
@@ -4441,11 +4515,11 @@
 
     const nativeShareBtn = canNativeShare
       ? `<button class="amt-scm-btn amt-scm-native" id="amt-scm-native-btn">
-           📲 Share with image
+           Share image
          </button>`
       : '';
     const divider = canNativeShare
-      ? `<div class="amt-scm-divider"><span>or share to a specific platform</span></div>`
+      ? `<div class="amt-scm-divider"><span>or keep a copy for later</span></div>`
       : '';
 
     const modal = document.createElement('div');
@@ -4466,25 +4540,12 @@
         <p class="amt-scm-invite">${escapeHtml(invitePrompt)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
-          <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">
-            ⬇️ Download image
-          </a>
+          <button class="amt-scm-btn amt-scm-link" id="amt-scm-link-btn">Share link</button>
+          <button class="amt-scm-btn amt-scm-copy" id="amt-scm-copy-btn">Copy caption</button>
           ${divider}
-          <button class="amt-scm-btn amt-scm-twitter" data-url="https://twitter.com/intent/tweet?text=${encodedText}">
-            𝕏 Twitter / X
-          </button>
-          <button class="amt-scm-btn amt-scm-facebook" data-url="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}">
-            📘 Facebook
-          </button>
-          <button class="amt-scm-btn amt-scm-whatsapp" data-url="https://wa.me/?text=${encodedText}">
-            💬 WhatsApp
-          </button>
-          <button class="amt-scm-btn amt-scm-instagram">
-            📸 Instagram
-          </button>
-          <button class="amt-scm-btn amt-scm-copy">
-            📋 Copy text
-          </button>
+          <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">
+            Download image
+          </a>
         </div>
         <p class="amt-scm-platform-note" style="display:none;"></p>
       </div>
@@ -4516,15 +4577,6 @@
       }
     }
 
-    // ── Helper: download image then open platform URL ──────────────────
-    function downloadThenOpen(platformUrl, platformNote) {
-      _downloadImage(dataUrl, downloadName);
-      markShareComplete();
-      note.textContent = platformNote;
-      note.style.display = '';
-      setTimeout(() => window.open(platformUrl, '_blank', 'noopener,noreferrer'), 400);
-    }
-
     // ── Close handlers ──────────────────────────────────────────────────
     const close = () => {
       modal.classList.remove('amt-scm-visible');
@@ -4546,86 +4598,39 @@
             // Fallback to download
             _downloadImage(dataUrl, downloadName);
             markShareComplete();
-            note.textContent = '📥 Image saved — paste it into your app of choice.';
+            note.textContent = 'Image saved. Open Instagram, Facebook, WhatsApp, or any app you like and attach it there.';
             note.style.display = '';
           }
         }
       });
     }
 
-    // ── Twitter / X ───────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-twitter').addEventListener('click', async function() {
+    modal.querySelector('#amt-scm-link-btn').addEventListener('click', async function() {
       if (canNativeShare) {
         try {
-          await shareViaSystemSheet('X');
+          await navigator.share({ title: modalTitle, text: caption, url: pageUrl });
+          markShareComplete();
           return;
         } catch (err) {
           if (err.name === 'AbortError') return;
         }
       }
-      downloadThenOpen(
-        this.dataset.url,
-        '📥 Image saved! Attach it to your tweet — Twitter doesn\'t support auto-upload from web.'
-      );
+      try {
+        await navigator.clipboard.writeText(pageUrl);
+        markShareComplete();
+        note.textContent = 'Link copied. Paste it anywhere you want to invite someone in.';
+        note.style.display = '';
+      } catch (e) {}
     });
 
-    // ── Facebook ──────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-facebook').addEventListener('click', async function() {
-      if (canNativeShare) {
-        try {
-          await shareViaSystemSheet('Facebook');
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-        }
-      }
-      downloadThenOpen(
-        this.dataset.url,
-        '📥 Image saved! On Facebook, create a post and upload the downloaded image.'
-      );
-    });
-
-    // ── WhatsApp ──────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-whatsapp').addEventListener('click', async function() {
-      if (canNativeShare) {
-        try {
-          await shareViaSystemSheet('WhatsApp');
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-        }
-      }
-      downloadThenOpen(
-        this.dataset.url,
-        '📥 Image saved! In WhatsApp, tap the attachment icon to add it to your message.'
-      );
-    });
-
-    // ── Instagram ─────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-instagram').addEventListener('click', async () => {
-      if (canNativeShare) {
-        try {
-          await shareViaSystemSheet('Instagram');
-          return;
-        } catch (err) {
-          if (err.name === 'AbortError') return;
-        }
-      }
-      _downloadImage(dataUrl, downloadName);
-      markShareComplete();
-      note.textContent = '📥 Image saved! Open Instagram, tap + and choose your downloaded image for a post or story.';
-      note.style.display = '';
-    });
-
-    // ── Copy text ─────────────────────────────────────────────────────────
-    modal.querySelector('.amt-scm-copy').addEventListener('click', async function() {
+    modal.querySelector('#amt-scm-copy-btn').addEventListener('click', async function() {
       try {
         await navigator.clipboard.writeText(shareText);
         markShareComplete();
-        this.textContent = '✅ Copied!';
-        setTimeout(() => { this.textContent = '📋 Copy text'; }, 2500);
+        this.textContent = 'Copied';
+        setTimeout(() => { this.textContent = 'Copy caption'; }, 2500);
       } catch (e) {
-        this.textContent = '⚠️ Copy failed';
+        this.textContent = 'Copy failed';
       }
     });
   }
@@ -4669,75 +4674,76 @@
 
   function buildInsightShareCard(insight) {
     const normalized = normalizeInsightRecord(insight);
-    const W = 1200;
-    const H = 1500;
+    const W = 1080;
+    const H = 1350;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
     const grad = ctx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0, '#f7f0e4');
-    grad.addColorStop(0.55, '#efe6d9');
-    grad.addColorStop(1, '#e7dccd');
+    grad.addColorStop(0, '#fbf6ee');
+    grad.addColorStop(0.58, '#f2e7d8');
+    grad.addColorStop(1, '#eadcc8');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = 'rgba(46,42,36,0.03)';
-    for (let i = 0; i < 3200; i++) {
+    ctx.fillStyle = 'rgba(46,42,36,0.025)';
+    for (let i = 0; i < 2600; i++) {
       ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
     }
 
     ctx.strokeStyle = 'rgba(139,115,85,0.28)';
-    ctx.lineWidth = 4;
-    _roundRect(ctx, 44, 44, W - 88, H - 88, 30);
+    ctx.lineWidth = 3;
+    _roundRect(ctx, 42, 42, W - 84, H - 84, 28);
     ctx.stroke();
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '600 30px Georgia, serif';
+    ctx.font = '600 28px Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText('ASK MIRROR TALK', W / 2, 126);
+    ctx.fillText('ASK MIRROR TALK', W / 2, 112);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '700 76px Georgia, serif';
-    wrapCanvasText(ctx, normalized.question, 170, 238, 860, 94, 4);
+    ctx.font = '700 64px Georgia, serif';
+    wrapCanvasText(ctx, normalized.question, 120, 210, W - 240, 78, 4);
 
-    ctx.fillStyle = 'rgba(46,42,36,0.1)';
-    _roundRect(ctx, 150, 450, W - 300, 56, 28);
+    const themePillWidth = Math.min(W - 220, Math.max(280, 190 + (normalized.theme.length * 10)));
+    ctx.fillStyle = 'rgba(46,42,36,0.08)';
+    _roundRect(ctx, (W - themePillWidth) / 2, 406, themePillWidth, 52, 26);
     ctx.fill();
     ctx.fillStyle = '#6b665d';
-    ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(normalized.theme, W / 2, 486);
+    ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(normalized.theme, W / 2, 440);
 
     ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    _roundRect(ctx, 108, 560, W - 216, 548, 34);
+    _roundRect(ctx, 94, 514, W - 188, 500, 32);
     ctx.fill();
     ctx.strokeStyle = 'rgba(139,115,85,0.18)';
     ctx.lineWidth = 2;
-    _roundRect(ctx, 108, 560, W - 216, 548, 34);
+    _roundRect(ctx, 94, 514, W - 188, 500, 32);
     ctx.stroke();
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '88px Georgia, serif';
+    ctx.font = '82px Georgia, serif';
     ctx.textAlign = 'left';
-    ctx.fillText('“', 160, 664);
+    ctx.fillText('“', 140, 610);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '500 42px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, 160, 720, W - 320, 60, 7);
+    ctx.font = '500 38px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, 140, 662, W - 280, 54, 8);
 
     ctx.fillStyle = '#6b665d';
     ctx.font = '500 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1188);
+    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1108);
 
     ctx.fillStyle = '#2e2a24';
-    ctx.font = '600 30px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1318);
+    ctx.font = '600 28px Georgia, serif';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1204);
 
     ctx.fillStyle = '#8b7355';
-    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1368);
+    ctx.font = '500 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1248);
 
     return canvas.toDataURL('image/png');
   }
@@ -4847,6 +4853,31 @@
     btn.style.display = count > 0 ? '' : 'none';
   }
 
+  function openInsightsPanel(options) {
+    const panel = document.getElementById('amt-insights-panel');
+    if (!panel) return;
+
+    const insights = loadInsights();
+    if (insights.length === 0) {
+      panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
+      panel.style.display = '';
+    } else {
+      renderInsightsPanel();
+    }
+
+    if (options && options.pulse) {
+      panel.classList.remove('amt-insights-panel-pulse');
+      void panel.offsetWidth;
+      panel.classList.add('amt-insights-panel-pulse');
+    }
+
+    if (options && options.scrollIntoView) {
+      setTimeout(() => {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+  }
+
   function renderInsightsPanel() {
     const panel = document.getElementById('amt-insights-panel');
     if (!panel) return;
@@ -4928,13 +4959,7 @@
       if (panel.style.display !== 'none') {
         panel.style.display = 'none';
       } else {
-        const insights = loadInsights();
-        if (insights.length === 0) {
-          panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
-          panel.style.display = '';
-        } else {
-          renderInsightsPanel();
-        }
+        openInsightsPanel();
       }
     });
   })();
@@ -5114,6 +5139,7 @@
       question: question
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
+    const standalone = isStandaloneMode();
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
@@ -5124,7 +5150,7 @@
         <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
         <button type="button" class="amt-share-btn amt-share-btn-secondary" data-action="invite">Invite a friend</button>
       </div>
-      <p class="amt-share-helper">Best on mobile: the reflection card can open your system share sheet with the image attached.</p>
+      ${standalone ? '' : `<p class="amt-share-helper">Best on phone or homescreen: Share this reflection opens your system share sheet with the image attached when available.</p>`}
     `;
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
@@ -5381,11 +5407,10 @@
   // ========================================
 
   const MOOD_REACTIONS = [
-    { emoji: '😮', label: 'Surprising' },
-    { emoji: '💡', label: 'Insightful' },
-    { emoji: '😢', label: 'Moving' },
-    { emoji: '🙏', label: 'Grateful' },
-    { emoji: '❤️', label: 'Loving it' },
+    { emoji: '✨', label: 'Grounded' },
+    { emoji: '🫶', label: 'Seen' },
+    { emoji: '🤔', label: 'Challenged' },
+    { emoji: '🌱', label: 'Not yet' },
   ];
 
   function showMoodReactions() {

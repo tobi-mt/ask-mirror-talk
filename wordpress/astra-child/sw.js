@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.4.24';
+const CACHE_VERSION = 'amt-v5.4.26';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -283,11 +283,17 @@ self.addEventListener('notificationclick', (event) => {
           // the browser — navigate() forces a fresh load and checkAutoAsk() fires.
           // postMessage alone fails for discarded tabs because the message is lost.
           return targetClient.navigate(targetUrl)
-            .then(navigated => { if (navigated) navigated.focus(); })
+            .then(navigated => {
+              const client = navigated || targetClient;
+              try {
+                client.postMessage({ type: 'AUTO_SUBMIT', question, source: data?.type || 'push' });
+              } catch (e) {}
+              if (client && client.focus) return client.focus();
+            })
             .catch(() => {
               // navigate() not available (old iOS Safari < 15.4) — fall back to
               // postMessage for tabs that are still alive, then focus.
-              targetClient.postMessage({ type: 'AUTO_SUBMIT', question });
+              targetClient.postMessage({ type: 'AUTO_SUBMIT', question, source: data?.type || 'push' });
               return targetClient.focus();
             });
         }

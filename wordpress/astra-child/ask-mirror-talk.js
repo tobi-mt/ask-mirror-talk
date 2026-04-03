@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.22 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.24 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -163,7 +163,7 @@
           <span class="amt-campaign-kicker">New here?</span>
           <h3 class="amt-campaign-title">${escapeHtml(title)}</h3>
           <p class="amt-campaign-text">${escapeHtml(body)}</p>
-          ${activeCampaignContext.source ? `<p class="amt-campaign-meta">Source: ${escapeHtml(activeCampaignContext.source)}${activeCampaignContext.ref ? ` · ${escapeHtml(activeCampaignContext.ref)}` : ''}</p>` : ''}
+          ${(activeCampaignContext.source && activeCampaignContext.source !== 'pwa') ? `<p class="amt-campaign-meta">Source: ${escapeHtml(activeCampaignContext.source)}${activeCampaignContext.ref ? ` · ${escapeHtml(activeCampaignContext.ref)}` : ''}</p>` : ''}
         </div>
         <div class="amt-campaign-actions">
           ${prompt ? `<button type="button" class="amt-campaign-btn amt-campaign-btn-primary" data-action="prefill">${escapeHtml(truncateText(prompt, 88))}</button>` : ''}

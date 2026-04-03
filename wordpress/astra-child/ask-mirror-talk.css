@@ -5392,6 +5392,68 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-journal-edit-cancel-btn:hover { background: #f5f0e8; }
 
 @media (max-width: 640px) {
+  .ask-mirror-talk,
+  #ask-mirror-talk-form,
+  .ask-mirror-talk-response,
+  .amt-campaign-welcome-inner,
+  .amt-journey-card-inner,
+  .amt-weekly-recap-inner,
+  .amt-continuation-strip-inner,
+  .amt-question-coach-inner,
+  .amt-answer-context,
+  .amt-share-card-modal,
+  .amt-journal-panel,
+  .amt-about-panel {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  .ask-mirror-talk {
+    overflow-x: hidden;
+  }
+
+  .amt-heading-row,
+  .amt-form-intro {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .amt-heading-copy,
+  .amt-heading-controls,
+  .amt-form-note,
+  .amt-form-footer,
+  .amt-question-coach,
+  .amt-answer-context-copy,
+  .amt-answer-context-pills,
+  .amt-answer-utilities,
+  .amt-reflect-inner,
+  .amt-share-actions-row,
+  .amt-continuation-actions,
+  .amt-stats-prompt {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .amt-heading-controls,
+  .amt-form-footer,
+  .amt-answer-utilities,
+  .amt-share-actions-row,
+  .amt-continuation-actions,
+  .amt-reflect-actions {
+    flex-wrap: wrap;
+  }
+
+  .amt-form-note,
+  .amt-question-coach-text,
+  .amt-answer-context-summary,
+  .amt-answer-context-detail,
+  .amt-stats-prompt-text,
+  .amt-stats-prompt-subtext {
+    max-width: none;
+  }
+
   .amt-campaign-welcome-inner {
     flex-direction: column;
   }
@@ -5399,5 +5461,184 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-campaign-actions {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .amt-journey-card-inner,
+  .amt-weekly-recap-inner,
+  .amt-campaign-welcome-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    grid-template-columns: none;
+  }
+
+  .amt-journey-card-inner > *,
+  .amt-weekly-recap-inner > *,
+  .amt-campaign-welcome-inner > * {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .amt-journey-actions,
+  .amt-weekly-recap-actions,
+  .amt-campaign-actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .amt-journey-btn,
+  .amt-weekly-recap-btn,
+  .amt-campaign-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .amt-journey-title,
+  .amt-weekly-recap-title,
+  .amt-campaign-title {
+    font-size: 18px;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+  }
+
+  .amt-journey-text,
+  .amt-journey-quote,
+  .amt-weekly-recap-text,
+  .amt-weekly-recap-subtext,
+  .amt-campaign-text,
+  .amt-campaign-meta,
+  .amt-question-coach-btn-text,
+  .amt-answer-context-copy,
+  .amt-continuation-text,
+  .amt-reflect-question,
+  .amt-share-helper {
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+  }
+
+  .amt-journey-quote,
+  .amt-weekly-recap-quote {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .amt-campaign-welcome,
+  .amt-journey-card,
+  .amt-weekly-recap {
+    overflow: hidden;
+  }
+
+  .amt-stats-bar {
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .amt-stat,
+  .amt-badges-open-btn,
+  .amt-notification-btn {
+    min-width: 0;
+  }
+
+  .amt-answer-utilities > .amt-share-section,
+  .amt-answer-utilities > .amt-email-section,
+  .amt-answer-utilities > .amt-save-insight-section,
+  .amt-share-section-v2,
+  .amt-share-actions-row > *,
+  .amt-continuation-btn,
+  .amt-reflect-toggle,
+  .amt-reflect-save-btn {
+    width: 100%;
+  }
+
+  .amt-continuation-btn,
+  .amt-share-btn,
+  .amt-share-progress-btn,
+  .amt-reflect-toggle,
+  .amt-reflect-save-btn {
+    text-align: center;
+    justify-content: center;
+  }
+
+  .amt-citation-trust-note,
+  .amt-answer-context,
+  .amt-continuation-strip-inner,
+  .amt-question-coach-inner,
+  .amt-reflect-inner {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .amt-heading-controls {
+    justify-content: flex-start;
+  }
+
+  .amt-intent-starters-list,
+  .amt-theme-starters-list,
+  .amt-suggestions-list,
+  .amt-followups-list,
+  .amt-continuation-actions,
+  .amt-share-actions-row,
+  .amt-reflect-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .amt-intent-starter-chip,
+  .amt-theme-starter-chip,
+  .amt-suggestion-btn,
+  .amt-followup-btn,
+  .amt-continuation-btn,
+  .amt-share-btn,
+  .amt-share-progress-btn,
+  .amt-journal-share-btn,
+  .amt-journal-delete-btn,
+  .amt-journal-edit-btn {
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .amt-stats-bar {
+    padding: 10px 12px;
+  }
+
+  .amt-stats-prompt {
+    gap: 6px;
+  }
+
+  .amt-campaign-welcome-inner,
+  .amt-journey-card-inner,
+  .amt-weekly-recap-inner,
+  .amt-continuation-strip-inner,
+  .amt-answer-context,
+  .amt-question-coach-inner,
+  .amt-reflect-inner {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .amt-campaign-title,
+  .amt-journey-title,
+  .amt-weekly-recap-title {
+    font-size: 17px;
+  }
+
+  .amt-journal-entry-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .amt-journal-entry-actions {
+    width: 100%;
+    flex-direction: column;
   }
 }

@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.34';
+    return '5.4.41';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -28,7 +28,6 @@ function ask_mirror_talk_shortcode() {
                 <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
                     <span class="amt-heading-trust-pill">Private by default</span>
                     <span class="amt-heading-trust-pill">Real episode references</span>
-                    <span class="amt-heading-trust-pill">Built for daily return</span>
                 </div>
             </div>
             <div class="amt-heading-controls">
@@ -63,7 +62,6 @@ function ask_mirror_talk_shortcode() {
         <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
-        <div id="amt-campaign-welcome" class="amt-campaign-welcome" style="display:none;" role="region" aria-label="Campaign welcome"></div>
         <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
@@ -95,8 +93,6 @@ function ask_mirror_talk_shortcode() {
                 </div>
                 <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find and show you where the answer came from.</p>
             </div>
-            <div id="amt-intent-starters" class="amt-intent-starters" style="display:none;" aria-label="Suggested question intents"></div>
-            <div id="amt-theme-starters" class="amt-theme-starters" style="display:none;" aria-label="Suggested reflection starters"></div>
             <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
             <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>
             <div class="amt-form-footer">
@@ -141,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.34: returning-user onboarding respects cookie-backed history too
+    $version = ask_mirror_talk_theme_version(); // v5.4.41: restore Explore content reliably after an answered question
     
     // Core styles
     wp_enqueue_style(

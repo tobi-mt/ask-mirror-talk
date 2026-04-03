@@ -178,45 +178,54 @@ def _clip_sentence(text_value: str, max_len: int = 118) -> str:
     return f"{clipped}…"
 
 
+def _remove_brand_mentions(text_value: str) -> str:
+    clean = re.sub(r"\bAsk Mirror Talk\b", "", text_value or "", flags=re.IGNORECASE)
+    clean = re.sub(r"\bMirror Talk\b", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\s+", " ", clean).strip(" ,;:.-")
+    return clean
+
+
 def _qotd_copy(question: str, theme: str, hook: str | None, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "✨ Today's reflection"
-    if hook:
-        body = f"{question} {hook} is today's Mirror Talk path."
-    else:
-        body = question
+    title = "Quiet signal"
+    body = question
     if is_returning and recent_theme and recent_theme.lower() != theme.lower():
         body = f"{question} A grounded answer is ready for the season you've been in lately."
     elif is_returning:
-        body = f"{question} Today's answer is grounded in the kind of questions you've been returning to."
+        body = f"{question} Today's answer meets the questions you've been returning to."
     else:
-        body = f"{question} Open Mirror Talk for today's grounded answer."
+        body = f"{question} Open for today's grounded answer."
+    if hook:
+        title = _clip_sentence(_remove_brand_mentions(hook), 28) or title
     return title, _clip_sentence(body, 132)
 
 
 def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
     clean_title = re.sub(r"^[^\w]+", "", (title or "").strip())
     clean_title = re.sub(r"\s+", " ", clean_title)
-    final_title = clean_title if clean_title else "☀️ Midday reset"
-    clean_body = _strip_midday_cta(body)
+    clean_title = _remove_brand_mentions(clean_title)
+    final_title = clean_title if clean_title else "Midday aperture"
+    clean_body = _remove_brand_mentions(_strip_midday_cta(body))
     if is_returning and recent_theme:
         clean_body = f"{clean_body} Stay close to what matters in your {recent_theme.lower()} season."
+    elif not clean_body:
+        clean_body = "Take one quiet minute and return to what matters before the day pulls you away."
     return final_title, _clip_sentence(clean_body, 132)
 
 
 def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "🔥 Keep your streak"
+    title = "Keep the thread"
     if is_returning and recent_theme:
         body = f"One honest question tonight keeps your reflection rhythm alive, especially around {recent_theme.lower()}."
     elif is_returning:
         body = "One honest question tonight keeps your reflection rhythm alive."
     else:
-        body = "Ask one thoughtful question tonight to keep your Mirror Talk streak alive."
+        body = "Ask one thoughtful question tonight to keep your reflection rhythm alive."
     return title, _clip_sentence(body, 118)
 
 
 def _new_episode_copy(episode_title: str) -> tuple[str, str]:
-    title = "🎙️ New episode"
-    body = f"{episode_title} is ready. Open the episode and take one insight with you."
+    title = "Fresh listening"
+    body = f"{episode_title} is ready. Open the episode and carry one clear insight with you."
     return title, _clip_sentence(body, 128)
 
 

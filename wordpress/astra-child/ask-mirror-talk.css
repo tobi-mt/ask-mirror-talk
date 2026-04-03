@@ -94,90 +94,6 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.amt-intent-starters {
-  margin: 4px 0 12px;
-}
-
-.amt-intent-starters-label {
-  margin: 0 0 8px;
-  color: #8b7355;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.amt-intent-starters-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.amt-intent-starter-chip {
-  background: linear-gradient(135deg, rgba(250,248,244,0.98), rgba(245,241,233,0.95));
-  border: 1px solid #d8cdbd;
-  border-radius: 999px;
-  padding: 8px 14px;
-  color: #2e2a24;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ask-mirror-talk .amt-intent-starter-chip:hover,
-.ask-mirror-talk .amt-intent-starter-chip:focus-visible {
-  border-color: #8b7355;
-  background: #fff;
-  color: #2e2a24;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
-}
-
-.amt-theme-starters {
-  margin: 4px 0 14px;
-}
-
-.amt-theme-starters-label {
-  margin: 0 0 8px;
-  color: #8b7355;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.amt-theme-starters-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.amt-theme-starter-chip {
-  background: rgba(255,255,255,0.92);
-  border: 1px solid #ddd4c9;
-  border-radius: 999px;
-  padding: 8px 14px;
-  color: #2e2a24;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ask-mirror-talk .amt-theme-starter-chip:hover,
-.ask-mirror-talk .amt-theme-starter-chip:focus-visible {
-  border-color: #8b7355;
-  background: #fff;
-  color: #2e2a24;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
-}
-
-.amt-theme-starter-chip-theme {
-  white-space: nowrap;
-}
-
 .amt-question-coach {
   margin: 10px 0 4px;
 }
@@ -254,87 +170,6 @@
   line-height: 1.45;
   font-weight: 600;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.amt-campaign-welcome {
-  margin: 16px 0 18px;
-}
-
-.amt-campaign-welcome-inner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-  border-radius: 16px;
-  border: 1px solid rgba(180, 143, 89, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(247, 201, 72, 0.16), transparent 42%),
-    linear-gradient(135deg, rgba(255,255,255,0.92), rgba(247,243,235,0.95));
-  box-shadow: 0 10px 26px rgba(46, 42, 36, 0.06);
-}
-
-.amt-campaign-kicker {
-  display: inline-block;
-  margin-bottom: 6px;
-  color: #8b7355;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.amt-campaign-title {
-  margin: 0 0 6px;
-  font-size: 20px;
-}
-
-.amt-campaign-text,
-.amt-campaign-meta {
-  margin: 0;
-  color: #6b665d;
-  line-height: 1.55;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.amt-campaign-meta {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #8f877b;
-}
-
-.amt-campaign-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 230px;
-}
-
-.amt-campaign-btn {
-  border: 1px solid #d8cdbd;
-  border-radius: 14px;
-  padding: 11px 14px;
-  background: rgba(255,255,255,0.9);
-  color: #2e2a24;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.4;
-  font-weight: 600;
-  text-align: left;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-
-.amt-campaign-btn:hover {
-  transform: translateY(-1px);
-  border-color: #8b7355;
-  box-shadow: 0 6px 16px rgba(46, 42, 36, 0.08);
-}
-
-.amt-campaign-btn-primary {
-  background: linear-gradient(135deg, #2e2a24, #474038);
-  color: #fff;
-  border-color: #2e2a24;
 }
 
 .amt-form-footer {
@@ -1111,15 +946,15 @@
 
 .amt-scm-panel {
   position: relative;
-  background: #1e1a14;
-  border: 1px solid rgba(201,168,76,0.35);
-  border-radius: 16px;
-  padding: 28px 24px 24px;
-  max-width: 560px;
+  background: #1f1a15;
+  border: 1px solid rgba(201,168,76,0.22);
+  border-radius: 18px;
+  padding: 24px 22px 22px;
+  max-width: 500px;
   width: calc(100% - 32px);
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.52);
   transform: translateY(0);
   transition: transform 0.25s ease;
 }
@@ -1145,17 +980,17 @@
 
 .amt-scm-title {
   color: #f5e6c8;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  margin: 0 0 16px;
+  margin: 0 0 10px;
   text-align: center;
   font-family: Georgia, serif;
 }
 
 .amt-scm-context {
-  margin: -4px 0 12px;
+  margin: -2px 0 10px;
   color: rgba(245,230,200,0.72);
-  font-size: 13px;
+  font-size: 12px;
   text-align: center;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1166,40 +1001,43 @@
 .amt-scm-preview {
   display: block;
   width: 100%;
-  border-radius: 8px;
+  max-width: 340px;
+  border-radius: 12px;
   border: 1px solid rgba(201,168,76,0.25);
-  margin-bottom: 12px;
+  margin: 0 auto 12px;
 }
 
 .amt-scm-hint {
   color: rgba(245,230,200,0.5);
   font-size: 12px;
   text-align: center;
-  margin: 0 0 14px;
+  margin: 0 auto 10px;
+  max-width: 38ch;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-scm-invite {
-  margin: -2px 0 14px;
+  margin: 0 auto 12px;
   color: rgba(245,230,200,0.62);
   font-size: 12px;
   line-height: 1.45;
   text-align: center;
+  max-width: 42ch;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-scm-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
 .amt-scm-btn {
   display: block;
   padding: 11px 14px;
-  border-radius: 8px;
-  border: none;
-  font-size: 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
@@ -1213,33 +1051,10 @@
   transform: translateY(-1px);
 }
 
-.amt-scm-native    { background: #f5e6c8; color: #1a1410; grid-column: 1 / -1; font-size: 15px; }
-.amt-scm-link      { background: #c9a84c; color: #1a1410; }
-.amt-scm-copy      { background: rgba(255,255,255,0.1); color: #f5e6c8; border: 1px solid rgba(255,255,255,0.15); }
-.amt-scm-download  { background: rgba(255,255,255,0.05); color: #f5e6c8; border: 1px solid rgba(201,168,76,0.22); grid-column: 1 / -1; }
-
-.amt-scm-divider {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 4px 0;
-}
-
-.amt-scm-divider::before,
-.amt-scm-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: rgba(255,255,255,0.12);
-}
-
-.amt-scm-divider span {
-  color: rgba(255,255,255,0.35);
-  font-size: 12px;
-  white-space: nowrap;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
+.amt-scm-native    { background: #f5e6c8; color: #1a1410; font-size: 14px; }
+.amt-scm-copy-link { background: rgba(255,255,255,0.08); color: #f5e6c8; border-color: rgba(255,255,255,0.14); }
+.amt-scm-copy      { background: rgba(255,255,255,0.08); color: #f5e6c8; border-color: rgba(255,255,255,0.14); }
+.amt-scm-download  { background: rgba(255,255,255,0.05); color: #f5e6c8; border-color: rgba(201,168,76,0.22); }
 
 .amt-scm-platform-note {
   color: #f7c948;
@@ -3620,6 +3435,9 @@
 .amt-email-section {
   margin-top: 8px;
   text-align: center;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .amt-email-btn {
@@ -4415,6 +4233,10 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-mood-reaction-label {
+  white-space: nowrap;
+}
+
+.amt-mood-reaction-label {
   font-size: 10px;
   color: #8b7355;
   line-height: 1.2;
@@ -4899,7 +4721,7 @@ body.amt-light-mode .amt-suggestions-label {
   background: linear-gradient(135deg, #faf8f4, #f4efe7);
   border: 1px solid #e8e1d6;
   border-radius: 16px;
-  padding: 16px;
+  padding: 14px;
 }
 
 .amt-share-helper {
@@ -4915,17 +4737,19 @@ body.amt-light-mode .amt-suggestions-label {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 10px;
   align-items: stretch;
+  justify-content: center;
 }
 
 .amt-share-btn {
-  flex: 1 1 180px;
-  min-height: 52px;
-  border-radius: 16px;
-  padding: 12px 18px;
-  font-size: 14px;
+  flex: 0 1 220px;
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .amt-share-btn-primary {
@@ -5414,7 +5238,6 @@ body.amt-light-mode .amt-suggestions-label {
   .ask-mirror-talk,
   #ask-mirror-talk-form,
   .ask-mirror-talk-response,
-  .amt-campaign-welcome-inner,
   .amt-journey-card-inner,
   .amt-weekly-recap-inner,
   .amt-continuation-strip-inner,
@@ -5473,20 +5296,8 @@ body.amt-light-mode .amt-suggestions-label {
     max-width: none;
   }
 
-  .amt-campaign-welcome-inner {
-    flex-direction: column;
-  }
-
-  .amt-campaign-actions {
-    min-width: 0;
-    width: 100%;
-  }
-}
-
-@media (max-width: 640px) {
   .amt-journey-card-inner,
-  .amt-weekly-recap-inner,
-  .amt-campaign-welcome-inner {
+  .amt-weekly-recap-inner {
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -5494,29 +5305,25 @@ body.amt-light-mode .amt-suggestions-label {
   }
 
   .amt-journey-card-inner > *,
-  .amt-weekly-recap-inner > *,
-  .amt-campaign-welcome-inner > * {
+  .amt-weekly-recap-inner > * {
     min-width: 0;
     width: 100%;
   }
 
   .amt-journey-actions,
-  .amt-weekly-recap-actions,
-  .amt-campaign-actions {
+  .amt-weekly-recap-actions {
     width: 100%;
     min-width: 0;
   }
 
   .amt-journey-btn,
-  .amt-weekly-recap-btn,
-  .amt-campaign-btn {
+  .amt-weekly-recap-btn {
     width: 100%;
     text-align: center;
   }
 
   .amt-journey-title,
-  .amt-weekly-recap-title,
-  .amt-campaign-title {
+  .amt-weekly-recap-title {
     font-size: 18px;
     line-height: 1.3;
     overflow-wrap: break-word;
@@ -5528,8 +5335,6 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-journey-quote,
   .amt-weekly-recap-text,
   .amt-weekly-recap-subtext,
-  .amt-campaign-text,
-  .amt-campaign-meta,
   .amt-question-coach-btn-text,
   .amt-answer-context-copy,
   .amt-continuation-text,
@@ -5546,7 +5351,6 @@ body.amt-light-mode .amt-suggestions-label {
     line-height: 1.6;
   }
 
-  .amt-campaign-welcome,
   .amt-journey-card,
   .amt-weekly-recap {
     overflow: hidden;
@@ -5567,7 +5371,6 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-answer-utilities > .amt-email-section,
   .amt-answer-utilities > .amt-save-insight-section,
   .amt-share-section-v2,
-  .amt-share-actions-row > *,
   .amt-continuation-btn,
   .amt-reflect-toggle,
   .amt-reflect-save-btn {
@@ -5581,6 +5384,17 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-reflect-save-btn {
     text-align: center;
     justify-content: center;
+  }
+
+  .amt-share-actions-row {
+    justify-content: center;
+  }
+
+  .amt-share-btn {
+    width: min(100%, 280px);
+    flex: 0 1 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .amt-citation-trust-note,
@@ -5598,8 +5412,6 @@ body.amt-light-mode .amt-suggestions-label {
     justify-content: flex-start;
   }
 
-  .amt-intent-starters-list,
-  .amt-theme-starters-list,
   .amt-suggestions-list,
   .amt-followups-list,
   .amt-continuation-actions,
@@ -5610,12 +5422,9 @@ body.amt-light-mode .amt-suggestions-label {
     align-items: stretch;
   }
 
-  .amt-intent-starter-chip,
-  .amt-theme-starter-chip,
   .amt-suggestion-btn,
   .amt-followup-btn,
   .amt-continuation-btn,
-  .amt-share-btn,
   .amt-share-progress-btn,
   .amt-journal-share-btn,
   .amt-journal-delete-btn,
@@ -5626,6 +5435,14 @@ body.amt-light-mode .amt-suggestions-label {
     justify-content: center;
   }
 
+  .amt-share-btn {
+    width: min(100%, 260px);
+    max-width: 260px;
+    flex: 0 1 260px;
+    min-height: 40px;
+    padding: 10px 14px;
+  }
+
   .amt-stats-bar {
     padding: 10px 12px;
   }
@@ -5634,7 +5451,6 @@ body.amt-light-mode .amt-suggestions-label {
     gap: 6px;
   }
 
-  .amt-campaign-welcome-inner,
   .amt-journey-card-inner,
   .amt-weekly-recap-inner,
   .amt-continuation-strip-inner,
@@ -5645,7 +5461,6 @@ body.amt-light-mode .amt-suggestions-label {
     border-radius: 14px;
   }
 
-  .amt-campaign-title,
   .amt-journey-title,
   .amt-weekly-recap-title {
     font-size: 17px;

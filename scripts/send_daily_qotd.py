@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 def main():
     from app.core.db import get_session_local
     from app.notifications.push import send_qotd_notification
+    from app.core.config import settings
 
     logger.info("🔔 Starting daily QOTD push notification...")
 
@@ -43,8 +44,13 @@ def main():
 
         if result["sent"] > 0:
             print(f"✓ Sent QOTD notification to {result['sent']} subscribers")
+        elif result["failed"] > 0:
+            if not settings.vapid_private_key or not settings.vapid_claim_email:
+                print("⚠ QOTD had subscribers due, but push is not configured locally (missing VAPID keys)")
+            else:
+                print(f"⚠ QOTD attempted but {result['failed']} failed")
         elif result["total_subscribers"] == 0:
-            print("ℹ No active subscribers yet")
+            print("ℹ No QOTD subscribers due at this hour")
         else:
             print(f"⚠ Notification attempted but {result['failed']} failed")
 

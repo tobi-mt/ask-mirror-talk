@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 def main():
     from app.core.db import get_session_local
     from app.notifications.push import send_midday_motivation_notification
+    from app.core.config import settings
 
     logger.info("☀️ Starting midday motivation push notification check...")
 
@@ -44,6 +45,11 @@ def main():
 
         if result["sent"] > 0:
             print(f"✓ Sent midday motivation to {result['sent']} subscribers")
+        elif result["failed"] > 0:
+            if not settings.vapid_private_key or not settings.vapid_claim_email:
+                print("⚠ Midday motivation had subscribers due, but push is not configured locally (missing VAPID keys)")
+            else:
+                print(f"⚠ Midday motivation attempted but {result['failed']} failed")
         else:
             print("ℹ No subscribers due for midday motivation at this hour")
 

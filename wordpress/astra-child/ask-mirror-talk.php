@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.46';
+    return '5.4.49';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -137,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.46: rollback to the last known-good 5.4.39 child-theme baseline with fresh cache-busting markers
+    $version = ask_mirror_talk_theme_version(); // v5.4.49: keep the stable 5.4.43 baseline and make stacked mobile share CTAs feel like real compact buttons
     
     // Core styles
     wp_enqueue_style(

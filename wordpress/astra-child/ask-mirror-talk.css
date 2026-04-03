@@ -4739,15 +4739,20 @@ body.amt-light-mode .amt-suggestions-label {
   gap: 8px;
   margin-top: 10px;
   align-items: stretch;
+  justify-content: center;
 }
 
 .amt-share-btn {
-  flex: 1 1 160px;
-  min-height: 46px;
-  border-radius: 14px;
-  padding: 11px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 188px;
+  min-height: 38px;
+  border-radius: 12px;
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .amt-share-btn-primary {
@@ -5369,7 +5374,6 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-answer-utilities > .amt-email-section,
   .amt-answer-utilities > .amt-save-insight-section,
   .amt-share-section-v2,
-  .amt-share-actions-row > *,
   .amt-continuation-btn,
   .amt-reflect-toggle,
   .amt-reflect-save-btn {
@@ -5383,6 +5387,18 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-reflect-save-btn {
     text-align: center;
     justify-content: center;
+  }
+
+  .amt-share-actions-row {
+    justify-content: center;
+  }
+
+  .amt-share-btn {
+    width: min(100%, 200px) !important;
+    max-width: 200px;
+    flex: 0 1 200px !important;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .amt-citation-trust-note,
@@ -5403,17 +5419,23 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-suggestions-list,
   .amt-followups-list,
   .amt-continuation-actions,
-  .amt-share-actions-row,
   .amt-reflect-actions {
     display: flex;
     flex-direction: column;
     align-items: stretch;
   }
 
+  .amt-share-actions-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
   .amt-suggestion-btn,
   .amt-followup-btn,
   .amt-continuation-btn,
-  .amt-share-btn,
   .amt-share-progress-btn,
   .amt-journal-share-btn,
   .amt-journal-delete-btn,
@@ -5422,6 +5444,19 @@ body.amt-light-mode .amt-suggestions-label {
     max-width: 100%;
     text-align: center;
     justify-content: center;
+  }
+
+  .amt-share-btn {
+    width: auto !important;
+    max-width: none;
+    min-width: 142px;
+    flex: 0 0 auto !important;
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 999px;
+    line-height: 1.15;
+    white-space: nowrap;
   }
 
   .amt-stats-bar {

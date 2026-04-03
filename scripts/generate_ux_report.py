@@ -141,17 +141,33 @@ def analyze_episode_engagement(db, days=7):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     query = text("""
+        WITH qa_episode_mentions AS (
+            SELECT
+                CAST(TRIM(ep_id_text) AS INTEGER) AS episode_id,
+                COUNT(DISTINCT q.id) AS mentions
+            FROM qa_logs q
+            CROSS JOIN LATERAL unnest(string_to_array(COALESCE(q.episode_ids, ''), ',')) AS ep_id_text
+            WHERE q.created_at >= :cutoff
+              AND TRIM(ep_id_text) <> ''
+            GROUP BY CAST(TRIM(ep_id_text) AS INTEGER)
+        ),
+        citation_episode_clicks AS (
+            SELECT
+                c.episode_id,
+                COUNT(DISTINCT c.id) AS clicks
+            FROM citation_clicks c
+            WHERE c.clicked_at >= :cutoff
+            GROUP BY c.episode_id
+        )
         SELECT 
             e.id,
             e.title,
-            COUNT(DISTINCT c.id) as clicks,
-            COUNT(DISTINCT q.id) as mentions
+            COALESCE(c.clicks, 0) AS clicks,
+            COALESCE(m.mentions, 0) AS mentions
         FROM episodes e
-        LEFT JOIN citation_clicks c ON c.episode_id = e.id AND c.clicked_at >= :cutoff
-        LEFT JOIN qa_logs q ON q.episode_ids LIKE '%' || CAST(e.id AS TEXT) || '%' 
-            AND q.created_at >= :cutoff
-        WHERE clicks > 0 OR mentions > 0
-        GROUP BY e.id, e.title
+        LEFT JOIN citation_episode_clicks c ON c.episode_id = e.id
+        LEFT JOIN qa_episode_mentions m ON m.episode_id = e.id
+        WHERE COALESCE(c.clicks, 0) > 0 OR COALESCE(m.mentions, 0) > 0
         ORDER BY clicks DESC, mentions DESC
         LIMIT 15
     """)
@@ -250,8 +266,9 @@ def generate_recommendations(metrics):
         recommendations.append({
             'priority': 'MEDIUM',
             'category': 'Engagement',
-            'issue': f"Citation click rate is only {metrics['click_rate']:.1f}% (target: >30%)",
-            'action': "• Make episode citations more prominent\n"
+            'issue': f"Citation click rate is only {metrics['click_rate']:.1f}% (target: >15%)",
+            'action': "• Verify citation click tracking is firing in the current UI\n"
+                     "• Make episode citations more prominent\n"
                      "• Add inline audio player previews\n"
                      "• Show episode thumbnails\n"
                      "• Add 'Why this episode?' context"
@@ -297,7 +314,7 @@ def generate_recommendations(metrics):
     # Print recommendations
     if not recommendations:
         print("✅ All metrics look great! Keep up the good work.\n")
-        print("💡 Consider implementing Priority 2-3 features from UX_IMPROVEMENT_PLAN.md\n")
+        print("💡 Keep monitoring latency, return rate, and citation engagement weekly.\n")
         return
     
     for rec in recommendations:
@@ -324,20 +341,18 @@ def generate_summary_report(db, days=7):
     
     print_header("📋 NEXT STEPS")
     print("1. Review recommendations above")
-    print("2. Check UX_IMPROVEMENT_PLAN.md for detailed features")
-    print("3. Test new v4.0 enhancements on staging")
-    print("4. Monitor metrics after deploying improvements")
+    print("2. Verify citation click and feedback tracking in the live UI")
+    print("3. Monitor metrics after deploying improvements")
+    print("4. Compare retention and response speed week over week")
     print("5. Run this report weekly to track progress")
     print()
     
-    print("🚀 Quick Wins Deployed (v4.0):")
-    print("   ✅ Enhanced visual feedback & micro-interactions")
-    print("   ✅ Progress indicators with time estimation")
-    print("   ✅ Haptic feedback for mobile")
-    print("   ✅ Reading time calculations")
-    print("   ✅ Success celebrations")
-    print("   ✅ Skeleton loaders")
-    print("   ✅ Smooth animations")
+    print("🚀 Current Focus Areas:")
+    print("   ✅ Faster repeat-answer handling via cache")
+    print("   ✅ Improved notification copy and actions")
+    print("   ✅ Cleaner mobile and PWA layout")
+    print("   ✅ Better post-answer reflection and sharing flow")
+    print("   ✅ Ongoing analytics and retention improvements")
     print()
 
 
@@ -347,7 +362,7 @@ def main():
     parser.add_argument('--days', type=int, default=7, help='Number of days to analyze')
     args = parser.parse_args()
     
-    db = SessionLocal()
+    db = SessionLocal()()
     try:
         generate_summary_report(db, args.days)
     except Exception as e:

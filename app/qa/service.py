@@ -84,6 +84,7 @@ def answer_question(
     user_ip: str,
     use_smart_citations: bool = True,
     log_interaction: bool = True,
+    bypass_cache: bool = False,
 ):
     """
     Answer a user's question with intelligent episode selection.
@@ -98,49 +99,51 @@ def answer_question(
     start_time = time.time()
     cache = get_answer_cache()
     norm_q = normalize_question(question)
-    exact_cached_response = cache.get_exact(norm_q)
-    if exact_cached_response:
-        latency_ms = int((time.time() - start_time) * 1000)
-        exact_citations = exact_cached_response.get("citations", [])
-        qa_log_id = _log_qa_with_fresh_session(
-            question=question,
-            answer=exact_cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in exact_citations],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=True,
-            is_answered=len(exact_citations) > 0,
-            log_interaction=log_interaction,
-            context="qa_exact_cache_logging",
-        )
-        exact_cached_response["latency_ms"] = latency_ms
-        exact_cached_response["qa_log_id"] = qa_log_id
-        exact_cached_response["question"] = question
-        return exact_cached_response
+    if not bypass_cache:
+        exact_cached_response = cache.get_exact(norm_q)
+        if exact_cached_response:
+            latency_ms = int((time.time() - start_time) * 1000)
+            exact_citations = exact_cached_response.get("citations", [])
+            qa_log_id = _log_qa_with_fresh_session(
+                question=question,
+                answer=exact_cached_response["answer"],
+                episode_ids=[c["episode_id"] for c in exact_citations],
+                latency_ms=latency_ms,
+                user_ip=user_ip,
+                is_cached=True,
+                is_answered=len(exact_citations) > 0,
+                log_interaction=log_interaction,
+                context="qa_exact_cache_logging",
+            )
+            exact_cached_response["latency_ms"] = latency_ms
+            exact_cached_response["qa_log_id"] = qa_log_id
+            exact_cached_response["question"] = question
+            return exact_cached_response
 
     query_embedding = embed_text(question)
 
-    # Check cache for near-identical questions (normalize for better matching)
-    cached_response = cache.get(norm_q, query_embedding)
-    if cached_response:
-        latency_ms = int((time.time() - start_time) * 1000)
-        # Log the cached response too
-        cached_citations = cached_response.get("citations", [])
-        qa_log_id = _log_qa_with_fresh_session(
-            question=question,
-            answer=cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in cached_citations],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=True,
-            is_answered=len(cached_citations) > 0,
-            log_interaction=log_interaction,
-            context="qa_similarity_cache_logging",
-        )
-        cached_response["latency_ms"] = latency_ms
-        cached_response["qa_log_id"] = qa_log_id
-        cached_response["question"] = question
-        return cached_response
+    if not bypass_cache:
+        # Check cache for near-identical questions (normalize for better matching)
+        cached_response = cache.get(norm_q, query_embedding)
+        if cached_response:
+            latency_ms = int((time.time() - start_time) * 1000)
+            # Log the cached response too
+            cached_citations = cached_response.get("citations", [])
+            qa_log_id = _log_qa_with_fresh_session(
+                question=question,
+                answer=cached_response["answer"],
+                episode_ids=[c["episode_id"] for c in cached_citations],
+                latency_ms=latency_ms,
+                user_ip=user_ip,
+                is_cached=True,
+                is_answered=len(cached_citations) > 0,
+                log_interaction=log_interaction,
+                context="qa_similarity_cache_logging",
+            )
+            cached_response["latency_ms"] = latency_ms
+            cached_response["qa_log_id"] = qa_log_id
+            cached_response["question"] = question
+            return cached_response
 
     # ── Phase 1: DB-heavy retrieval — keep session open ──
     if use_smart_citations:

@@ -33,6 +33,19 @@ _THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
     "Faith": ("faith", "doubt", "god", "spiritual"),
 }
 
+_QOTD_TITLES: dict[str, str] = {
+    "Grief": "Hold this gently",
+    "Courage": "Stand in this",
+    "Fear": "Stand in this",
+    "Relationships": "Look closer",
+    "Self-worth": "Return here",
+    "Healing": "Stay with this",
+    "Purpose": "Start here",
+    "Inner peace": "A quieter question",
+    "Boundaries": "Look again",
+    "Faith": "Sit with this",
+}
+
 
 def _get_vapid_private_key_b64() -> str:
     """
@@ -185,51 +198,51 @@ def _remove_brand_mentions(text_value: str) -> str:
     return clean
 
 
+def _question_text_only(question: str) -> str:
+    clean = re.sub(r"\s+", " ", (question or "").strip())
+    return clean.rstrip(" .")
+
+
 def _qotd_copy(question: str, theme: str, hook: str | None, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "Quiet signal"
-    body = question
-    if is_returning and recent_theme and recent_theme.lower() != theme.lower():
-        body = f"{question} A grounded answer is ready for the season you've been in lately."
+    title = _QOTD_TITLES.get(theme or "", "Today's question")
+    base_question = _question_text_only(question)
+    if is_returning and recent_theme and recent_theme.lower() != (theme or "").lower():
+        body = f"{base_question}? A grounded answer is ready."
     elif is_returning:
-        body = f"{question} Today's answer meets the questions you've been returning to."
+        body = f"{base_question}? Open for today's answer."
     else:
-        body = f"{question} Open for today's grounded answer."
-    if hook:
-        title = _clip_sentence(_remove_brand_mentions(hook), 28) or title
-    return title, _clip_sentence(body, 132)
+        body = f"{base_question}? Open for a grounded answer."
+    return title, _clip_sentence(body, 108)
 
 
 def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    clean_title = re.sub(r"^[^\w]+", "", (title or "").strip())
-    clean_title = re.sub(r"\s+", " ", clean_title)
-    clean_title = _remove_brand_mentions(clean_title)
-    final_title = clean_title if clean_title else "Midday aperture"
+    final_title = "Pause here"
     clean_body = _remove_brand_mentions(_strip_midday_cta(body))
     if is_returning and recent_theme:
-        clean_body = f"{clean_body} Stay close to what matters in your {recent_theme.lower()} season."
+        clean_body = f"{clean_body} Stay with what matters in {recent_theme.lower()}."
     elif not clean_body:
         clean_body = "Take one quiet minute and return to what matters before the day pulls you away."
-    return final_title, _clip_sentence(clean_body, 132)
+    return final_title, _clip_sentence(clean_body, 104)
 
 
 def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "Keep the thread"
+    title = "Don't lose the thread"
     if is_returning and recent_theme:
-        body = f"One honest question tonight keeps your reflection rhythm alive, especially around {recent_theme.lower()}."
+        body = f"One honest question tonight keeps your reflection rhythm alive around {recent_theme.lower()}."
     elif is_returning:
         body = "One honest question tonight keeps your reflection rhythm alive."
     else:
         body = "Ask one thoughtful question tonight to keep your reflection rhythm alive."
-    return title, _clip_sentence(body, 118)
+    return title, _clip_sentence(body, 102)
 
 
 def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
     title = "Before the day ends"
     if is_returning and recent_theme:
-        body = f"Return to what stayed with you today, especially in your {recent_theme.lower()} season."
+        body = f"Return to what stayed with you today, especially in {recent_theme.lower()}."
     else:
         body = "Return to what stayed with you today."
-    return title, _clip_sentence(body, 118)
+    return title, _clip_sentence(body, 100)
 
 
 def _new_episode_copy(episode_title: str) -> tuple[str, str]:

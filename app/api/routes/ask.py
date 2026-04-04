@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import get_client_ip
 from app.api.rate_limit import enforce_rate_limit
+from app.core.config import settings
 from app.core.db import get_db
+from app.qa.guardrails import inspect_question
 
 router = APIRouter()
 
@@ -42,6 +44,10 @@ def ask(
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     if len(question) > 500:
         raise HTTPException(status_code=400, detail="Question must be 500 characters or fewer")
+    if settings.question_guardrails_enabled:
+        decision = inspect_question(question)
+        if not decision.allowed:
+            raise HTTPException(status_code=400, detail=decision.message)
 
     from app.qa.service import answer_question
 
@@ -66,6 +72,10 @@ def ask_stream(
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     if len(question) > 500:
         raise HTTPException(status_code=400, detail="Question must be 500 characters or fewer")
+    if settings.question_guardrails_enabled:
+        decision = inspect_question(question)
+        if not decision.allowed:
+            raise HTTPException(status_code=400, detail=decision.message)
 
     from app.qa.service import answer_question_stream
 

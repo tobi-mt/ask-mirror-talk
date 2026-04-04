@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     # API
     rate_limit_per_minute: int = 20
     allowed_origins: str = ""  # comma-separated origins for CORS
+    question_guardrails_enabled: bool = True
 
     # Admin dashboard
     admin_enabled: bool = True

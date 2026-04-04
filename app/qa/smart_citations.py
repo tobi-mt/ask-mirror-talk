@@ -31,6 +31,24 @@ _STOPWORDS = {
     "mean", "look", "like", "life", "mirror", "talk",
 }
 
+_GENERIC_SEGMENT_MARKERS = {
+    "well,",
+    "you know",
+    "i mean",
+    "right.",
+    "right?",
+    "that's right",
+    "uh",
+    "um",
+    "tell us",
+    "welcome back",
+    "thanks for having me",
+    "thank you for having me",
+    "before we get started",
+    "in this episode",
+    "for joining us",
+}
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -64,6 +82,19 @@ def _score_candidate_text(
     if len((text_value or "").strip()) < 90:
         score -= 0.05
     return score, question_overlap, answer_overlap
+
+
+def _looks_generic_source_moment(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return True
+    if len(lower) < 70:
+        return True
+    marker_hits = sum(1 for marker in _GENERIC_SEGMENT_MARKERS if marker in lower[:140])
+    if marker_hits >= 2:
+        return True
+    token_count = len(_tokenize_for_overlap(lower))
+    return token_count < 4
 
 
 def rerank_citation_moments(
@@ -163,8 +194,8 @@ def rerank_citation_moments(
         top_question_overlap = float(top_chunk.get("citation_question_overlap", 0.0) or 0.0)
         top_answer_overlap = float(top_chunk.get("citation_answer_overlap", 0.0) or 0.0)
         confidence_gap = top_score - second_score
-        has_clear_support = top_score >= 0.38 and max(top_question_overlap, top_answer_overlap) >= 0.10
-        has_clear_lead = confidence_gap >= 0.035 or len(filtered) == 1
+        has_clear_support = top_score >= 0.46 and max(top_question_overlap, top_answer_overlap) >= 0.14
+        has_clear_lead = confidence_gap >= 0.05 or len(filtered) == 1
         top_chunk["is_strongest_match"] = bool(has_clear_support and has_clear_lead)
 
     return filtered
@@ -179,8 +210,8 @@ def refine_citation_segments(
     padding_seconds: int = 12,
 ) -> list[dict]:
     """
-    Improve citation precision by picking the best transcript segment inside each
-    already-selected chunk window when transcript segments are available.
+    Improve citation precision by picking the best transcript window inside each
+    already-selected chunk when transcript segments are available.
     """
     if not citation_chunks:
         return []
@@ -218,33 +249,118 @@ def refine_citation_segments(
         best_segment = None
         best_score = float("-inf")
 
-        for segment in segments:
-            seg_text = (segment.text or "").strip()
-            if len(seg_text) < 35:
-                continue
+        for start_idx, segment in enumerate(segments):
+            for end_idx in range(start_idx, min(start_idx + 3, len(segments))):
+                window_segments = segments[start_idx:end_idx + 1]
+                window_start = float(window_segments[0].start_time)
+                window_end = float(window_segments[-1].end_time)
+                if window_end - window_start > 42:
+                    break
 
-            lexical_score, question_overlap, answer_overlap = _score_candidate_text(
-                text_value=seg_text,
-                question_tokens=question_tokens,
-                answer_tokens=answer_tokens,
-                semantic=0.0,
+                window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
+                if len(window_text) < 60:
+                    continue
+
+                lexical_score, question_overlap, answer_overlap = _score_candidate_text(
+                    text_value=window_text,
+                    question_tokens=question_tokens,
+                    answer_tokens=answer_tokens,
+                    semantic=0.0,
+                )
+                score = base_precision * 0.40 + lexical_score * 0.60
+
+                # Prefer self-contained, quoteable moments over tiny fragments.
+                if 110 <= len(window_text) <= 320:
+                    score += 0.04
+                elif len(window_text) < 90:
+                    score -= 0.08
+                elif len(window_text) > 420:
+                    score -= 0.04
+
+                if _looks_generic_source_moment(window_text):
+                    score -= 0.18
+
+                # Early-episode snippets are often intros; only allow them when they
+                # show unmistakable lexical support for the actual topic.
+                if window_start < 45 and max(question_overlap, answer_overlap) < 0.16:
+                    score -= 0.18
+
+                # Very late snippets can also be outro-like or summary-like.
+                if window_start >= max(0.0, end_time - 15) and max(question_overlap, answer_overlap) < 0.12:
+                    score -= 0.06
+
+                if score > best_score:
+                    best_score = score
+                    best_segment = {
+                        **chunk,
+                        "text": window_text,
+                        "start_time": window_start,
+                        "end_time": window_end,
+                        "citation_precision_score": round(max(base_precision, score), 4),
+                        "citation_question_overlap": round(question_overlap, 4),
+                        "citation_answer_overlap": round(answer_overlap, 4),
+                    }
+
+        chosen = best_segment or chunk
+        chosen_precision = float(chosen.get("citation_precision_score", 0.0) or 0.0)
+        chosen_question_overlap = float(chosen.get("citation_question_overlap", 0.0) or 0.0)
+        chosen_answer_overlap = float(chosen.get("citation_answer_overlap", 0.0) or 0.0)
+        chosen_start = float(chosen.get("start_time", 0.0) or 0.0)
+        chosen_text = (chosen.get("text") or "").strip()
+
+        weak_overlap = max(chosen_question_overlap, chosen_answer_overlap) < 0.08
+        weak_precision = chosen_precision < 0.34
+        generic_window = _looks_generic_source_moment(chosen_text)
+        suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
+
+        if (weak_precision and weak_overlap) or generic_window or suspicious_intro:
+            logger.info(
+                "Dropping low-trust citation segment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, start=%.1f)",
+                episode_id,
+                chosen_precision,
+                chosen_question_overlap,
+                chosen_answer_overlap,
+                chosen_start,
             )
-            score = base_precision * 0.45 + lexical_score * 0.55
-            if score > best_score:
-                best_score = score
-                best_segment = {
-                    **chunk,
-                    "text": seg_text,
-                    "start_time": float(segment.start_time),
-                    "end_time": float(segment.end_time),
-                    "citation_precision_score": round(max(base_precision, score), 4),
-                    "citation_question_overlap": round(question_overlap, 4),
-                    "citation_answer_overlap": round(answer_overlap, 4),
-                }
+            continue
 
-        refined_chunks.append(best_segment or chunk)
+        refined_chunks.append(chosen)
 
     return refined_chunks
+
+
+def finalize_citation_confidence(citation_chunks: list[dict]) -> list[dict]:
+    """
+    Re-evaluate badge confidence after segment refinement / filtering.
+    Ensures only the final top citation can carry the strongest-match badge.
+    """
+    if not citation_chunks:
+        return []
+
+    ordered = sorted(
+        [dict(chunk) for chunk in citation_chunks],
+        key=lambda chunk: float(chunk.get("citation_precision_score", chunk.get("similarity", 0.0)) or 0.0),
+        reverse=True,
+    )
+
+    for chunk in ordered:
+        chunk["is_strongest_match"] = False
+
+    top = ordered[0]
+    second = ordered[1] if len(ordered) > 1 else None
+    top_score = float(top.get("citation_precision_score", top.get("similarity", 0.0)) or 0.0)
+    second_score = float(second.get("citation_precision_score", second.get("similarity", 0.0)) or 0.0) if second else 0.0
+    top_overlap = max(
+        float(top.get("citation_question_overlap", 0.0) or 0.0),
+        float(top.get("citation_answer_overlap", 0.0) or 0.0),
+    )
+    top_text = (top.get("text") or "").strip()
+    has_clear_support = top_score >= 0.48 and top_overlap >= 0.16 and not _looks_generic_source_moment(top_text)
+    has_clear_lead = (top_score - second_score) >= 0.05 or second is None
+    if has_clear_support and has_clear_lead:
+        ordered[0]["is_strongest_match"] = True
+
+    return ordered
 
 
 def select_top_episodes_for_citation(

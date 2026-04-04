@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.indexing.embeddings import embed_text
 from app.qa.retrieval import retrieve_chunks, load_episode_map
-from app.qa.smart_citations import retrieve_chunks_two_tier, rerank_citation_moments, refine_citation_segments
+from app.qa.smart_citations import (
+    retrieve_chunks_two_tier,
+    rerank_citation_moments,
+    refine_citation_segments,
+    finalize_citation_confidence,
+)
 from app.qa.answer import compose_answer
 from app.qa.cache import get_answer_cache, normalize_question
 from app.storage.repository import log_qa
@@ -265,6 +270,7 @@ def answer_question(
                 citation_chunks=refined_citation_chunks,
                 context="qa_citation_segment_refinement",
             )
+            refined_citation_chunks = finalize_citation_confidence(refined_citation_chunks)
             from app.qa.answer import _build_citations
             response["citations"] = _build_citations(refined_citation_chunks)
 
@@ -467,6 +473,7 @@ def answer_question_stream(
             citation_chunks=refined_citation_chunks,
             context="qa_stream_citation_segment_refinement",
         )
+        refined_citation_chunks = finalize_citation_confidence(refined_citation_chunks)
     citations = _build_citations(refined_citation_chunks if refined_citation_chunks else (citation_payloads if citation_payloads else chunk_payloads))
 
     # ── Start follow-up generation in a background thread ──

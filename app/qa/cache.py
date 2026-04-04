@@ -69,15 +69,13 @@ class AnswerCache:
     similarity scans always happen in-memory for speed.
     """
 
-    _REDIS_KEY_PREFIX = "amt:cache:"
-    _REDIS_INDEX_KEY = "amt:cache:index"  # sorted set of entry keys ordered by created_at
-
     def __init__(
         self,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         max_entries: int = DEFAULT_MAX_ENTRIES,
         redis_url: str | None = None,
+        namespace: str = "default",
     ):
         self._entries: list[CacheEntry] = []
         self._entries_by_question: dict[str, CacheEntry] = {}
@@ -85,6 +83,7 @@ class AnswerCache:
         self.similarity_threshold = similarity_threshold
         self.ttl_seconds = ttl_seconds
         self.max_entries = max_entries
+        self.namespace = (namespace or "default").strip()
         self._redis = None
 
         if redis_url:
@@ -111,7 +110,11 @@ class AnswerCache:
     def _entry_redis_key(self, question: str) -> str:
         import hashlib
         h = hashlib.sha256(question.encode()).hexdigest()[:16]
-        return f"{self._REDIS_KEY_PREFIX}{h}"
+        return f"amt:cache:{self.namespace}:{h}"
+
+    @property
+    def _redis_index_key(self) -> str:
+        return f"amt:cache:index:{self.namespace}"
 
     def _serialize_entry(self, entry: CacheEntry) -> bytes:
         """Serialise a CacheEntry to JSON bytes (no pickle for safety)."""
@@ -145,13 +148,13 @@ class AnswerCache:
         try:
             now = time.time()
             # Fetch all entry keys from the sorted set (score = created_at)
-            keys = self._redis.zrange(self._REDIS_INDEX_KEY, 0, -1)
+            keys = self._redis.zrange(self._redis_index_key, 0, -1)
             loaded = 0
             for key in keys:
                 raw = self._redis.get(key)
                 if raw is None:
                     # TTL expired in Redis but index wasn't cleaned up
-                    self._redis.zrem(self._REDIS_INDEX_KEY, key)
+                    self._redis.zrem(self._redis_index_key, key)
                     continue
                 entry = self._deserialize_entry(raw)
                 if entry is None:
@@ -176,9 +179,9 @@ class AnswerCache:
             remaining_ttl = max(1, int(self.ttl_seconds - (time.time() - entry.created_at)))
             self._redis.setex(key, remaining_ttl, raw)
             # Track in sorted set so we can efficiently load all entries later
-            self._redis.zadd(self._REDIS_INDEX_KEY, {key: entry.created_at})
+            self._redis.zadd(self._redis_index_key, {key: entry.created_at})
             # Expire the index key to avoid unbounded growth
-            self._redis.expire(self._REDIS_INDEX_KEY, self.ttl_seconds + 3600)
+            self._redis.expire(self._redis_index_key, self.ttl_seconds + 3600)
         except Exception as exc:
             logger.warning("Failed to persist cache entry to Redis: %s", exc)
 
@@ -291,20 +294,21 @@ class AnswerCache:
                 "total_hits": total_hits,
                 "ttl_seconds": self.ttl_seconds,
                 "similarity_threshold": self.similarity_threshold,
+                "namespace": self.namespace,
             }
 
     def clear(self) -> None:
         """Clear all cache entries (in-memory and Redis)."""
         with self._lock:
-            self._entries.clear()
-            self._entries_by_question.clear()
-            logger.info("Cache CLEARED")
+                self._entries.clear()
+                self._entries_by_question.clear()
+                logger.info("Cache CLEARED")
         if self._redis:
             try:
-                keys = self._redis.zrange(self._REDIS_INDEX_KEY, 0, -1)
+                keys = self._redis.zrange(self._redis_index_key, 0, -1)
                 if keys:
                     self._redis.delete(*keys)
-                self._redis.delete(self._REDIS_INDEX_KEY)
+                self._redis.delete(self._redis_index_key)
                 logger.info("Redis cache CLEARED")
             except Exception as exc:
                 logger.warning("Failed to clear Redis cache: %s", exc)
@@ -447,5 +451,6 @@ def get_answer_cache() -> AnswerCache:
             similarity_threshold=settings.cache_similarity_threshold,
             ttl_seconds=settings.cache_ttl_seconds,
             redis_url=settings.redis_url,
+            namespace=settings.cache_namespace,
         )
     return _answer_cache

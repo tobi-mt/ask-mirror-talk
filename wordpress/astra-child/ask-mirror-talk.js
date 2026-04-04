@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.56 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.57 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -38,6 +38,7 @@
   // ─── API URL ────────────────────────────────────────────────
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+  const DEBUG_NO_CACHE = new URLSearchParams(window.location.search).get('amt_nocache') === '1';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
@@ -1208,11 +1209,12 @@
    * Falls back to the non-streaming /ask endpoint on error.
    */
   async function askStreaming(question) {
+    const streamUrl = DEBUG_NO_CACHE ? `${API_BASE}/ask/stream?bypass_cache=1` : `${API_BASE}/ask/stream`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
     let response;
     try {
-      response = await fetch(`${API_BASE}/ask/stream`, {
+      response = await fetch(streamUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, context: conversationContext.length ? conversationContext : undefined }),
@@ -1978,6 +1980,10 @@
   // ========================================
 
   async function askWithRetry(question, retried = false) {
+    if (DEBUG_NO_CACHE) {
+      return askDirectAPI(question);
+    }
+
     const body = new URLSearchParams();
     body.set("action", "ask_mirror_talk");
     body.set("nonce", currentNonce);
@@ -2012,7 +2018,7 @@
   }
 
   async function askDirectAPI(question) {
-    const apiUrl = API_BASE + '/ask';
+    const apiUrl = DEBUG_NO_CACHE ? `${API_BASE}/ask?bypass_cache=1` : `${API_BASE}/ask`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -28,7 +28,12 @@ def ask_options():
 
 
 @router.post("/ask")
-def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
+def ask(
+    payload: AskRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    bypass_cache: bool = Query(default=False),
+):
     ip = get_client_ip(request)
     enforce_rate_limit(ip)
 
@@ -40,11 +45,18 @@ def ask(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
 
     from app.qa.service import answer_question
 
+    if bypass_cache:
+        return answer_question(db, question, user_ip=ip, bypass_cache=True)
     return answer_question(db, question, user_ip=ip)
 
 
 @router.post("/ask/stream")
-def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_db)):
+def ask_stream(
+    payload: AskRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    bypass_cache: bool = Query(default=False),
+):
     """Stream an answer using Server-Sent Events (SSE)."""
     ip = get_client_ip(request)
     enforce_rate_limit(ip)
@@ -57,8 +69,14 @@ def ask_stream(payload: AskRequest, request: Request, db: Session = Depends(get_
 
     from app.qa.service import answer_question_stream
 
+    stream = (
+        answer_question_stream(db, question, user_ip=ip, context=payload.context or [], bypass_cache=True)
+        if bypass_cache
+        else answer_question_stream(db, question, user_ip=ip, context=payload.context or [])
+    )
+
     return StreamingResponse(
-        answer_question_stream(db, question, user_ip=ip, context=payload.context or []),
+        stream,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

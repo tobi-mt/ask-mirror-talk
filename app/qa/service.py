@@ -305,6 +305,7 @@ def answer_question_stream(
     user_ip: str,
     context: list[dict] | None = None,
     log_interaction: bool = True,
+    bypass_cache: bool = False,
 ):
     """
     Stream an answer using SSE. Yields JSON events:
@@ -327,7 +328,7 @@ def answer_question_stream(
     # Check cache first (normalize for better matching)
     cache = get_answer_cache()
     norm_q = normalize_question(question)
-    exact_cached_response = cache.get_exact(norm_q)
+    exact_cached_response = cache.get_exact(norm_q) if not bypass_cache else None
     if exact_cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _exact_citations = exact_cached_response.get("citations", [])
@@ -353,7 +354,7 @@ def answer_question_stream(
 
     query_embedding = embed_text(question)
 
-    cached_response = cache.get(norm_q, query_embedding)
+    cached_response = cache.get(norm_q, query_embedding) if not bypass_cache else None
     if cached_response:
         latency_ms = int((time.time() - start_time) * 1000)
         _cached_citations = cached_response.get("citations", [])

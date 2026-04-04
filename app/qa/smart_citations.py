@@ -59,6 +59,23 @@ _GENERIC_SEGMENT_MARKERS = {
     "politicians in d.c.",
 }
 
+_HOST_BRIDGE_PATTERNS = (
+    "tell us",
+    "can you talk about",
+    "can you share",
+    "what does that mean",
+    "how does that feel",
+    "let me ask you",
+    "i'd like to know",
+    "welcome back",
+    "before we continue",
+    "after the break",
+    "we'll be right back",
+    "hit that subscribe",
+    "friendly nudge",
+    "support the show",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -105,6 +122,27 @@ def _looks_generic_source_moment(text_value: str) -> bool:
         return True
     token_count = len(_tokenize_for_overlap(lower))
     return token_count < 4
+
+
+def _is_standalone_evidence(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return False
+    if _looks_generic_source_moment(lower):
+        return False
+    if len(lower) < 110:
+        return False
+    if len(lower) > 460:
+        return False
+    if len(_tokenize_for_overlap(lower)) < 7:
+        return False
+    if sum(1 for pattern in _HOST_BRIDGE_PATTERNS if pattern in lower) >= 1:
+        return False
+    if lower.count("?") >= 2:
+        return False
+    if re.match(r"^(so|and|but|well|right)\b", lower) and len(lower) < 180:
+        return False
+    return True
 
 
 def rerank_citation_moments(
@@ -345,6 +383,134 @@ def finalize_citation_confidence(citation_chunks: list[dict]) -> list[dict]:
     # Temporarily disable the badge until production testing shows the top
     # citation is consistently trustworthy enough to merit the claim.
     return ordered
+
+
+def select_citation_segments(
+    db: Session,
+    *,
+    question: str,
+    answer_text: str,
+    candidate_episodes: list[dict],
+    min_citations: int = 2,
+    max_citations: int = 3,
+) -> list[dict]:
+    """
+    Select citations from transcript segments first, not from chunk timestamps.
+    Only keep 2-3 strong, self-contained source moments.
+    """
+    if not candidate_episodes:
+        return []
+
+    question_tokens = _tokenize_for_overlap(question)
+    answer_tokens = _tokenize_for_overlap(answer_text)
+
+    episode_meta = {
+        int(item["episode"]["id"]): item
+        for item in candidate_episodes
+        if item.get("episode", {}).get("id")
+    }
+    episode_ids = list(episode_meta.keys())
+    if not episode_ids:
+        return []
+
+    stmt = (
+        select(Transcript.episode_id, TranscriptSegment)
+        .join(Transcript, Transcript.id == TranscriptSegment.transcript_id)
+        .where(Transcript.episode_id.in_(episode_ids))
+        .order_by(Transcript.episode_id.asc(), TranscriptSegment.start_time.asc())
+    )
+    rows = db.execute(stmt).all()
+
+    segments_by_episode: dict[int, list[TranscriptSegment]] = defaultdict(list)
+    for episode_id, segment in rows:
+        segments_by_episode[int(episode_id)].append(segment)
+
+    best_per_episode: list[dict] = []
+    for episode_id, segments in segments_by_episode.items():
+        episode_context = episode_meta.get(int(episode_id))
+        if not episode_context or not segments:
+            continue
+
+        episode_boost = max(
+            float(episode_context.get("relevance_score", 0.0) or 0.0),
+            float(episode_context.get("similarity", 0.0) or 0.0),
+        )
+
+        best_candidate = None
+        best_score = float("-inf")
+        for start_idx in range(len(segments)):
+            for end_idx in range(start_idx, min(start_idx + 4, len(segments))):
+                window_segments = segments[start_idx:end_idx + 1]
+                window_start = float(window_segments[0].start_time)
+                window_end = float(window_segments[-1].end_time)
+                if window_end - window_start > 55:
+                    break
+
+                window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
+                if not _is_standalone_evidence(window_text):
+                    continue
+
+                _, question_overlap, answer_overlap = _score_candidate_text(
+                    text_value=window_text,
+                    question_tokens=question_tokens,
+                    answer_tokens=answer_tokens,
+                    semantic=0.0,
+                )
+                overlap = max(question_overlap, answer_overlap)
+                if overlap < 0.12:
+                    continue
+
+                score = (
+                    min(episode_boost, 1.0) * 0.35 +
+                    question_overlap * 0.35 +
+                    answer_overlap * 0.30
+                )
+
+                if 130 <= len(window_text) <= 320:
+                    score += 0.05
+                if window_start < 60 and overlap < 0.18:
+                    score -= 0.25
+                if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
+                    score -= 0.30
+
+                if score > best_score:
+                    best_score = score
+                    best_candidate = {
+                        "text": window_text,
+                        "start_time": window_start,
+                        "end_time": window_end,
+                        "episode": episode_context["episode"],
+                        "similarity": float(episode_context.get("similarity", 0.0) or 0.0),
+                        "relevance_score": float(episode_context.get("relevance_score", 0.0) or 0.0),
+                        "citation_precision_score": round(score, 4),
+                        "citation_question_overlap": round(question_overlap, 4),
+                        "citation_answer_overlap": round(answer_overlap, 4),
+                        "is_strongest_match": False,
+                    }
+
+        if best_candidate and float(best_candidate["citation_precision_score"]) >= 0.34:
+            best_per_episode.append(best_candidate)
+
+    best_per_episode.sort(
+        key=lambda item: float(item.get("citation_precision_score", 0.0) or 0.0),
+        reverse=True,
+    )
+
+    strong = [
+        item for item in best_per_episode
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.40
+        and max(
+            float(item.get("citation_question_overlap", 0.0) or 0.0),
+            float(item.get("citation_answer_overlap", 0.0) or 0.0),
+        ) >= 0.14
+    ]
+
+    if len(strong) >= min_citations:
+        selected = strong[:max_citations]
+    else:
+        selected = best_per_episode[:max_citations]
+
+    return finalize_citation_confidence(selected)
 
 
 def select_top_episodes_for_citation(

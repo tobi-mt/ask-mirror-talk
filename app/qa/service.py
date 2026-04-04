@@ -7,9 +7,7 @@ from app.indexing.embeddings import embed_text
 from app.qa.retrieval import retrieve_chunks, load_episode_map
 from app.qa.smart_citations import (
     retrieve_chunks_two_tier,
-    rerank_citation_moments,
-    refine_citation_segments,
-    finalize_citation_confidence,
+    select_citation_segments,
 )
 from app.qa.answer import compose_answer
 from app.qa.cache import get_answer_cache, normalize_question
@@ -83,31 +81,31 @@ def _log_qa_with_fresh_session(
         safe_close_session(log_db, context=context)
 
 
-def _refine_citations_with_fresh_session(
+def _select_citations_with_fresh_session(
     *,
     question: str,
     answer_text: str,
-    citation_chunks: list[dict],
+    candidate_episodes: list[dict],
     context: str,
 ):
-    if not citation_chunks:
-        return citation_chunks
+    if not candidate_episodes:
+        return []
 
     from app.core.db import get_session_local, safe_close_session
 
     SessionLocal = get_session_local()
     refine_db = SessionLocal()
     try:
-        refined = refine_citation_segments(
+        refined = select_citation_segments(
             refine_db,
             question=question,
             answer_text=answer_text,
-            citation_chunks=citation_chunks,
+            candidate_episodes=candidate_episodes,
         )
-        return refined or citation_chunks
+        return refined or []
     except Exception as exc:
-        logger.error("Failed to refine citation segments during %s: %s", context, exc, exc_info=True)
-        return citation_chunks
+        logger.error("Failed to select citation segments during %s: %s", context, exc, exc_info=True)
+        return []
     finally:
         safe_close_session(refine_db, context=context)
 
@@ -257,22 +255,17 @@ def answer_question(
                               citation_override=citation_payloads if use_smart_citations else None)
 
     if use_smart_citations and citation_payloads:
-        refined_citation_chunks = rerank_citation_moments(
-            question,
-            response["answer"],
-            chunk_payloads,
-            [c["episode"]["id"] for c in citation_payloads if c.get("episode", {}).get("id")],
+        refined_citation_chunks = _select_citations_with_fresh_session(
+            question=question,
+            answer_text=response["answer"],
+            candidate_episodes=citation_payloads,
+            context="qa_citation_segment_selection",
         )
         if refined_citation_chunks:
-            refined_citation_chunks = _refine_citations_with_fresh_session(
-                question=question,
-                answer_text=response["answer"],
-                citation_chunks=refined_citation_chunks,
-                context="qa_citation_segment_refinement",
-            )
-            refined_citation_chunks = finalize_citation_confidence(refined_citation_chunks)
             from app.qa.answer import _build_citations
             response["citations"] = _build_citations(refined_citation_chunks)
+        else:
+            response["citations"] = []
 
     # ── Phase 3: Log with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
@@ -458,23 +451,15 @@ def answer_question_stream(
     import concurrent.futures
 
     refined_citation_chunks = (
-        rerank_citation_moments(
-            question,
-            full_answer,
-            chunk_payloads,
-            [c["episode"]["id"] for c in citation_payloads if c.get("episode", {}).get("id")],
+        _select_citations_with_fresh_session(
+            question=question,
+            answer_text=full_answer,
+            candidate_episodes=citation_payloads,
+            context="qa_stream_citation_segment_selection",
         )
         if citation_payloads else []
     )
-    if refined_citation_chunks:
-        refined_citation_chunks = _refine_citations_with_fresh_session(
-            question=question,
-            answer_text=full_answer,
-            citation_chunks=refined_citation_chunks,
-            context="qa_stream_citation_segment_refinement",
-        )
-        refined_citation_chunks = finalize_citation_confidence(refined_citation_chunks)
-    citations = _build_citations(refined_citation_chunks if refined_citation_chunks else (citation_payloads if citation_payloads else chunk_payloads))
+    citations = _build_citations(refined_citation_chunks) if refined_citation_chunks else []
 
     # ── Start follow-up generation in a background thread ──
     # This runs concurrently while we yield citations and log to the DB,

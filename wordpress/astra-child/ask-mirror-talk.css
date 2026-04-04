@@ -337,18 +337,29 @@
   overflow-anchor: none; /* prevent scroll anchoring thrash */
   overflow-wrap: break-word;
   word-wrap: break-word;
+  max-width: 62ch;
+  margin: 0 auto;
 }
 
 #ask-mirror-talk-output > * {
   max-width: 62ch;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 #ask-mirror-talk-output p {
-  margin: 0 0 16px 0;
+  margin: 0 auto 16px;
 }
 
 #ask-mirror-talk-output p:last-child {
   margin-bottom: 0;
+}
+
+#ask-mirror-talk-output ul,
+#ask-mirror-talk-output ol,
+#ask-mirror-talk-output blockquote {
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Streaming cursor — visible while streaming text */
@@ -4074,6 +4085,11 @@ body.amt-light-mode .amt-suggestions-label {
 .amt-answer-utilities > .amt-email-section,
 .amt-answer-utilities > .amt-save-insight-section {
   margin-top: 0;
+}
+
+.amt-answer-utilities > .amt-email-section {
+  flex: 1 1 100%;
+  justify-content: center;
 }
 
 .amt-continuation-strip {

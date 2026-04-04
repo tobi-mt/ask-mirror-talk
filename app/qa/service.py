@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.indexing.embeddings import embed_text
 from app.qa.retrieval import retrieve_chunks, load_episode_map
-from app.qa.smart_citations import retrieve_chunks_two_tier
+from app.qa.smart_citations import retrieve_chunks_two_tier, rerank_citation_moments
 from app.qa.answer import compose_answer
 from app.qa.cache import get_answer_cache, normalize_question
 from app.storage.repository import log_qa
@@ -167,6 +167,7 @@ def answer_question(
                     "id": episode.id,
                     "title": episode.title,
                     "audio_url": episode.audio_url or "",
+                    "published_year": episode.published_at.year if episode.published_at else None,
                 },
                 "similarity": similarity,
             })
@@ -220,6 +221,17 @@ def answer_question(
     # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
     response = compose_answer(question, chunk_payloads,
                               citation_override=citation_payloads if use_smart_citations else None)
+
+    if use_smart_citations and citation_payloads:
+        refined_citation_chunks = rerank_citation_moments(
+            question,
+            response["answer"],
+            chunk_payloads,
+            [c["episode"]["id"] for c in citation_payloads if c.get("episode", {}).get("id")],
+        )
+        if refined_citation_chunks:
+            from app.qa.answer import _build_citations
+            response["citations"] = _build_citations(refined_citation_chunks)
 
     # ── Phase 3: Log with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
@@ -404,7 +416,16 @@ def answer_question_stream(
     from app.qa.answer import _build_citations, _generate_follow_up_questions
     import concurrent.futures
 
-    citations = _build_citations(citation_payloads if citation_payloads else chunk_payloads)
+    refined_citation_chunks = (
+        rerank_citation_moments(
+            question,
+            full_answer,
+            chunk_payloads,
+            [c["episode"]["id"] for c in citation_payloads if c.get("episode", {}).get("id")],
+        )
+        if citation_payloads else []
+    )
+    citations = _build_citations(refined_citation_chunks if refined_citation_chunks else (citation_payloads if citation_payloads else chunk_payloads))
 
     # ── Start follow-up generation in a background thread ──
     # This runs concurrently while we yield citations and log to the DB,

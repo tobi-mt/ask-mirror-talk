@@ -15,11 +15,98 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from collections import defaultdict
 import logging
+import re
 
 from app.storage.models import Chunk, Episode
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_STOPWORDS = {
+    "the", "and", "that", "this", "with", "from", "your", "have", "what", "when",
+    "where", "which", "about", "into", "them", "they", "their", "there", "would",
+    "could", "should", "being", "been", "were", "will", "than", "then", "because",
+    "while", "through", "after", "before", "over", "under", "between", "today",
+    "still", "just", "more", "most", "some", "such", "really", "very", "does",
+    "mean", "look", "like", "life", "mirror", "talk",
+}
+
+
+def _tokenize_for_overlap(text: str) -> set[str]:
+    words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
+    return {word for word in words if word not in _STOPWORDS}
+
+
+def _overlap_score(source_tokens: set[str], candidate_text: str) -> float:
+    if not source_tokens:
+        return 0.0
+    candidate_tokens = _tokenize_for_overlap(candidate_text)
+    if not candidate_tokens:
+        return 0.0
+    overlap = source_tokens & candidate_tokens
+    return len(overlap) / max(1, min(len(source_tokens), 12))
+
+
+def rerank_citation_moments(
+    question: str,
+    answer_text: str,
+    answer_chunks: list[dict],
+    candidate_episode_ids: list[int],
+) -> list[dict]:
+    """
+    Refine the chosen citation timestamp for each already-selected episode.
+
+    The initial episode selection is good at picking which episodes matter.
+    This pass sharpens *where* inside those episodes we point by scoring each
+    candidate chunk against both the user question and the final answer text.
+    """
+    if not answer_chunks or not candidate_episode_ids:
+        return []
+
+    question_tokens = _tokenize_for_overlap(question)
+    answer_tokens = _tokenize_for_overlap(answer_text)
+
+    chunks_by_episode: dict[int, list[dict]] = defaultdict(list)
+    for chunk in answer_chunks:
+        episode = (chunk or {}).get("episode") or {}
+        episode_id = episode.get("id")
+        if episode_id:
+            chunks_by_episode[int(episode_id)].append(chunk)
+
+    refined: list[dict] = []
+    for episode_id in candidate_episode_ids:
+        candidates = chunks_by_episode.get(int(episode_id), [])
+        if not candidates:
+            continue
+
+        best_chunk = None
+        best_score = float("-inf")
+
+        for chunk in candidates:
+            text_value = chunk.get("text", "")
+            semantic = float(chunk.get("similarity", 0.0) or 0.0)
+            question_overlap = _overlap_score(question_tokens, text_value)
+            answer_overlap = _overlap_score(answer_tokens, text_value)
+
+            score = (
+                semantic * 0.55 +
+                question_overlap * 0.25 +
+                answer_overlap * 0.20
+            )
+
+            # Mild penalty for short/generic chunks that are more likely to be connective tissue.
+            if len(text_value.strip()) < 90:
+                score -= 0.05
+
+            if score > best_score:
+                best_score = score
+                best_chunk = dict(chunk)
+                best_chunk["citation_precision_score"] = round(score, 4)
+
+        if best_chunk:
+            refined.append(best_chunk)
+
+    return refined
 
 
 def select_top_episodes_for_citation(

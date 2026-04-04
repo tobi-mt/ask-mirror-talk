@@ -17,7 +17,7 @@ from collections import defaultdict
 import logging
 import re
 
-from app.storage.models import Chunk, Episode
+from app.storage.models import Chunk, Episode, Transcript, TranscriptSegment
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,25 @@ def _overlap_score(source_tokens: set[str], candidate_text: str) -> float:
         return 0.0
     overlap = source_tokens & candidate_tokens
     return len(overlap) / max(1, min(len(source_tokens), 12))
+
+
+def _score_candidate_text(
+    *,
+    text_value: str,
+    question_tokens: set[str],
+    answer_tokens: set[str],
+    semantic: float = 0.0,
+) -> tuple[float, float, float]:
+    question_overlap = _overlap_score(question_tokens, text_value)
+    answer_overlap = _overlap_score(answer_tokens, text_value)
+    score = (
+        semantic * 0.55 +
+        question_overlap * 0.25 +
+        answer_overlap * 0.20
+    )
+    if len((text_value or "").strip()) < 90:
+        score -= 0.05
+    return score, question_overlap, answer_overlap
 
 
 def rerank_citation_moments(
@@ -85,28 +104,147 @@ def rerank_citation_moments(
         for chunk in candidates:
             text_value = chunk.get("text", "")
             semantic = float(chunk.get("similarity", 0.0) or 0.0)
-            question_overlap = _overlap_score(question_tokens, text_value)
-            answer_overlap = _overlap_score(answer_tokens, text_value)
-
-            score = (
-                semantic * 0.55 +
-                question_overlap * 0.25 +
-                answer_overlap * 0.20
+            score, question_overlap, answer_overlap = _score_candidate_text(
+                text_value=text_value,
+                question_tokens=question_tokens,
+                answer_tokens=answer_tokens,
+                semantic=semantic,
             )
-
-            # Mild penalty for short/generic chunks that are more likely to be connective tissue.
-            if len(text_value.strip()) < 90:
-                score -= 0.05
 
             if score > best_score:
                 best_score = score
                 best_chunk = dict(chunk)
                 best_chunk["citation_precision_score"] = round(score, 4)
+                best_chunk["citation_question_overlap"] = round(question_overlap, 4)
+                best_chunk["citation_answer_overlap"] = round(answer_overlap, 4)
+                best_chunk["citation_semantic_score"] = round(semantic, 4)
 
         if best_chunk:
             refined.append(best_chunk)
 
-    return refined
+    refined.sort(
+        key=lambda chunk: float(chunk.get("citation_precision_score", 0.0) or 0.0),
+        reverse=True,
+    )
+
+    filtered: list[dict] = []
+    for idx, chunk in enumerate(refined):
+        precision = float(chunk.get("citation_precision_score", 0.0) or 0.0)
+        question_overlap = float(chunk.get("citation_question_overlap", 0.0) or 0.0)
+        answer_overlap = float(chunk.get("citation_answer_overlap", 0.0) or 0.0)
+        semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
+
+        # Keep the strongest few by default, but avoid padding with weak,
+        # generic episode moments that only barely match semantically.
+        if idx < 3:
+            filtered.append(chunk)
+            continue
+
+        has_lexical_support = max(question_overlap, answer_overlap) >= 0.08
+        has_strong_semantic_support = semantic >= 0.62
+        has_good_precision = precision >= 0.34
+
+        if has_good_precision and (has_lexical_support or has_strong_semantic_support):
+            filtered.append(chunk)
+        else:
+            logger.info(
+                "Dropping weak citation moment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, semantic=%.3f)",
+                (chunk.get("episode") or {}).get("id"),
+                precision,
+                question_overlap,
+                answer_overlap,
+                semantic,
+            )
+
+    if filtered:
+        top_score = float(filtered[0].get("citation_precision_score", 0.0) or 0.0)
+        second_score = float(filtered[1].get("citation_precision_score", 0.0) or 0.0) if len(filtered) > 1 else 0.0
+        top_chunk = filtered[0]
+        top_question_overlap = float(top_chunk.get("citation_question_overlap", 0.0) or 0.0)
+        top_answer_overlap = float(top_chunk.get("citation_answer_overlap", 0.0) or 0.0)
+        confidence_gap = top_score - second_score
+        has_clear_support = top_score >= 0.38 and max(top_question_overlap, top_answer_overlap) >= 0.10
+        has_clear_lead = confidence_gap >= 0.035 or len(filtered) == 1
+        top_chunk["is_strongest_match"] = bool(has_clear_support and has_clear_lead)
+
+    return filtered
+
+
+def refine_citation_segments(
+    db: Session,
+    *,
+    question: str,
+    answer_text: str,
+    citation_chunks: list[dict],
+    padding_seconds: int = 12,
+) -> list[dict]:
+    """
+    Improve citation precision by picking the best transcript segment inside each
+    already-selected chunk window when transcript segments are available.
+    """
+    if not citation_chunks:
+        return []
+
+    question_tokens = _tokenize_for_overlap(question)
+    answer_tokens = _tokenize_for_overlap(answer_text)
+    refined_chunks: list[dict] = []
+
+    for chunk in citation_chunks:
+        episode = (chunk or {}).get("episode") or {}
+        episode_id = episode.get("id")
+        if not episode_id:
+            refined_chunks.append(chunk)
+            continue
+
+        start_time = float(chunk.get("start_time", 0.0) or 0.0)
+        end_time = float(chunk.get("end_time", start_time) or start_time)
+        search_start = max(0.0, start_time - padding_seconds)
+        search_end = max(search_start, end_time + padding_seconds)
+
+        stmt = (
+            select(TranscriptSegment)
+            .join(Transcript, Transcript.id == TranscriptSegment.transcript_id)
+            .where(Transcript.episode_id == int(episode_id))
+            .where(TranscriptSegment.end_time >= search_start)
+            .where(TranscriptSegment.start_time <= search_end)
+            .order_by(TranscriptSegment.start_time.asc())
+        )
+        segments = db.execute(stmt).scalars().all()
+        if not segments:
+            refined_chunks.append(chunk)
+            continue
+
+        base_precision = float(chunk.get("citation_precision_score", chunk.get("similarity", 0.0)) or 0.0)
+        best_segment = None
+        best_score = float("-inf")
+
+        for segment in segments:
+            seg_text = (segment.text or "").strip()
+            if len(seg_text) < 35:
+                continue
+
+            lexical_score, question_overlap, answer_overlap = _score_candidate_text(
+                text_value=seg_text,
+                question_tokens=question_tokens,
+                answer_tokens=answer_tokens,
+                semantic=0.0,
+            )
+            score = base_precision * 0.45 + lexical_score * 0.55
+            if score > best_score:
+                best_score = score
+                best_segment = {
+                    **chunk,
+                    "text": seg_text,
+                    "start_time": float(segment.start_time),
+                    "end_time": float(segment.end_time),
+                    "citation_precision_score": round(max(base_precision, score), 4),
+                    "citation_question_overlap": round(question_overlap, 4),
+                    "citation_answer_overlap": round(answer_overlap, 4),
+                }
+
+        refined_chunks.append(best_segment or chunk)
+
+    return refined_chunks
 
 
 def select_top_episodes_for_citation(

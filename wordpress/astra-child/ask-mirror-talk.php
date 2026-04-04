@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.55';
+    return '5.4.56';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -137,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.55: center the response body itself on larger screens while keeping the email action centered
+    $version = ask_mirror_talk_theme_version(); // v5.4.56: only show "Strongest match" when the backend has high confidence
     
     // Core styles
     wp_enqueue_style(

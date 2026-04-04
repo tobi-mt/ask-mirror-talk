@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.indexing.embeddings import embed_text
 from app.qa.retrieval import retrieve_chunks, load_episode_map
-from app.qa.smart_citations import retrieve_chunks_two_tier, rerank_citation_moments
+from app.qa.smart_citations import retrieve_chunks_two_tier, rerank_citation_moments, refine_citation_segments
 from app.qa.answer import compose_answer
 from app.qa.cache import get_answer_cache, normalize_question
 from app.storage.repository import log_qa
@@ -76,6 +76,35 @@ def _log_qa_with_fresh_session(
         return None
     finally:
         safe_close_session(log_db, context=context)
+
+
+def _refine_citations_with_fresh_session(
+    *,
+    question: str,
+    answer_text: str,
+    citation_chunks: list[dict],
+    context: str,
+):
+    if not citation_chunks:
+        return citation_chunks
+
+    from app.core.db import get_session_local, safe_close_session
+
+    SessionLocal = get_session_local()
+    refine_db = SessionLocal()
+    try:
+        refined = refine_citation_segments(
+            refine_db,
+            question=question,
+            answer_text=answer_text,
+            citation_chunks=citation_chunks,
+        )
+        return refined or citation_chunks
+    except Exception as exc:
+        logger.error("Failed to refine citation segments during %s: %s", context, exc, exc_info=True)
+        return citation_chunks
+    finally:
+        safe_close_session(refine_db, context=context)
 
 
 def answer_question(
@@ -230,6 +259,12 @@ def answer_question(
             [c["episode"]["id"] for c in citation_payloads if c.get("episode", {}).get("id")],
         )
         if refined_citation_chunks:
+            refined_citation_chunks = _refine_citations_with_fresh_session(
+                question=question,
+                answer_text=response["answer"],
+                citation_chunks=refined_citation_chunks,
+                context="qa_citation_segment_refinement",
+            )
             from app.qa.answer import _build_citations
             response["citations"] = _build_citations(refined_citation_chunks)
 
@@ -425,6 +460,13 @@ def answer_question_stream(
         )
         if citation_payloads else []
     )
+    if refined_citation_chunks:
+        refined_citation_chunks = _refine_citations_with_fresh_session(
+            question=question,
+            answer_text=full_answer,
+            citation_chunks=refined_citation_chunks,
+            context="qa_stream_citation_segment_refinement",
+        )
     citations = _build_citations(refined_citation_chunks if refined_citation_chunks else (citation_payloads if citation_payloads else chunk_payloads))
 
     # ── Start follow-up generation in a background thread ──

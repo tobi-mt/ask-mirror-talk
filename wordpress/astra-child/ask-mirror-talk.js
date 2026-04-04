@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.55 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.56 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1030,7 +1030,7 @@
               : timestampStart)
           : '';
         const timeHtml = timeDisplay ? `<span class="citation-time">▶ ${timeDisplay}</span>` : '';
-        const matchBadgeHtml = index === 0
+        const matchBadgeHtml = citation.is_strongest_match
           ? '<span class="citation-match-badge">Strongest match</span>'
           : '';
 

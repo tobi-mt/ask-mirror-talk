@@ -195,6 +195,7 @@ def _build_citations(chunks: list[dict]) -> list[dict]:
             "audio_url": audio_url,
             "episode_url": episode_url,
             "text": _make_quote(chunk["text"], max_len=200),
+            "is_strongest_match": bool(chunk.get("is_strongest_match")),
         })
     return citations
 

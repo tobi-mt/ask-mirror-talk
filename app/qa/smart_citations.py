@@ -83,12 +83,20 @@ _META_QUESTION_MARKERS = (
     "prove the answer",
     "verify the answer",
     "supporting the answer",
+    "supports the answer",
+    "supports an answer",
+    "citation genuinely supports",
+    "citation is actually supporting",
+    "quoted source really proves",
     "really supporting",
     "episode reference",
     "references",
     "grounding",
     "evidence",
     "answer itself",
+    "just nearby",
+    "sounding related",
+    "actually supporting",
 )
 
 
@@ -167,6 +175,14 @@ def _is_abstract_or_meta_question(question: str) -> bool:
     if any(marker in lower for marker in _META_QUESTION_MARKERS):
         return True
     tokens = _tokenize_for_overlap(lower)
+    if "citation" in tokens or "citations" in tokens:
+        return True
+    if "reference" in tokens or "references" in tokens:
+        return True
+    if ("answer" in tokens or "question" in tokens) and any(word in tokens for word in {"evidence", "proof", "support", "supporting", "related", "nearby"}):
+        return True
+    if any(phrase in lower for phrase in ("really proves", "genuinely supports", "just sounding related", "just sounds related", "actually supporting", "actually supports")):
+        return True
     if len(tokens) <= 5 and any(word in tokens for word in {"truth", "meaning", "proof", "evidence", "answer"}):
         return True
     return False

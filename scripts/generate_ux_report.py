@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text, func
 from app.core.db import SessionLocal
-from app.storage.models import QALog, CitationClick, UserFeedback, Episode
+from app.storage.models import QALog, CitationClick, UserFeedback, Episode, ProductEvent
 
 
 def print_header(title):
@@ -69,6 +69,10 @@ def analyze_engagement_metrics(db, days=7):
     
     total_feedback = positive_feedback + negative_feedback
     satisfaction_rate = (positive_feedback / total_feedback * 100) if total_feedback > 0 else 0
+    guardrail_blocks = db.query(func.count(ProductEvent.id)).filter(
+        ProductEvent.created_at >= cutoff,
+        ProductEvent.event_name == 'guardrail_blocked'
+    ).scalar()
     
     print(f"Total Questions:        {total_questions:,}")
     print(f"Unique Users:           {unique_users:,}")
@@ -79,6 +83,7 @@ def analyze_engagement_metrics(db, days=7):
     print(f"Positive Feedback:      {positive_feedback}")
     print(f"Negative Feedback:      {negative_feedback}")
     print(f"Satisfaction Rate:      {satisfaction_rate:.1f}%")
+    print(f"Guardrail Blocks:       {guardrail_blocks:,}")
     
     # Trend analysis
     print(f"\n📈 TRENDS:")
@@ -99,7 +104,8 @@ def analyze_engagement_metrics(db, days=7):
         'unique_users': unique_users,
         'avg_latency': avg_latency,
         'click_rate': click_rate,
-        'satisfaction_rate': satisfaction_rate
+        'satisfaction_rate': satisfaction_rate,
+        'guardrail_blocks': guardrail_blocks,
     }
 
 
@@ -244,6 +250,31 @@ def analyze_user_journey(db, days=7):
     print(f"   Returning Users:  {returning_users}/{total_users} ({return_rate:.1f}%)")
 
 
+def analyze_guardrails(db, days=7):
+    """Analyze blocked prompt volume by category."""
+    print_header(f"🛡️ GUARDRAIL ACTIVITY (Last {days} Days)")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    query = text("""
+        SELECT
+            COALESCE(metadata_json::json->>'category', 'unknown') AS category,
+            COUNT(*) AS count
+        FROM product_events
+        WHERE created_at >= :cutoff
+          AND event_name = 'guardrail_blocked'
+        GROUP BY COALESCE(metadata_json::json->>'category', 'unknown')
+        ORDER BY count DESC, category ASC
+    """)
+    rows = db.execute(query, {"cutoff": cutoff}).fetchall()
+
+    if not rows:
+        print("No blocked prompts recorded.\n")
+        return
+
+    for category, count in rows:
+        print(f"   {category:22s} {count:>5d}")
+
+
 def generate_recommendations(metrics):
     """Generate actionable recommendations based on metrics"""
     print_header("💡 RECOMMENDATIONS")
@@ -272,6 +303,16 @@ def generate_recommendations(metrics):
                      "• Add inline audio player previews\n"
                      "• Show episode thumbnails\n"
                      "• Add 'Why this episode?' context"
+        })
+
+    if metrics.get('guardrail_blocks', 0) > 0:
+        recommendations.append({
+            'priority': 'LOW',
+            'category': 'Safety',
+            'issue': f"{metrics['guardrail_blocks']} blocked prompts were detected in the last period",
+            'action': "• Review blocked categories for trends\n"
+                     "• Tighten or relax heuristics only if false positives/negatives appear\n"
+                     "• Keep storing categories, not raw harmful prompt text, unless auditing requires more detail"
         })
     
     # User satisfaction recommendations
@@ -337,6 +378,7 @@ def generate_summary_report(db, days=7):
     analyze_popular_topics(db, days)
     analyze_episode_engagement(db, days)
     analyze_user_journey(db, days)
+    analyze_guardrails(db, days)
     generate_recommendations(metrics)
     
     print_header("📋 NEXT STEPS")

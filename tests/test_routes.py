@@ -102,12 +102,20 @@ def test_ask_stream_route_returns_sse(monkeypatch):
 
 def test_ask_route_blocks_malicious_prompt(monkeypatch):
     called = {"value": False}
+    logged = {}
 
     def fake_answer_question(db, question, user_ip):
         called["value"] = True
         return {"answer": "ok", "citations": [], "question": question}
 
+    def fake_log_guardrail_block(*, question, user_ip, decision, route):
+        logged["question"] = question
+        logged["user_ip"] = user_ip
+        logged["code"] = decision.code
+        logged["route"] = route
+
     monkeypatch.setattr("app.qa.service.answer_question", fake_answer_question)
+    monkeypatch.setattr(ask_routes, "log_guardrail_block", fake_log_guardrail_block)
     clear_rate_limits()
 
     app.dependency_overrides[get_db] = _override_db(object())
@@ -120,6 +128,8 @@ def test_ask_route_blocks_malicious_prompt(monkeypatch):
     assert response.status_code == 400
     assert "violence" in response.json()["detail"].lower() or "harm" in response.json()["detail"].lower()
     assert called["value"] is False
+    assert logged["code"] == "violent_wrongdoing"
+    assert logged["route"] == "/ask"
 
 
 def test_ask_route_allows_sensitive_but_sincere_question(monkeypatch):
@@ -143,7 +153,16 @@ def test_ask_route_allows_sensitive_but_sincere_question(monkeypatch):
     assert captured["question"] == "How do I heal after emotional abuse?"
 
 
-def test_ask_stream_route_blocks_prompt_injection():
+def test_ask_stream_route_blocks_prompt_injection(monkeypatch):
+    logged = {}
+
+    def fake_log_guardrail_block(*, question, user_ip, decision, route):
+        logged["question"] = question
+        logged["user_ip"] = user_ip
+        logged["code"] = decision.code
+        logged["route"] = route
+
+    monkeypatch.setattr(ask_routes, "log_guardrail_block", fake_log_guardrail_block)
     clear_rate_limits()
     app.dependency_overrides[get_db] = _override_db(object())
     try:
@@ -153,7 +172,9 @@ def test_ask_stream_route_blocks_prompt_injection():
         app.dependency_overrides.clear()
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "That request is not supported here."
+    assert response.json()["detail"] == "I can't help with hidden instructions, system prompts, or attempts to bypass the app."
+    assert logged["code"] == "prompt_injection"
+    assert logged["route"] == "/ask/stream"
 
 
 def test_ingest_route_accepts_request(monkeypatch):

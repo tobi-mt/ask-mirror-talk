@@ -124,6 +124,34 @@ def get_analytics_summary(
             unanswered = None
             cached_count = None
 
+        try:
+            guardrail_total = db.execute(
+                text("""
+                    SELECT COUNT(*)
+                    FROM product_events
+                    WHERE created_at >= :cutoff
+                      AND event_name = 'guardrail_blocked'
+                """),
+                {"cutoff": cutoff},
+            ).scalar() or 0
+            guardrail_rows = db.execute(
+                text("""
+                    SELECT
+                        COALESCE(metadata_json::json->>'category', 'unknown') AS category,
+                        COUNT(*) AS count
+                    FROM product_events
+                    WHERE created_at >= :cutoff
+                      AND event_name = 'guardrail_blocked'
+                    GROUP BY COALESCE(metadata_json::json->>'category', 'unknown')
+                    ORDER BY count DESC, category ASC
+                """),
+                {"cutoff": cutoff},
+            ).fetchall()
+        except Exception:
+            db.rollback()
+            guardrail_total = 0
+            guardrail_rows = []
+
         return {
             "period_days": days,
             "total_questions": total_questions or 0,
@@ -138,6 +166,10 @@ def get_analytics_summary(
             },
             "unanswered_questions": unanswered,
             "cached_questions": cached_count,
+            "guardrails": {
+                "blocked_total": guardrail_total,
+                "by_category": [{"category": row[0], "count": row[1]} for row in guardrail_rows],
+            },
             "top_questions": [{"question": q[0], "count": q[1]} for q in top_questions],
             "most_cited_episodes": [
                 {"id": episode[0], "title": episode[1], "citations": episode[2]}

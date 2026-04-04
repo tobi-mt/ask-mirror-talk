@@ -955,7 +955,7 @@ def send_midday_motivation_notification(db: Session) -> dict:
         clean = url.split('#')[0].rstrip('&?')
         sep = '&' if '?' in clean else '?'
         hash_part = '#ask-mirror-talk-form'
-        notify_url = f"{clean}{sep}autoask={quote(extracted_q)}{hash_part}"
+        notify_url = f"{clean}{sep}autoask={quote(extracted_q)}&midday_reflection=1{hash_part}"
 
         result = send_push_notification(
             subscription_info=subscription_info,

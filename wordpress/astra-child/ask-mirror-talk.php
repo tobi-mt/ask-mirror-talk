@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.57';
+    return '5.4.58';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -137,7 +137,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.57: add debug no-cache mode and keep saved-insight action centered on larger screens
+    $version = ask_mirror_talk_theme_version(); // v5.4.58: make midday push open path resilient with local fallback auto-submit
     
     // Core styles
     wp_enqueue_style(

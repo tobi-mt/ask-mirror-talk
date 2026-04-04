@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.4.57';
+const CACHE_VERSION = 'amt-v5.4.58';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -227,6 +227,7 @@ self.addEventListener('notificationclick', (event) => {
   const action = event.action;
   const data = event.notification.data;
   const baseUrl = data?.url || '/';
+  const notificationType = data?.type || '';
 
   // Handle dismiss/save actions without opening the app
   if (action === 'dismiss') {
@@ -288,6 +289,22 @@ self.addEventListener('notificationclick', (event) => {
               // navigate() not available (old iOS Safari < 15.4) — fall back to
               // postMessage for tabs that are still alive, then focus.
               targetClient.postMessage({ type: 'AUTO_SUBMIT', question });
+              return targetClient.focus();
+            });
+        }
+        if (notificationType === 'midday_motivation') {
+          return targetClient.navigate(base + hash)
+            .then(navigated => { if (navigated) navigated.focus(); })
+            .catch(() => {
+              targetClient.postMessage({ type: 'AUTO_START_MIDDAY_REFLECTION' });
+              return targetClient.focus();
+            });
+        }
+        if (notificationType === 'night_reflection') {
+          return targetClient.navigate(base + hash)
+            .then(navigated => { if (navigated) navigated.focus(); })
+            .catch(() => {
+              targetClient.postMessage({ type: 'AUTO_START_NIGHT_REFLECTION' });
               return targetClient.focus();
             });
         }

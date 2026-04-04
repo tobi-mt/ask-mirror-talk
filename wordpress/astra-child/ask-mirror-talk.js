@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.57 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.58 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -337,6 +337,66 @@
     };
   }
 
+  function buildMiddayReflectionPrompt() {
+    const today = todayStr();
+    const lastSession = loadLastSession() || null;
+    const activity = loadActivityLog().filter(entry => entry && entry.day === today);
+    const latestQotd = loadLatestQotd();
+    const recap = getWeeklyRecapData ? getWeeklyRecapData() : null;
+
+    const todayTheme = (
+      activity.find(entry => entry.type === 'question' && entry.theme)?.theme ||
+      (lastSession && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today ? lastSession.theme : '') ||
+      (latestQotd && latestQotd.theme) ||
+      (recap && recap.topTheme) ||
+      ''
+    );
+
+    if (lastSession && lastSession.question && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today) {
+      return {
+        question: todayTheme
+          ? `What about today's reflection on ${todayTheme} wants a deeper look right now?`
+          : `What about today's reflection wants a deeper look right now?`,
+        strategy: 'today_last_session',
+        theme: todayTheme || null
+      };
+    }
+
+    if (latestQotd && latestQotd.question) {
+      return {
+        question: `Go deeper on this: ${latestQotd.question}`,
+        strategy: 'qotd_fallback',
+        theme: latestQotd.theme || null
+      };
+    }
+
+    if (recap && recap.topTheme) {
+      return {
+        question: `What needs my attention most around ${recap.topTheme} this afternoon?`,
+        strategy: 'weekly_recap',
+        theme: recap.topTheme
+      };
+    }
+
+    return {
+      question: 'What needs my attention most this afternoon?',
+      strategy: 'default',
+      theme: null
+    };
+  }
+
+  function autoStartMiddayReflection() {
+    const resolved = buildMiddayReflectionPrompt();
+    emitProductEvent('midday_reflection_opened', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+    autoSubmitQuestion(resolved.question, 'midday_reflection', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+  }
+
   function autoStartNightReflection() {
     const resolved = buildNightReflectionPrompt();
     emitProductEvent('night_reflection_opened', {
@@ -354,6 +414,7 @@
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('autoask');
     const nightReflection = params.get('night_reflection');
+    const middayReflection = params.get('midday_reflection');
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
@@ -390,6 +451,23 @@
       } else {
         setTimeout(() => autoStartNightReflection(), 120);
       }
+      return;
+    }
+
+    if (middayReflection === '1') {
+      const remainingParams = params.toString()
+        .replace(/midday_reflection=[^&]*&?/, '')
+        .replace(/&$/, '');
+      const cleanUrl = window.location.pathname +
+        (remainingParams ? `?${remainingParams}` : '') +
+        window.location.hash;
+      history.replaceState(null, '', cleanUrl || window.location.pathname);
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => autoStartMiddayReflection());
+      } else {
+        setTimeout(() => autoStartMiddayReflection(), 120);
+      }
     }
   })();
 
@@ -414,11 +492,14 @@
       if (event.data && event.data.type === 'AUTO_SUBMIT' && event.data.question) {
         // QOTD notification clicked while app was open — auto-submit the question.
         autoSubmitQuestion(event.data.question);
+      } else if (event.data && event.data.type === 'AUTO_START_MIDDAY_REFLECTION') {
+        autoStartMiddayReflection();
+      } else if (event.data && event.data.type === 'AUTO_START_NIGHT_REFLECTION') {
+        autoStartNightReflection();
       } else if (event.data && event.data.type === 'NAVIGATE_TO_FORM') {
-        // Midday motivation notification clicked while app was open — scroll
-        // to the form and focus the input so the user can start typing.
-        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        if (input) input.focus();
+        // Legacy service-worker fallback path: prefer a smart midday auto-start
+        // instead of just opening the form with an empty state.
+        autoStartMiddayReflection();
       } else if (event.data && event.data.type === 'SW_UPDATED') {
         // New service worker just activated and claimed this tab.
         // Reload so the page picks up freshly-cached JS/CSS instead of old

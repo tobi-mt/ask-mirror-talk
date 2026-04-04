@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import logging
 import re
 
+from app.core.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ def inspect_question(question: str) -> GuardrailDecision:
         return GuardrailDecision(
             allowed=False,
             code="prompt_injection",
-            message="That request is not supported here.",
+            message="I can't help with hidden instructions, system prompts, or attempts to bypass the app.",
         )
 
     if _matches_any(lowered, _SELF_HARM_PATTERNS):
@@ -71,7 +73,7 @@ def inspect_question(question: str) -> GuardrailDecision:
             code="self_harm",
             message=(
                 "I can't help with instructions for self-harm. "
-                "If this is personal and urgent, contact local emergency services or a crisis line now."
+                "If this is personal or urgent, contact local emergency services or a crisis line right now."
             ),
         )
 
@@ -80,7 +82,7 @@ def inspect_question(question: str) -> GuardrailDecision:
         return GuardrailDecision(
             allowed=False,
             code="violent_wrongdoing",
-            message="I can't help with harming someone or planning violence.",
+            message="I can't help with harming someone, planning violence, or creating violent threats.",
         )
 
     if _matches_any(lowered, _ILLEGAL_WRONGDOING_PATTERNS):
@@ -88,7 +90,7 @@ def inspect_question(question: str) -> GuardrailDecision:
         return GuardrailDecision(
             allowed=False,
             code="illegal_wrongdoing",
-            message="I can't help with illegal, exploitative, or deceptive instructions.",
+            message="I can't help with illegal, deceptive, or exploitative instructions like hacking, phishing, fraud, or theft.",
         )
 
     if _matches_any(lowered, _EXPLOITATIVE_PATTERNS):
@@ -96,7 +98,42 @@ def inspect_question(question: str) -> GuardrailDecision:
         return GuardrailDecision(
             allowed=False,
             code="exploitative_content",
-            message="I can't help create abusive, hateful, or exploitative content.",
+            message="I can't help create abusive, hateful, sexually exploitative, or manipulative content.",
         )
 
     return GuardrailDecision(allowed=True)
+
+
+def log_guardrail_block(
+    *,
+    question: str,
+    user_ip: str,
+    decision: GuardrailDecision,
+    route: str,
+) -> None:
+    """Log blocked prompts as privacy-conscious product events."""
+    if not settings.question_guardrails_enabled or decision.allowed:
+        return
+
+    try:
+        from app.core.db import get_session_local, safe_close_session
+        from app.storage.repository import log_product_event
+
+        SessionLocal = get_session_local()
+        db = SessionLocal()
+        try:
+            log_product_event(
+                db,
+                event_name="guardrail_blocked",
+                user_ip=user_ip,
+                qa_log_id=None,
+                metadata={
+                    "category": decision.code,
+                    "route": route,
+                    "question_length": len((question or "").strip()),
+                },
+            )
+        finally:
+            safe_close_session(db, context="guardrail_block_event")
+    except Exception as exc:
+        logger.warning("Failed to log guardrail block event: %s", exc)

@@ -47,6 +47,16 @@ _GENERIC_SEGMENT_MARKERS = {
     "before we get started",
     "in this episode",
     "for joining us",
+    "podcast enthusiasts",
+    "add a little sparkle",
+    "friendly nudge",
+    "if you're loving",
+    "captivating stories",
+    "let's take a quick break",
+    "we'll be right back",
+    "support the show",
+    "share this episode",
+    "politicians in d.c.",
 }
 
 
@@ -159,44 +169,30 @@ def rerank_citation_moments(
     )
 
     filtered: list[dict] = []
-    for idx, chunk in enumerate(refined):
+    for chunk in refined:
         precision = float(chunk.get("citation_precision_score", 0.0) or 0.0)
         question_overlap = float(chunk.get("citation_question_overlap", 0.0) or 0.0)
         answer_overlap = float(chunk.get("citation_answer_overlap", 0.0) or 0.0)
         semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
+        text_value = (chunk.get("text") or "").strip()
 
-        # Keep the strongest few by default, but avoid padding with weak,
-        # generic episode moments that only barely match semantically.
-        if idx < 3:
-            filtered.append(chunk)
-            continue
+        has_lexical_support = max(question_overlap, answer_overlap) >= 0.10
+        has_good_precision = precision >= 0.36
+        has_min_semantic_support = semantic >= 0.50
+        looks_generic = _looks_generic_source_moment(text_value)
 
-        has_lexical_support = max(question_overlap, answer_overlap) >= 0.08
-        has_strong_semantic_support = semantic >= 0.62
-        has_good_precision = precision >= 0.34
-
-        if has_good_precision and (has_lexical_support or has_strong_semantic_support):
+        if has_good_precision and has_lexical_support and has_min_semantic_support and not looks_generic:
             filtered.append(chunk)
         else:
             logger.info(
-                "Dropping weak citation moment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, semantic=%.3f)",
+                "Dropping weak citation moment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, semantic=%.3f, generic=%s)",
                 (chunk.get("episode") or {}).get("id"),
                 precision,
                 question_overlap,
                 answer_overlap,
                 semantic,
+                looks_generic,
             )
-
-    if filtered:
-        top_score = float(filtered[0].get("citation_precision_score", 0.0) or 0.0)
-        second_score = float(filtered[1].get("citation_precision_score", 0.0) or 0.0) if len(filtered) > 1 else 0.0
-        top_chunk = filtered[0]
-        top_question_overlap = float(top_chunk.get("citation_question_overlap", 0.0) or 0.0)
-        top_answer_overlap = float(top_chunk.get("citation_answer_overlap", 0.0) or 0.0)
-        confidence_gap = top_score - second_score
-        has_clear_support = top_score >= 0.46 and max(top_question_overlap, top_answer_overlap) >= 0.14
-        has_clear_lead = confidence_gap >= 0.05 or len(filtered) == 1
-        top_chunk["is_strongest_match"] = bool(has_clear_support and has_clear_lead)
 
     return filtered
 
@@ -346,20 +342,8 @@ def finalize_citation_confidence(citation_chunks: list[dict]) -> list[dict]:
     for chunk in ordered:
         chunk["is_strongest_match"] = False
 
-    top = ordered[0]
-    second = ordered[1] if len(ordered) > 1 else None
-    top_score = float(top.get("citation_precision_score", top.get("similarity", 0.0)) or 0.0)
-    second_score = float(second.get("citation_precision_score", second.get("similarity", 0.0)) or 0.0) if second else 0.0
-    top_overlap = max(
-        float(top.get("citation_question_overlap", 0.0) or 0.0),
-        float(top.get("citation_answer_overlap", 0.0) or 0.0),
-    )
-    top_text = (top.get("text") or "").strip()
-    has_clear_support = top_score >= 0.48 and top_overlap >= 0.16 and not _looks_generic_source_moment(top_text)
-    has_clear_lead = (top_score - second_score) >= 0.05 or second is None
-    if has_clear_support and has_clear_lead:
-        ordered[0]["is_strongest_match"] = True
-
+    # Temporarily disable the badge until production testing shows the top
+    # citation is consistently trustworthy enough to merit the claim.
     return ordered
 
 

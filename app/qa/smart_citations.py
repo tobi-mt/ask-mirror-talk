@@ -76,6 +76,21 @@ _HOST_BRIDGE_PATTERNS = (
     "support the show",
 )
 
+_META_QUESTION_MARKERS = (
+    "citation",
+    "quoted source",
+    "source moment",
+    "prove the answer",
+    "verify the answer",
+    "supporting the answer",
+    "really supporting",
+    "episode reference",
+    "references",
+    "grounding",
+    "evidence",
+    "answer itself",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -143,6 +158,18 @@ def _is_standalone_evidence(text_value: str) -> bool:
     if re.match(r"^(so|and|but|well|right)\b", lower) and len(lower) < 180:
         return False
     return True
+
+
+def _is_abstract_or_meta_question(question: str) -> bool:
+    lower = (question or "").strip().lower()
+    if not lower:
+        return False
+    if any(marker in lower for marker in _META_QUESTION_MARKERS):
+        return True
+    tokens = _tokenize_for_overlap(lower)
+    if len(tokens) <= 5 and any(word in tokens for word in {"truth", "meaning", "proof", "evidence", "answer"}):
+        return True
+    return False
 
 
 def rerank_citation_moments(
@@ -403,6 +430,7 @@ def select_citation_segments(
 
     question_tokens = _tokenize_for_overlap(question)
     answer_tokens = _tokenize_for_overlap(answer_text)
+    is_meta_question = _is_abstract_or_meta_question(question)
 
     episode_meta = {
         int(item["episode"]["id"]): item
@@ -505,10 +533,32 @@ def select_citation_segments(
         ) >= 0.14
     ]
 
+    very_strong = [
+        item for item in best_per_episode
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.48
+        and max(
+            float(item.get("citation_question_overlap", 0.0) or 0.0),
+            float(item.get("citation_answer_overlap", 0.0) or 0.0),
+        ) >= 0.18
+    ]
+
+    if is_meta_question:
+        if len(very_strong) >= 2:
+            return finalize_citation_confidence(very_strong[:max_citations])
+        logger.info("Meta/abstract question detected; refusing weak citations for question: %s", question[:140])
+        return []
+
     if len(strong) >= min_citations:
         selected = strong[:max_citations]
     else:
         selected = best_per_episode[:max_citations]
+
+    if not is_meta_question:
+        # For normal questions, still refuse citations if we can't find at least
+        # one clearly solid supporting moment.
+        if not strong and len(selected) > 0:
+            logger.info("No strong citation support found; returning broader reflection for question: %s", question[:140])
+            return []
 
     return finalize_citation_confidence(selected)
 

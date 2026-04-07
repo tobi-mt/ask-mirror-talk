@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.58';
+    return '5.4.62';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -34,6 +34,7 @@ function ask_mirror_talk_shortcode() {
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
                 <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
                 <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
+                <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
             </div>
         </div>
         <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
@@ -137,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.58: make midday push open path resilient with local fallback auto-submit
+    $version = ask_mirror_talk_theme_version(); // v5.4.62: soften citation actions so they read like premium controls instead of chunky buttons
     
     // Core styles
     wp_enqueue_style(

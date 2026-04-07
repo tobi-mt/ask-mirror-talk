@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.58 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.62 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -4157,17 +4157,17 @@
   // ========================================
   (function initOnboarding() {
     // Early exit conditions - check these first before any UI work
+    let resumeOnboarding = false;
     try {
       if (localStorage.getItem('amt_onboarded')) return;
       
       // Skip onboarding if page was just reloaded by service worker
       if (sessionStorage.getItem('amt_sw_reloaded')) {
-        // If we're reloading from SW and onboarding was in progress, mark as complete
         if (localStorage.getItem('amt_onboarding_started')) {
-          localStorage.setItem('amt_onboarded', '1');
-          localStorage.removeItem('amt_onboarding_started');
+          resumeOnboarding = true;
+        } else {
+          return;
         }
-        return;
       }
       
       // Skip onboarding if we're in standalone mode (already installed)
@@ -4272,8 +4272,10 @@
       } catch (e) {}
     }
 
-    // Show after a short delay so the page renders first
-    setTimeout(() => renderStep(0), 800);
+    // Show after a short delay so the page renders first.
+    // If we are resuming after an SW-triggered reload, render immediately so
+    // the intro doesn't feel like it flashed and vanished.
+    setTimeout(() => renderStep(0), resumeOnboarding ? 0 : 800);
   })();
 
   // ========================================

@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.4.62';
+const CACHE_VERSION = 'amt-v5.4.71';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -99,15 +99,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Core app shell files should prefer the network when available so installed
+  // PWAs pick up visual/theme changes quickly instead of waiting behind an older
+  // cached shell.
+  if (isAppShellAsset(url)) {
+    event.respondWith(networkFirstWithCache(request, STATIC_CACHE));
+    return;
+  }
+
   // Static assets: cache-first with network update
   if (isStaticAsset(url)) {
     event.respondWith(cacheFirstWithUpdate(request, STATIC_CACHE));
     return;
   }
 
-  // HTML pages: network-first for freshness
+  // HTML pages: network-only while online so installed PWAs pick up the latest
+  // page shell immediately. We keep an offline fallback, but we stop storing
+  // navigations in cache because stale HTML is the main reason visual updates
+  // appear to "not land" for PWA users.
   if (request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(networkFirstWithCache(request, STATIC_CACHE));
+    event.respondWith(networkPageWithOfflineFallback(request));
     return;
   }
 });
@@ -168,8 +179,23 @@ async function networkFirstWithCache(request, cacheName) {
   }
 }
 
+async function networkPageWithOfflineFallback(request) {
+  try {
+    return await fetch(request, { cache: 'no-store' });
+  } catch (err) {
+    return new Response(offlineHTML(), {
+      headers: { 'Content-Type': 'text/html' },
+      status: 503,
+    });
+  }
+}
+
 function isStaticAsset(url) {
   return /\.(css|js|png|jpg|jpeg|svg|webp|woff2?|ttf|ico)(\?.*)?$/.test(url.pathname);
+}
+
+function isAppShellAsset(url) {
+  return /\/wp-content\/themes\/astra-child\/(ask-mirror-talk(?:-enhanced)?\.(?:css|js)|analytics-addon\.js)$/.test(url.pathname);
 }
 
 // ── Push Notifications (Premium) ──

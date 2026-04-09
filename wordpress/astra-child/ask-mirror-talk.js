@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.62 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.71 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -4589,8 +4589,8 @@
     async function shareViaSystemSheet(platformName) {
       const file = await _dataUrlToFile(dataUrl, downloadName);
       const sharePayload = canNativeShareFiles && navigator.canShare({ files: [file] })
-        ? { files: [file], text: caption, url: pageUrl }
-        : { text: shareText, url: pageUrl };
+        ? { files: [file] }
+        : { title: modalTitle, text: shareText, url: pageUrl };
 
       await navigator.share(sharePayload);
       markShareComplete();
@@ -4701,8 +4701,163 @@
     };
   }
 
+  function hashInsightShareSeed(text) {
+    const source = String(text || '');
+    let hash = 0;
+    for (let i = 0; i < source.length; i++) {
+      hash = ((hash << 5) - hash) + source.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }
+
+  function getInsightShareVariant(insight) {
+    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
+    const variants = [
+      {
+        questionAlign: 'center',
+        questionX: 540,
+        questionWidth: 904,
+        themeAlign: 'center',
+        footerAlign: 'center',
+        orbA: { x: 0.84, y: 0.15, inner: 30, outer: 460 },
+        orbB: { x: 0.14, y: 0.82, inner: 40, outer: 380 },
+        glossCurve: { lineX: 210, bendX: 92, bendY: 174, tailY: 318 },
+        panelInset: 72,
+        accentWidth: 284,
+        excerptX: 118
+      },
+      {
+        questionAlign: 'left',
+        questionX: 102,
+        questionWidth: 836,
+        themeAlign: 'left',
+        footerAlign: 'left',
+        orbA: { x: 0.76, y: 0.16, inner: 28, outer: 420 },
+        orbB: { x: 0.20, y: 0.74, inner: 46, outer: 340 },
+        glossCurve: { lineX: 260, bendX: 138, bendY: 204, tailY: 346 },
+        panelInset: 88,
+        accentWidth: 236,
+        excerptX: 134
+      },
+      {
+        questionAlign: 'center',
+        questionX: 540,
+        questionWidth: 876,
+        themeAlign: 'center',
+        footerAlign: 'center',
+        orbA: { x: 0.20, y: 0.20, inner: 30, outer: 390 },
+        orbB: { x: 0.84, y: 0.80, inner: 40, outer: 360 },
+        glossCurve: { lineX: 170, bendX: 132, bendY: 196, tailY: 360 },
+        panelInset: 80,
+        accentWidth: 320,
+        excerptX: 126
+      },
+      {
+        questionAlign: 'left',
+        questionX: 108,
+        questionWidth: 824,
+        themeAlign: 'center',
+        footerAlign: 'center',
+        orbA: { x: 0.88, y: 0.22, inner: 30, outer: 420 },
+        orbB: { x: 0.10, y: 0.84, inner: 34, outer: 330 },
+        glossCurve: { lineX: 226, bendX: 104, bendY: 182, tailY: 328 },
+        panelInset: 84,
+        accentWidth: 268,
+        excerptX: 130
+      }
+    ];
+    return variants[seed % variants.length];
+  }
+
+  function getInsightShareThemeStyle(theme) {
+    const key = String(theme || '').toLowerCase();
+    const palettes = {
+      faith: {
+        bg: ['#130f1f', '#422448', '#d39d42'],
+        orbA: 'rgba(224, 178, 82, 0.48)',
+        orbB: 'rgba(255, 237, 198, 0.18)',
+        accent: '#f0c678',
+        accentSoft: 'rgba(240,198,120,0.22)',
+        text: '#fff7ea',
+        card: 'rgba(255,250,243,0.965)',
+        cardText: '#2f261e',
+        kicker: 'A quiet return to what still feels sacred'
+      },
+      fear: {
+        bg: ['#170d18', '#5f1832', '#f06f51'],
+        orbA: 'rgba(240, 111, 81, 0.48)',
+        orbB: 'rgba(255, 215, 205, 0.18)',
+        accent: '#ffb29a',
+        accentSoft: 'rgba(255,178,154,0.24)',
+        text: '#fff0ea',
+        card: 'rgba(255,247,244,0.965)',
+        cardText: '#33231f',
+        kicker: 'A reflection shaped by what fear is trying to protect'
+      },
+      healing: {
+        bg: ['#0c1f24', '#15616f', '#5dc7ab'],
+        orbA: 'rgba(93, 199, 171, 0.46)',
+        orbB: 'rgba(210, 255, 239, 0.18)',
+        accent: '#b8f0d6',
+        accentSoft: 'rgba(184,240,214,0.22)',
+        text: '#f2fffb',
+        card: 'rgba(247,255,251,0.97)',
+        cardText: '#20312a',
+        kicker: 'A reflection for gentler repair and steadier ground'
+      },
+      grief: {
+        bg: ['#171423', '#48306f', '#8d7bf4'],
+        orbA: 'rgba(141, 123, 244, 0.42)',
+        orbB: 'rgba(232, 226, 255, 0.16)',
+        accent: '#d7ccff',
+        accentSoft: 'rgba(215,204,255,0.24)',
+        text: '#f4f1ff',
+        card: 'rgba(250,248,255,0.965)',
+        cardText: '#282434',
+        kicker: 'A reflection that stays tender without turning away'
+      },
+      relationships: {
+        bg: ['#1b111d', '#6d2f52', '#ef8a84'],
+        orbA: 'rgba(239, 138, 132, 0.44)',
+        orbB: 'rgba(255, 226, 222, 0.18)',
+        accent: '#ffc6bf',
+        accentSoft: 'rgba(255,198,191,0.22)',
+        text: '#fff1f0',
+        card: 'rgba(255,248,247,0.965)',
+        cardText: '#342425',
+        kicker: 'A reflection shaped for honest connection'
+      },
+      'self-worth': {
+        bg: ['#1f1612', '#87522c', '#f0b763'],
+        orbA: 'rgba(240, 183, 99, 0.46)',
+        orbB: 'rgba(255, 235, 205, 0.18)',
+        accent: '#ffd8a6',
+        accentSoft: 'rgba(255,216,166,0.24)',
+        text: '#fff6ec',
+        card: 'rgba(255,249,242,0.97)',
+        cardText: '#37281e',
+        kicker: 'A reflection that returns you to your own center'
+      }
+    };
+
+    return palettes[key] || {
+      bg: ['#171312', '#6a4730', '#e0a261'],
+      orbA: 'rgba(224, 162, 97, 0.44)',
+      orbB: 'rgba(255, 233, 204, 0.18)',
+      accent: '#f5cf98',
+      accentSoft: 'rgba(245,207,152,0.24)',
+      text: '#fff7ed',
+      card: 'rgba(255,249,242,0.97)',
+      cardText: '#31251c',
+      kicker: 'A reflection worth keeping close'
+    };
+  }
+
   function buildInsightShareCard(insight) {
     const normalized = normalizeInsightRecord(insight);
+    const style = getInsightShareThemeStyle(normalized.theme);
+    const variant = getInsightShareVariant(normalized);
     const W = 1080;
     const H = 1350;
     const canvas = document.createElement('canvas');
@@ -4711,72 +4866,165 @@
     const ctx = canvas.getContext('2d');
 
     const grad = ctx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0, '#f7f0e4');
-    grad.addColorStop(0.55, '#efe6d9');
-    grad.addColorStop(1, '#e7dccd');
+    grad.addColorStop(0, style.bg[0]);
+    grad.addColorStop(0.42, style.bg[1]);
+    grad.addColorStop(1, style.bg[2]);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = 'rgba(46,42,36,0.03)';
-    for (let i = 0; i < 3200; i++) {
-      ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
-    }
+    const orbA = ctx.createRadialGradient(
+      W * variant.orbA.x,
+      H * variant.orbA.y,
+      variant.orbA.inner,
+      W * variant.orbA.x,
+      H * variant.orbA.y,
+      variant.orbA.outer
+    );
+    orbA.addColorStop(0, style.orbA);
+    orbA.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = orbA;
+    ctx.fillRect(0, 0, W, H);
 
-    ctx.strokeStyle = 'rgba(139,115,85,0.22)';
-    ctx.lineWidth = 3;
-    _roundRect(ctx, 42, 42, W - 84, H - 84, 28);
+    const orbB = ctx.createRadialGradient(
+      W * variant.orbB.x,
+      H * variant.orbB.y,
+      variant.orbB.inner,
+      W * variant.orbB.x,
+      H * variant.orbB.y,
+      variant.orbB.outer
+    );
+    orbB.addColorStop(0, style.orbB);
+    orbB.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = orbB;
+    ctx.fillRect(0, 0, W, H);
+
+    const gloss = ctx.createLinearGradient(0, 0, W, H * 0.52);
+    gloss.addColorStop(0, 'rgba(255,255,255,0.42)');
+    gloss.addColorStop(0.18, 'rgba(255,255,255,0.16)');
+    gloss.addColorStop(0.46, 'rgba(255,255,255,0.03)');
+    gloss.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gloss;
+    ctx.beginPath();
+    ctx.moveTo(48, 48);
+    ctx.lineTo(W - variant.glossCurve.lineX, 48);
+    ctx.quadraticCurveTo(W - variant.glossCurve.bendX, 76, W - 42, variant.glossCurve.bendY);
+    ctx.lineTo(48, variant.glossCurve.tailY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    ctx.fillRect(54, 54, W - 108, H - 108);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 1.8;
+    _roundRect(ctx, 30, 30, W - 60, H - 60, 40);
     ctx.stroke();
 
-    ctx.fillStyle = '#8b7355';
-    ctx.font = '600 28px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('ASK MIRROR TALK', W / 2, 118);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    _roundRect(ctx, 52, 52, W - 104, H - 104, 34);
+    ctx.stroke();
 
-    ctx.fillStyle = '#2e2a24';
-    ctx.font = '700 64px Georgia, serif';
-    wrapCanvasText(ctx, normalized.question, 132, 214, W - 264, 80, 4);
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 22px Georgia, serif';
+    ctx.textAlign = variant.questionAlign === 'left' ? 'left' : 'center';
+    ctx.fillText('ASK MIRROR TALK', variant.questionAlign === 'left' ? 98 : W / 2, 114);
 
-    ctx.fillStyle = 'rgba(46,42,36,0.1)';
-    _roundRect(ctx, 150, 400, W - 300, 52, 26);
-    ctx.fill();
-    ctx.fillStyle = '#6b665d';
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    ctx.fillText(style.kicker, variant.questionAlign === 'left' ? 98 : W / 2, 150);
+
+    ctx.fillStyle = style.text;
+    ctx.font = '700 76px Georgia, serif';
+    const questionLineCount = wrapCanvasText(
+      ctx,
+      normalized.question,
+      variant.questionX,
+      250,
+      variant.questionWidth,
+      84,
+      4,
+      variant.questionAlign
+    );
+    const questionBottom = 250 + ((Math.max(questionLineCount, 1) - 1) * 84);
+
+    const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(normalized.theme, W / 2, 434);
+    const themeWidth = Math.max(228, Math.ceil(ctx.measureText(themeLabel).width + 92));
+    const themeX = variant.themeAlign === 'left' ? 94 : Math.round((W - themeWidth) / 2);
+    const themeY = questionBottom + 44;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    _roundRect(ctx, 94, 500, W - 188, 470, 32);
+    const pillGrad = ctx.createLinearGradient(themeX, themeY, themeX + themeWidth, themeY);
+    pillGrad.addColorStop(0, 'rgba(255,255,255,0.30)');
+    pillGrad.addColorStop(1, 'rgba(255,255,255,0.12)');
+    ctx.fillStyle = pillGrad;
+    _roundRect(ctx, themeX, themeY, themeWidth, 54, 27);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(139,115,85,0.18)';
-    ctx.lineWidth = 2;
-    _roundRect(ctx, 94, 500, W - 188, 470, 32);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.5;
+    _roundRect(ctx, themeX, themeY, themeWidth, 54, 27);
+    ctx.stroke();
+    ctx.fillStyle = style.accent;
+    ctx.textAlign = variant.themeAlign === 'left' ? 'left' : 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(themeLabel, variant.themeAlign === 'left' ? themeX + 46 : themeX + (themeWidth / 2), themeY + 27);
+    ctx.textBaseline = 'alphabetic';
+
+    const excerptBoxY = themeY + 106;
+    const excerptBoxH = 446;
+    const panelInset = variant.panelInset;
+    const panelWidth = W - (panelInset * 2);
+
+    ctx.shadowColor = 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 16;
+    ctx.fillStyle = style.card;
+    _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 34);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(255,255,255,0.44)';
+    ctx.lineWidth = 1.5;
+    _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 34);
     ctx.stroke();
 
-    ctx.fillStyle = '#8b7355';
+    const accentBar = ctx.createLinearGradient(panelInset, excerptBoxY, W - panelInset, excerptBoxY);
+    accentBar.addColorStop(0, style.accent);
+    accentBar.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = accentBar;
+    _roundRect(ctx, panelInset + 24, excerptBoxY + 26, variant.accentWidth, 8, 4);
+    ctx.fill();
+
+    ctx.fillStyle = style.accent;
     ctx.font = '82px Georgia, serif';
     ctx.textAlign = 'left';
-    ctx.fillText('“', 142, 594);
+    ctx.fillText('“', variant.excerptX - 10, excerptBoxY + 106);
 
-    ctx.fillStyle = '#2e2a24';
-    ctx.font = '500 38px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, 146, 644, W - 292, 54, 6);
+    ctx.fillStyle = style.cardText;
+    ctx.font = '500 43px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, variant.excerptX, excerptBoxY + 158, panelWidth - ((variant.excerptX - panelInset) * 2), 60, 5, 'left');
 
-    ctx.fillStyle = '#6b665d';
-    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('A saved reflection from the Mirror Talk library', W / 2, 1068);
+    const footerLabelY = excerptBoxY + excerptBoxH + 88;
+    const footerUrlY = footerLabelY + 88;
+    const footerTaglineY = footerUrlY + 42;
 
-    ctx.fillStyle = '#2e2a24';
-    ctx.font = '600 28px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1186);
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = variant.footerAlign;
+    const footerX = variant.footerAlign === 'left' ? 96 : W / 2;
+    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, footerLabelY);
 
-    ctx.fillStyle = '#8b7355';
-    ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Come back for more.', W / 2, 1232);
+    ctx.fillStyle = style.text;
+    ctx.font = '700 36px Georgia, serif';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, footerUrlY);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.74)';
+    ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, footerTaglineY);
 
     return canvas.toDataURL('image/png');
   }
 
-  function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxLines) {
+  function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxLines, align) {
     const words = String(text || '').split(/\s+/).filter(Boolean);
     const lines = [];
     let currentLine = '';
@@ -4797,10 +5045,11 @@
       finalLines[maxLines - 1] = truncateText(finalLines[maxLines - 1], Math.max(12, finalLines[maxLines - 1].length - 1));
     }
 
-    ctx.textAlign = 'left';
+    ctx.textAlign = align || 'left';
     finalLines.forEach((line, index) => {
       ctx.fillText(line, x, startY + (index * lineHeight));
     });
+    return finalLines.length;
   }
 
   function shareInsightArtifact(insight) {
@@ -5155,8 +5404,7 @@
       medium: 'share',
       campaign: 'growth_sprint',
       ref: 'invite_button',
-      theme: reflectionInsight.theme || '',
-      question: question
+      theme: reflectionInsight.theme || ''
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
 
@@ -5314,8 +5562,10 @@
         <div class="amt-journal-backdrop"></div>
         <div class="amt-journal-panel">
           <button class="amt-journal-close" aria-label="Close">✕</button>
-          <h2 class="amt-journal-title">📓 My Reflection Notes</h2>
-          <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private on this device, with browser recovery for reinstall</p>
+          <div class="amt-journal-header-copy">
+            <h2 class="amt-journal-title">📓 My Reflection Notes</h2>
+            <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private on this device, with browser recovery for reinstall</p>
+          </div>
           <div class="amt-journal-list">${noteItems}</div>
         </div>
       `;

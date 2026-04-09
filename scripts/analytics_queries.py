@@ -25,11 +25,25 @@ from sqlalchemy import text
 from app.core.db import SessionLocal
 
 INTERNAL_USER_IP = "cache-prewarm"
+PLACEHOLDER_QUESTION_SQL = """
+AND COALESCE(TRIM(question), '') != ''
+AND LOWER(TRIM(question)) NOT IN ('{{question}}', '{question}', '[question]', '<question>', 'question')
+AND TRIM(question) !~ '^\\{\\{[^}]+\\}\\}$'
+AND TRIM(question) !~ '^\\{[^}]+\\}$'
+AND TRIM(question) !~ '^\\[[^]]+\\]$'
+AND TRIM(question) !~ '^<[^>]+>$'
+"""
 
 
 def _with_internal_filter(query: str, table_alias: str | None = None) -> str:
     target = f"{table_alias}.user_ip" if table_alias else "user_ip"
     return query.replace("{{INTERNAL_FILTER}}", f"AND COALESCE({target}, '') != :internal_user_ip")
+
+
+def _with_question_quality_filter(query: str, table_alias: str | None = None) -> str:
+    target = f"{table_alias}.question" if table_alias else "question"
+    clause = PLACEHOLDER_QUESTION_SQL.replace("question", target)
+    return query.replace("{{QUESTION_FILTER}}", clause)
 
 
 def run_query(db, query, params=None, description=""):
@@ -83,13 +97,14 @@ def analyze_common_questions(db, days=7):
         FROM qa_logs 
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY question 
         ORDER BY count DESC 
         LIMIT 20
     """
     
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Common Questions (Last {days} Days)"
     )
 
@@ -110,13 +125,14 @@ def analyze_cited_episodes(db, days=7):
         JOIN episodes e ON e.id = episode_id::int
         WHERE q.created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY e.id, e.title, e.published_at
         ORDER BY citation_count DESC
         LIMIT 20
     """
     
     run_query(
-        db, _with_internal_filter(query, "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query, "q"), "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Cited Episodes (Last {days} Days)"
     )
 
@@ -136,12 +152,13 @@ def analyze_usage_trends(db, days=30):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY DATE(created_at)
         ORDER BY date DESC
     """
     
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Daily Usage Trends (Last {days} Days)"
     )
 
@@ -161,6 +178,7 @@ def analyze_user_behavior(db, days=7):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY user_ip
         HAVING COUNT(*) > 1
         ORDER BY total_questions DESC
@@ -168,7 +186,7 @@ def analyze_user_behavior(db, days=7):
     """
     
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Most Active Users (Last {days} Days)"
     )
 
@@ -186,6 +204,7 @@ def analyze_episode_diversity(db, days=7):
             FROM qa_logs q
             WHERE q.created_at >= :cutoff
               {{INTERNAL_FILTER}}
+              {{QUESTION_FILTER}}
         )
         SELECT 
             num_episodes_cited,
@@ -197,7 +216,7 @@ def analyze_episode_diversity(db, days=7):
     """
     
     run_query(
-        db, _with_internal_filter(query, "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query, "q"), "q"), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Episode Diversity Distribution (Last {days} Days)"
     )
 
@@ -220,6 +239,7 @@ def analyze_latency_breakdown(db, days=7):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY 
             CASE 
                 WHEN latency_ms < 1000 THEN '< 1s'
@@ -233,7 +253,7 @@ def analyze_latency_breakdown(db, days=7):
     """
     
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Response Time Distribution (Last {days} Days)"
     )
 
@@ -253,12 +273,13 @@ def analyze_cache_performance(db, days=7):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY is_cached
         ORDER BY is_cached DESC
     """
 
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Cache Performance (Last {days} Days)"
     )
 
@@ -276,6 +297,7 @@ def analyze_bursty_usage(db, days=30):
             FROM qa_logs
             WHERE created_at >= :cutoff
               {{INTERNAL_FILTER}}
+              {{QUESTION_FILTER}}
             GROUP BY DATE(created_at), user_ip
         ),
         daily_totals AS (
@@ -285,6 +307,7 @@ def analyze_bursty_usage(db, days=30):
             FROM qa_logs
             WHERE created_at >= :cutoff
               {{INTERNAL_FILTER}}
+              {{QUESTION_FILTER}}
             GROUP BY DATE(created_at)
         ),
         ranked AS (
@@ -311,7 +334,7 @@ def analyze_bursty_usage(db, days=30):
     """
 
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Bursty Usage Risk — Top IP Share By Day (Last {days} Days)"
     )
 
@@ -330,6 +353,7 @@ def analyze_repeated_question_bursts(db, days=30):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY DATE(created_at), question
         HAVING COUNT(*) >= 5
         ORDER BY repeats DESC, day DESC
@@ -337,7 +361,7 @@ def analyze_repeated_question_bursts(db, days=30):
     """
 
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Repeated Question Bursts (Last {days} Days)"
     )
 
@@ -436,12 +460,13 @@ def analyze_hourly_patterns(db, days=7):
         FROM qa_logs
         WHERE created_at >= :cutoff
           {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
         GROUP BY hour_of_day
         ORDER BY hour_of_day
     """
     
     run_query(
-        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        db, _with_question_quality_filter(_with_internal_filter(query)), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Hourly Usage Patterns (Last {days} Days, UTC)"
     )
 
@@ -457,17 +482,17 @@ def generate_summary_report(db, days=7):
     
     # Overall metrics
     total_questions = db.execute(
-        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        text(f"SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
     unique_users = db.execute(
-        text("SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        text(f"SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
     avg_latency = db.execute(
-        text("SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip"),
+        text(f"SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
@@ -482,11 +507,11 @@ def generate_summary_report(db, days=7):
     print(f"   Total Chunks: {total_chunks or 0}")
 
     cached_questions = db.execute(
-        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE AND COALESCE(user_ip, '') != :internal_user_ip"),
+        text(f"SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_cached = TRUE AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     unanswered_questions = db.execute(
-        text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE AND COALESCE(user_ip, '') != :internal_user_ip"),
+        text(f"SELECT COUNT(*) FROM qa_logs WHERE created_at >= :cutoff AND is_answered = FALSE AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     print(f"   Cached Questions: {cached_questions or 0}")

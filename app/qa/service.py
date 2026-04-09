@@ -16,6 +16,17 @@ from app.storage.repository import log_qa
 logger = logging.getLogger(__name__)
 
 
+def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], extra: dict | None = None):
+    payload = {
+        "flow": flow,
+        "question_preview": question[:80],
+        **timings_ms,
+    }
+    if extra:
+        payload.update(extra)
+    logger.info("QA phase timings: %s", payload)
+
+
 def _maybe_log_qa(
     db: Session,
     *,
@@ -129,6 +140,11 @@ def answer_question(
     from app.core.db import get_session_local, safe_close_session
 
     start_time = time.time()
+    embed_started_at = None
+    retrieval_started_at = None
+    answer_started_at = None
+    citation_started_at = None
+    logging_started_at = None
     cache = get_answer_cache()
     norm_q = normalize_question(question)
     if not bypass_cache:
@@ -152,7 +168,9 @@ def answer_question(
             exact_cached_response["question"] = question
             return exact_cached_response
 
+    embed_started_at = time.perf_counter()
     query_embedding = embed_text(question)
+    embed_ms = int((time.perf_counter() - embed_started_at) * 1000)
 
     if not bypass_cache:
         # Check cache for near-identical questions (normalize for better matching)
@@ -178,6 +196,7 @@ def answer_question(
             return cached_response
 
     # ── Phase 1: DB-heavy retrieval — keep session open ──
+    retrieval_started_at = time.perf_counter()
     if use_smart_citations:
         retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
         answer_chunks = retrieval_result['answer_chunks']
@@ -244,6 +263,7 @@ def answer_question(
                 "similarity": similarity,
             })
         citation_payloads = None
+    retrieval_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
 
     # ── Release DB session before long OpenAI call ──
     # Neon serverless kills idle-in-transaction connections after 30s;
@@ -251,10 +271,14 @@ def answer_question(
     safe_close_session(db, context="qa_retrieval_phase")
 
     # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
+    answer_started_at = time.perf_counter()
     response = compose_answer(question, chunk_payloads,
                               citation_override=citation_payloads if use_smart_citations else None)
+    answer_ms = int((time.perf_counter() - answer_started_at) * 1000)
 
+    citation_ms = 0
     if use_smart_citations and citation_payloads:
+        citation_started_at = time.perf_counter()
         refined_citation_chunks = _select_citations_with_fresh_session(
             question=question,
             answer_text=response["answer"],
@@ -266,9 +290,11 @@ def answer_question(
             response["citations"] = _build_citations(refined_citation_chunks)
         else:
             response["citations"] = []
+        citation_ms = int((time.perf_counter() - citation_started_at) * 1000)
 
     # ── Phase 3: Log with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
+    logging_started_at = time.perf_counter()
     qa_log_id = _log_qa_with_fresh_session(
         question=question,
         answer=response["answer"],
@@ -279,6 +305,23 @@ def answer_question(
         is_answered=len(response["citations"]) > 0,
         log_interaction=log_interaction,
         context="qa_logging_phase",
+    )
+    logging_ms = int((time.perf_counter() - logging_started_at) * 1000)
+    _log_phase_timings(
+        "answer_question",
+        question,
+        {
+            "embed_ms": embed_ms,
+            "retrieval_ms": retrieval_ms,
+            "answer_ms": answer_ms,
+            "citation_ms": citation_ms,
+            "logging_ms": logging_ms,
+            "total_ms": latency_ms,
+        },
+        {
+            "citations": len(response["citations"]),
+            "cached": False,
+        },
     )
 
     # Cache this response for future similar questions
@@ -321,6 +364,11 @@ def answer_question_stream(
     from app.core.db import get_session_local, safe_close_session
 
     start_time = time.time()
+    embed_started_at = None
+    retrieval_started_at = None
+    stream_answer_started_at = None
+    citation_started_at = None
+    logging_started_at = None
 
     # ── Immediately tell the client we're working ──
     yield f"data: {json.dumps({'type': 'status', 'message': 'Searching episodes…'})}\n\n"
@@ -352,7 +400,9 @@ def answer_question_stream(
         yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
         return
 
+    embed_started_at = time.perf_counter()
     query_embedding = embed_text(question)
+    embed_ms = int((time.perf_counter() - embed_started_at) * 1000)
 
     cached_response = cache.get(norm_q, query_embedding) if not bypass_cache else None
     if cached_response:
@@ -380,6 +430,7 @@ def answer_question_stream(
         return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
+    retrieval_started_at = time.perf_counter()
     retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
     answer_chunks = retrieval_result['answer_chunks']
     citation_episodes = retrieval_result['citation_episodes']
@@ -419,6 +470,7 @@ def answer_question_stream(
             "relevance_score": cit['relevance_score'],
             "total_relevant_chunks": cit['total_relevant_chunks'],
         })
+    retrieval_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
 
     # ── Release the original DB session before the long streaming phase ──
     # This prevents Neon's idle-in-transaction timeout from killing the connection.
@@ -434,6 +486,7 @@ def answer_question_stream(
 
     full_answer = ""
     ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
+    stream_answer_started_at = time.perf_counter()
     if settings.answer_generation_provider == "openai":
         try:
             for text_chunk in generate_intelligent_answer_stream(question, ranked[:6], context=context or []):
@@ -446,11 +499,13 @@ def answer_question_stream(
     else:
         full_answer = _generate_basic_answer(question, ranked[:5])
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
+    answer_ms = int((time.perf_counter() - stream_answer_started_at) * 1000)
 
     # ── Send citations immediately — no extra latency ──
     from app.qa.answer import _build_citations, _generate_follow_up_questions
     import concurrent.futures
 
+    citation_started_at = time.perf_counter()
     refined_citation_chunks = (
         _select_citations_with_fresh_session(
             question=question,
@@ -461,6 +516,7 @@ def answer_question_stream(
         if citation_payloads else []
     )
     citations = _build_citations(refined_citation_chunks) if refined_citation_chunks else []
+    citation_ms = int((time.perf_counter() - citation_started_at) * 1000)
 
     # ── Start follow-up generation in a background thread ──
     # This runs concurrently while we yield citations and log to the DB,
@@ -476,6 +532,7 @@ def answer_question_stream(
 
     # ── Phase 3: Log result with a fresh DB session ──
     latency_ms = int((time.time() - start_time) * 1000)
+    logging_started_at = time.perf_counter()
     qa_log_id = _log_qa_with_fresh_session(
         question=question,
         answer=full_answer,
@@ -486,6 +543,23 @@ def answer_question_stream(
         is_answered=len(citations) > 0,
         log_interaction=log_interaction,
         context="qa_stream_logging_phase",
+    )
+    logging_ms = int((time.perf_counter() - logging_started_at) * 1000)
+    _log_phase_timings(
+        "answer_question_stream",
+        question,
+        {
+            "embed_ms": embed_ms,
+            "retrieval_ms": retrieval_ms,
+            "answer_ms": answer_ms,
+            "citation_ms": citation_ms,
+            "logging_ms": logging_ms,
+            "total_ms": latency_ms,
+        },
+        {
+            "citations": len(citations),
+            "cached": False,
+        },
     )
 
     # ── Collect follow-ups (background thread should be done by now) ──

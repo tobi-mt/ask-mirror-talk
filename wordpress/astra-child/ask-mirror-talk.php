@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.62';
+    return '5.4.71';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -138,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.62: soften citation actions so they read like premium controls instead of chunky buttons
+    $version = ask_mirror_talk_theme_version(); // v5.4.71: dynamic premium reflection-card variants with stable alignment and a fresh PWA shell version
     
     // Core styles
     wp_enqueue_style(

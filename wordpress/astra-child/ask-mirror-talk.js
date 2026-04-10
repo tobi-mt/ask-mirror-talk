@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.71 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.88 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -40,6 +40,8 @@
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
   const DEBUG_NO_CACHE = new URLSearchParams(window.location.search).get('amt_nocache') === '1';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
+  const RECENT_EXPLORE_THEMES_KEY = 'amt_recent_explore_themes';
+  const RECENT_NIGHT_THEMES_KEY = 'amt_recent_night_themes';
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
   let activeCampaignContext = null;
@@ -121,7 +123,8 @@
     if (data.ref) url.searchParams.set('ref', data.ref);
     if (data.intent) url.searchParams.set('intent', data.intent);
     if (data.theme) url.searchParams.set('theme', data.theme);
-    if (data.question) url.searchParams.set('question', sanitizeCampaignValue(data.question, 160));
+    if (data.question) url.searchParams.set('q', sanitizeCampaignValue(data.question, 120));
+    if (data.inviteReflection) url.searchParams.set('invite_reflection', '1');
     return url.toString();
   }
 
@@ -261,6 +264,49 @@
     }
   }
 
+  function loadRecentThemeHistory(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveRecentThemeHistory(key, themes) {
+    try {
+      localStorage.setItem(key, JSON.stringify((themes || []).slice(0, 6)));
+    } catch (e) {}
+  }
+
+  function rememberRecentTheme(key, theme) {
+    const clean = String(theme || '').trim();
+    if (!clean) return;
+    const updated = [clean, ...loadRecentThemeHistory(key).filter(item => item !== clean)];
+    saveRecentThemeHistory(key, updated);
+  }
+
+  function chooseRotatingTheme(candidates, fallbackTheme, storageKey) {
+    const cleanCandidates = Array.from(new Set((candidates || []).filter(Boolean).map(String)));
+    const recent = loadRecentThemeHistory(storageKey);
+    const preferred = cleanCandidates.filter(theme => !recent.includes(theme));
+    const pool = preferred.length ? preferred : cleanCandidates;
+    const fallback = fallbackTheme || pool[0] || '';
+    if (!pool.length) return fallback;
+
+    const seedSource = `${todayStr()}|${pool.join('|')}|${recent.join('|')}`;
+    let seed = 0;
+    for (let i = 0; i < seedSource.length; i++) {
+      seed = ((seed << 5) - seed) + seedSource.charCodeAt(i);
+      seed |= 0;
+    }
+    const chosen = pool[Math.abs(seed) % pool.length] || fallback;
+    if (chosen) rememberRecentTheme(storageKey, chosen);
+    return chosen || fallback;
+  }
+
   function buildNightReflectionPrompt() {
     const today = todayStr();
     const lastSession = loadLastSession() || null;
@@ -275,6 +321,7 @@
     });
     const recap = getWeeklyRecapData ? getWeeklyRecapData() : null;
     const latestQotd = loadLatestQotd();
+    const recentNightThemes = loadRecentThemeHistory(RECENT_NIGHT_THEMES_KEY);
 
     const todayTheme = (
       activity.find(entry => entry.type === 'question' && entry.theme)?.theme ||
@@ -285,6 +332,7 @@
     );
 
     if (lastSession && lastSession.question && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today) {
+      if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
           ? `What stayed with me most from today's reflection on ${todayTheme}, and why is it still with me tonight?`
@@ -295,6 +343,7 @@
     }
 
     if (notes.length > 0) {
+      if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
           ? `What from today still wants my attention tonight, especially around ${todayTheme}?`
@@ -305,6 +354,7 @@
     }
 
     if (insights.length > 0) {
+      if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
           ? `What truth from today's saved insight on ${todayTheme} do I need to carry into tomorrow?`
@@ -315,14 +365,23 @@
     }
 
     if (recap && recap.topTheme) {
+      const recapCandidates = [
+        recap.topTheme,
+        latestQotd && latestQotd.theme,
+        lastSession && lastSession.theme,
+      ].filter(Boolean).filter(theme => theme !== todayTheme);
+      const rotatedTheme = chooseRotatingTheme(recapCandidates, recap.topTheme, RECENT_NIGHT_THEMES_KEY);
       return {
-        question: `What keeps returning for me around ${recap.topTheme}, and what is it asking me to notice before the day ends?`,
+        question: `What keeps returning for me around ${rotatedTheme}, and what is it asking me to notice before the day ends?`,
         strategy: 'weekly_recap',
-        theme: recap.topTheme
+        theme: rotatedTheme
       };
     }
 
     if (latestQotd && latestQotd.question) {
+      if (latestQotd.theme && !recentNightThemes.includes(latestQotd.theme)) {
+        rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, latestQotd.theme);
+      }
       return {
         question: `What is today's question still trying to show me: ${latestQotd.question}`,
         strategy: 'qotd_fallback',
@@ -385,6 +444,44 @@
     };
   }
 
+  function buildInviteFriendPrompt() {
+    const context = activeCampaignContext || loadCampaignContext() || {};
+    const sharedQuestion = String(context.question || '').trim();
+    const sharedTheme = String(context.theme || '').trim();
+    const themeKey = sharedTheme.toLowerCase();
+
+    if (sharedQuestion) {
+      return {
+        question: sharedQuestion,
+        strategy: 'shared_question',
+        theme: sharedTheme || inferTheme(sharedQuestion, '') || null
+      };
+    }
+
+    const themePrompts = {
+      'self-worth': 'What would healthier self-worth look like in my life right now?',
+      fear: 'What is fear trying to protect in me right now?',
+      healing: 'What needs healing attention in me right now?',
+      grief: 'What does grief need from me today?',
+      relationships: 'What would a healthier relationship pattern look like right now?',
+      faith: 'How do I reconnect with my faith in a more honest way?'
+    };
+
+    if (sharedTheme) {
+      return {
+        question: themePrompts[themeKey] || `What is this season asking me to notice about ${sharedTheme}?`,
+        strategy: 'shared_theme',
+        theme: sharedTheme
+      };
+    }
+
+    return {
+      question: 'What feels most true for me to explore right now?',
+      strategy: 'default',
+      theme: null
+    };
+  }
+
   function autoStartMiddayReflection() {
     const resolved = buildMiddayReflectionPrompt();
     emitProductEvent('midday_reflection_opened', {
@@ -409,12 +506,27 @@
     });
   }
 
+  function autoStartInviteFriendReflection() {
+    const resolved = buildInviteFriendPrompt();
+    emitProductEvent('invite_reflection_opened', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+    autoSubmitQuestion(resolved.question, 'invite_friend', {
+      strategy: resolved.strategy,
+      theme: resolved.theme || null
+    });
+  }
+
   // ─── Handle ?autoask= URL param (notification click → new tab) ─
   (function checkAutoAsk() {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('autoask');
     const nightReflection = params.get('night_reflection');
     const middayReflection = params.get('midday_reflection');
+    const inviteReflection = params.get('invite_reflection');
+    const inviteSource = params.get('utm_source');
+    const inviteRef = params.get('ref');
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
@@ -467,6 +579,23 @@
         document.addEventListener('DOMContentLoaded', () => autoStartMiddayReflection());
       } else {
         setTimeout(() => autoStartMiddayReflection(), 120);
+      }
+      return;
+    }
+
+    if (inviteReflection === '1' || (inviteSource === 'invite_friend' && inviteRef === 'invite_button')) {
+      const remainingParams = params.toString()
+        .replace(/invite_reflection=[^&]*&?/, '')
+        .replace(/&$/, '');
+      const cleanUrl = window.location.pathname +
+        (remainingParams ? `?${remainingParams}` : '') +
+        window.location.hash;
+      history.replaceState(null, '', cleanUrl || window.location.pathname);
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => autoStartInviteFriendReflection());
+      } else {
+        setTimeout(() => autoStartInviteFriendReflection(), 120);
       }
     }
   })();
@@ -1413,7 +1542,7 @@
               cached: event.cached || false
             });
             // Add share button, related questions, and SEO schema after answer is complete
-            addShareButton(question, answerText);
+            addShareButton(question, answerText, window._amtLastTheme || null);
             addSaveToEmailButton(question, answerText);
             showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
@@ -1461,11 +1590,14 @@
     output.classList.add('amt-complete');
 
     showCitations(citationsList);
+    if (citationsList && citationsList[0] && citationsList[0].theme) {
+      window._amtLastTheme = citationsList[0].theme;
+    }
     showFollowUpQuestions(followUpQuestions);
 
     // Add share button and SEO schema
     const questionText = input.value.trim();
-    addShareButton(questionText, answer);
+    addShareButton(questionText, answer, window._amtLastTheme || null);
     addSaveToEmailButton(questionText, answer);
     injectFAQSchema(questionText, answer);
     finalizeAnswerPresentation(questionText, answer, citationsList);
@@ -1811,7 +1943,12 @@
 
     const exploredThemes = stats.themesExplored || new Set();
     const unexploredThemes = AMT_THEMES.filter(theme => !exploredThemes.has(theme));
-    const nextTheme = unexploredThemes[0] || lastTheme || AMT_THEMES[0];
+    const recentExploreThemes = loadRecentThemeHistory(RECENT_EXPLORE_THEMES_KEY);
+    const nextThemeCandidates = [
+      ...unexploredThemes,
+      ...AMT_THEMES.filter(theme => theme !== lastTheme),
+    ].filter(Boolean).filter(theme => theme !== lastTheme || unexploredThemes.length === 0);
+    const nextTheme = chooseRotatingTheme(nextThemeCandidates, lastTheme || AMT_THEMES[0], RECENT_EXPLORE_THEMES_KEY);
     const continueQuestion = lastQ || getThemeStarter(lastTheme || nextTheme);
     const continueLabel = lastQ ? 'Continue where you left off' : 'Pick up your reflection';
     const continueExcerpt = extractInsightExcerpt(lastA);
@@ -1820,13 +1957,16 @@
       ? `Last time you explored ${lastTheme}.`
       : `You have explored ${stats.themesExplored.size} theme${stats.themesExplored.size === 1 ? '' : 's'} so far.`;
     const timeLine = lastTime ? `Last visit ${formatRelativeTime(lastTime)}.` : '';
+    const varietyLine = recentExploreThemes.includes(nextTheme)
+      ? 'A different angle may open something new.'
+      : `Next up: ${nextTheme}.`;
 
     journeyCard.innerHTML = `
       <div class="amt-journey-card-inner">
         <div class="amt-journey-card-copy">
           <span class="amt-journey-kicker">Continue your reflection</span>
           <h3 class="amt-journey-title">${escapeHtml(continueLabel)}</h3>
-          <p class="amt-journey-text">${escapeHtml(continuityLine)} ${escapeHtml(timeLine)}</p>
+          <p class="amt-journey-text">${escapeHtml(continuityLine)} ${escapeHtml(timeLine)} ${escapeHtml(varietyLine)}</p>
           ${continueExcerpt ? `<p class="amt-journey-quote">“${escapeHtml(continueExcerpt)}”</p>` : ''}
         </div>
         <div class="amt-journey-actions">
@@ -1964,8 +2104,8 @@
   // Share Button
   // ========================================
 
-  function addShareButton(question, answer) {
-    addShareButtonV2(question, answer);
+  function addShareButton(question, answer, themeHint) {
+    addShareButtonV2(question, answer, themeHint);
   }
 
   // ========================================
@@ -2819,6 +2959,34 @@
     return false;
   }
 
+  async function refreshPushHeartbeat(force = false) {
+    try {
+      if (!('serviceWorker' in navigator)) return false;
+      const todayKey = todayStr();
+      if (!force && _readStorage(PUSH_HEARTBEAT_DAY_KEY) === todayKey) return true;
+
+      const isSubscribed = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
+      if (!isSubscribed) return false;
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription || !subscription.endpoint) return false;
+
+      const res = await fetch(`${API_BASE}/api/push/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      if (!res.ok) return false;
+
+      _writeStorage(PUSH_HEARTBEAT_DAY_KEY, todayKey);
+      return true;
+    } catch (err) {
+      console.warn('[Push] Heartbeat refresh error:', err);
+      return false;
+    }
+  }
+
   /**
    * Subscribe the browser to push notifications.
    * Returns { success: boolean, reason?: string }
@@ -2883,10 +3051,12 @@
         console.log('[Push] Subscription registered successfully');
         try {
           _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, true, 365);
+          _writeStorage(PUSH_HEARTBEAT_DAY_KEY, '');
           // Bell is already shown by initNotifManageBtn, just ensure it's visible
           const bellBtn = document.getElementById('amt-notif-manage-btn');
           if (bellBtn) bellBtn.style.display = '';
         } catch (e) {}
+        refreshPushHeartbeat(true);
         return { success: true };
       } else {
         console.warn('[Push] Server rejected subscription:', res.status);
@@ -2938,6 +3108,7 @@
     } finally {
       try {
         _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, false, 365);
+        localStorage.removeItem(PUSH_HEARTBEAT_DAY_KEY);
         localStorage.removeItem('amt_notif_dismiss_count');
         localStorage.removeItem('amt_notif_dismissed_permanent');
       } catch (e) {}
@@ -2963,7 +3134,11 @@
           notify_new_episodes: episodes,
         }),
       });
-      return res.ok;
+      if (res.ok) {
+        refreshPushHeartbeat(true);
+        return true;
+      }
+      return false;
     } catch (err) {
       console.warn('[Push] Preference update error:', err);
       return false;
@@ -3138,6 +3313,8 @@
 
       if (!alreadySubscribed) {
         showNotificationOptIn();
+      } else {
+        refreshPushHeartbeat(false);
       }
     } catch (e) {}
   }, (() => {
@@ -3187,6 +3364,7 @@
   const REFLECTION_NOTES_COOKIE_KEY = 'amt_rn';
   const ACTIVITY_LOG_COOKIE_KEY = 'amt_ax';
   const PUSH_SUBSCRIBED_COOKIE_KEY = 'amt_ps';
+  const PUSH_HEARTBEAT_DAY_KEY = 'amt_push_heartbeat_day';
 
   // ── Cookie helpers for cross-PWA-reinstall backup ────────────────────────
   // localStorage is wiped on iOS when the user deletes the PWA from homescreen.
@@ -4854,17 +5032,40 @@
     };
   }
 
-  function buildInsightShareCard(insight) {
-    const normalized = normalizeInsightRecord(insight);
-    const style = getInsightShareThemeStyle(normalized.theme);
-    const variant = getInsightShareVariant(normalized);
-    const W = 1080;
-    const H = 1350;
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
+  function getInsightShareFamily(insight) {
+    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}|family`);
+    const stableFamilies = ['editorial', 'minimal', 'atmospheric'];
+    return stableFamilies[seed % stableFamilies.length];
+  }
 
+  function extractShareHeadline(insight) {
+    const excerpt = String(insight.excerpt || '').trim();
+    if (!excerpt) return truncateText(insight.question || '', 140);
+    const sentences = excerpt.match(/[^.!?]+[.!?]?/g) || [excerpt];
+    const candidate = sentences
+      .map(s => s.trim())
+      .find(s => s.length >= 36 && s.length <= 170) || sentences[0].trim();
+    return String(candidate)
+      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function splitHeadlineForSpotlight(line) {
+    const words = String(line || '').split(/\s+/).filter(Boolean);
+    if (words.length < 5) {
+      return { lead: line, highlight: '', tail: '' };
+    }
+    const highlightStart = Math.max(1, Math.floor(words.length / 3));
+    const highlightSize = Math.min(4, Math.max(2, Math.ceil(words.length / 3)));
+    return {
+      lead: words.slice(0, highlightStart).join(' '),
+      highlight: words.slice(highlightStart, highlightStart + highlightSize).join(' '),
+      tail: words.slice(highlightStart + highlightSize).join(' ')
+    };
+  }
+
+  function drawShareCardShell(ctx, style, W, H, variant) {
     const grad = ctx.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, style.bg[0]);
     grad.addColorStop(0.42, style.bg[1]);
@@ -4915,6 +5116,11 @@
     ctx.fillStyle = 'rgba(255,255,255,0.045)';
     ctx.fillRect(54, 54, W - 108, H - 108);
 
+    for (let i = 0; i < 1200; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.012)';
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1.2, 1.2);
+    }
+
     ctx.strokeStyle = 'rgba(255,255,255,0.16)';
     ctx.lineWidth = 1.8;
     _roundRect(ctx, 30, 30, W - 60, H - 60, 40);
@@ -4924,6 +5130,268 @@
     ctx.lineWidth = 1;
     _roundRect(ctx, 52, 52, W - 104, H - 104, 34);
     ctx.stroke();
+  }
+
+  function drawShareFooter(ctx, style, W, y, align) {
+    const footerX = align === 'left' ? 96 : W / 2;
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = align;
+    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, y);
+
+    ctx.fillStyle = style.text;
+    ctx.font = '700 36px Georgia, serif';
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, y + 88);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.74)';
+    ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, y + 130);
+  }
+
+  function buildPosterInsightShareCard(ctx, normalized, style, W, H, variant) {
+    const headline = extractShareHeadline(normalized);
+    drawShareCardShell(ctx, style, W, H, variant);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 92, 108);
+    ctx.textAlign = 'right';
+    ctx.fillText('ASK MIRROR TALK', W - 92, 108);
+
+    const words = headline.split(/\s+/).filter(Boolean);
+    const pivot = Math.max(2, Math.min(words.length - 2, Math.ceil(words.length / 2)));
+    const first = words.slice(0, pivot).join(' ');
+    const second = words.slice(pivot).join(' ');
+
+    const firstFit = fitCanvasText(ctx, first, W - 192, 2, '500 __SIZE__px Georgia, serif', 72, 52);
+    const firstLineHeight = Math.round(firstFit.size * 1.14);
+    ctx.font = `500 ${firstFit.size}px Georgia, serif`;
+    const firstLines = splitCanvasLines(ctx, first, W - 192).slice(0, 2);
+    const firstBlockWidth = Math.min(
+      700,
+      Math.max(
+        320,
+        Math.ceil(Math.max(...firstLines.map(line => ctx.measureText(line).width), 0) + 52)
+      )
+    );
+    const firstBoxHeight = 30 + (firstLines.length * firstLineHeight);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff9f1';
+    drawFittedCanvasText(ctx, {
+      text: first,
+      x: 96,
+      y: 286,
+      maxWidth: W - 192,
+      maxLines: 2,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: firstFit.size,
+      minSize: 52,
+      lineHeightRatio: 1.14
+    });
+
+    const secondY = 286 + (firstLines.length * firstLineHeight) + 24;
+    const secondFit = fitCanvasText(ctx, second || first, W - 192, 3, '500 __SIZE__px Georgia, serif', 76, 56);
+    const secondLineHeight = Math.round(secondFit.size * 1.13);
+    ctx.fillStyle = style.text;
+    drawFittedCanvasText(ctx, {
+      text: second || first,
+      x: 96,
+      y: secondY,
+      maxWidth: W - 192,
+      maxLines: 3,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: secondFit.size,
+      minSize: 56,
+      lineHeightRatio: 1.13
+    });
+
+    const secondLines = Math.min(splitCanvasLines(ctx, second || first, W - 192).length, 3);
+    const questionY = Math.min(820, secondY + (secondLines * secondLineHeight) + 96);
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    ctx.font = '500 30px Georgia, serif';
+    wrapCanvasText(ctx, truncateText(normalized.question, 120), 96, questionY, W - 220, 44, 3, 'left');
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(style.kicker, 96, H - 196);
+    drawShareFooter(ctx, style, W, H - 160, 'left');
+  }
+
+  function buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant) {
+    const headline = splitHeadlineForSpotlight(extractShareHeadline(normalized));
+    drawShareCardShell(ctx, style, W, H, variant);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = style.accent;
+    ctx.font = '700 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W / 2, 106);
+
+    const splitY = 268;
+    if (headline.lead) {
+      ctx.fillStyle = style.text;
+      drawFittedCanvasText(ctx, {
+        text: headline.lead,
+        x: W / 2,
+        y: splitY,
+        maxWidth: W - 180,
+        maxLines: 2,
+        align: 'center',
+        fontTemplate: '500 __SIZE__px Georgia, serif',
+        maxSize: 66,
+        minSize: 48,
+        lineHeightRatio: 1.12
+      });
+    }
+
+    if (headline.highlight) {
+      const leadFit = headline.lead ? fitCanvasText(ctx, headline.lead, W - 180, 2, '500 __SIZE__px Georgia, serif', 66, 48) : { lineCount: 0, lineHeight: 74 };
+      const highlightY = splitY + (leadFit.lineCount * leadFit.lineHeight) + 24;
+      ctx.fillStyle = style.accentSoft;
+      _roundRect(ctx, 118, highlightY - 54, W - 236, 92, 18);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1.3;
+      _roundRect(ctx, 118, highlightY - 54, W - 236, 92, 18);
+      ctx.stroke();
+      ctx.fillStyle = '#fffdf8';
+      drawFittedCanvasText(ctx, {
+        text: headline.highlight,
+        x: W / 2,
+        y: highlightY,
+        maxWidth: W - 220,
+        maxLines: 2,
+        align: 'center',
+        fontTemplate: '700 __SIZE__px Georgia, serif',
+        maxSize: 70,
+        minSize: 50,
+        lineHeightRatio: 1.08
+      });
+
+      if (headline.tail) {
+        ctx.fillStyle = style.text;
+        drawFittedCanvasText(ctx, {
+          text: headline.tail,
+          x: W / 2,
+          y: highlightY + 132,
+          maxWidth: W - 180,
+          maxLines: 3,
+          align: 'center',
+          fontTemplate: '500 __SIZE__px Georgia, serif',
+          maxSize: 66,
+          minSize: 46,
+          lineHeightRatio: 1.12
+        });
+      }
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.80)';
+    ctx.font = '500 28px Georgia, serif';
+    wrapCanvasText(ctx, truncateText(normalized.question, 120), W / 2, 962, W - 220, 42, 3, 'center');
+    drawShareFooter(ctx, style, W, H - 154, 'center');
+  }
+
+  function buildMinimalInsightShareCard(ctx, normalized, style, W, H, variant) {
+    drawShareCardShell(ctx, style, W, H, variant);
+    const headline = extractShareHeadline(normalized);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillRect(82, 86, W - 164, 2);
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 19px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 92, 126);
+    ctx.textAlign = 'right';
+    ctx.fillText('ASK MIRROR TALK', W - 92, 126);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    _roundRect(ctx, 92, 226, W - 184, 628, 18);
+    ctx.fill();
+
+    ctx.fillStyle = style.text;
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: 92,
+      y: 332,
+      maxWidth: W - 184,
+      maxHeight: 470,
+      maxLines: 6,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 80,
+      minSize: 34,
+      lineHeightRatio: 1.15
+    });
+
+    const questionY = Math.max(972, 332 + headlineMetrics.height + 82);
+    ctx.fillStyle = 'rgba(255,255,255,0.68)';
+    ctx.font = '500 22px Georgia, serif';
+    wrapCanvasText(ctx, truncateText(normalized.question, 120), 92, questionY, W - 184, 32, 2, 'left');
+    drawShareFooter(ctx, style, W, H - 154, 'left');
+  }
+
+  function buildAtmosphericInsightShareCard(ctx, normalized, style, W, H, variant) {
+    drawShareCardShell(ctx, style, W, H, variant);
+    const headline = extractShareHeadline(normalized);
+
+    const veil = ctx.createLinearGradient(0, H * 0.22, 0, H);
+    veil.addColorStop(0, 'rgba(8,8,8,0.00)');
+    veil.addColorStop(0.28, 'rgba(8,8,8,0.14)');
+    veil.addColorStop(1, 'rgba(8,8,8,0.34)');
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.arc(W * 0.78, H * 0.24, 160, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('ASK MIRROR TALK', 94, 112);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W - 94, 112);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: 96,
+      y: 736,
+      maxWidth: W - 220,
+      maxHeight: 430,
+      maxLines: 5,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 78,
+      minSize: 34,
+      lineHeightRatio: 1.12
+    });
+
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    wrapCanvasText(ctx, style.kicker, 96, 226, 420, 34, 3, 'left');
+
+    const footerTop = H - 154;
+    const questionY = Math.min(
+      footerTop - 92,
+      Math.max(1046, 736 + headlineMetrics.height + 78)
+    );
+    ctx.fillStyle = 'rgba(255,255,255,0.64)';
+    ctx.font = '500 21px Georgia, serif';
+    wrapCanvasText(ctx, truncateText(normalized.question, 118), 96, questionY, W - 220, 30, 2, 'left');
+    drawShareFooter(ctx, style, W, H - 154, 'left');
+  }
+
+  function buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant) {
+    drawShareCardShell(ctx, style, W, H, variant);
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
@@ -5003,28 +5471,56 @@
     ctx.font = '500 43px Georgia, serif';
     wrapCanvasText(ctx, normalized.excerpt, variant.excerptX, excerptBoxY + 158, panelWidth - ((variant.excerptX - panelInset) * 2), 60, 5, 'left');
 
-    const footerLabelY = excerptBoxY + excerptBoxH + 88;
-    const footerUrlY = footerLabelY + 88;
-    const footerTaglineY = footerUrlY + 42;
+    drawShareFooter(ctx, style, W, excerptBoxY + excerptBoxH + 88, variant.footerAlign);
+  }
 
-    ctx.fillStyle = style.accent;
-    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = variant.footerAlign;
-    const footerX = variant.footerAlign === 'left' ? 96 : W / 2;
-    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, footerLabelY);
-
-    ctx.fillStyle = style.text;
-    ctx.font = '700 36px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, footerUrlY);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.74)';
-    ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, footerTaglineY);
+  function buildInsightShareCard(insight) {
+    const normalized = normalizeInsightRecord(insight);
+    const style = getInsightShareThemeStyle(normalized.theme);
+    const variant = getInsightShareVariant(normalized);
+    const family = getInsightShareFamily(normalized);
+    const W = 1080;
+    const H = 1350;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (family === 'poster') {
+      buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'spotlight') {
+      buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'minimal') {
+      buildMinimalInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'atmospheric') {
+      buildAtmosphericInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else {
+      buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant);
+    }
 
     return canvas.toDataURL('image/png');
   }
 
   function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight, maxLines, align) {
+    const lines = splitCanvasLines(ctx, text, maxWidth);
+
+    const finalLines = lines.slice(0, maxLines);
+    if (lines.length > maxLines) {
+      finalLines[maxLines - 1] = truncateCanvasTextToWidth(ctx, finalLines[maxLines - 1], maxWidth);
+    }
+
+    ctx.textAlign = align || 'left';
+    finalLines.forEach((line, index) => {
+      ctx.fillText(line, x, startY + (index * lineHeight));
+    });
+    return finalLines.length;
+  }
+
+  function countWrappedLines(ctx, text, maxWidth, maxLines) {
+    const lines = splitCanvasLines(ctx, text, maxWidth);
+    return Math.min(lines.length, maxLines);
+  }
+
+  function splitCanvasLines(ctx, text, maxWidth) {
     const words = String(text || '').split(/\s+/).filter(Boolean);
     const lines = [];
     let currentLine = '';
@@ -5039,21 +5535,115 @@
       }
     });
     if (currentLine) lines.push(currentLine);
+    return lines;
+  }
 
-    const finalLines = lines.slice(0, maxLines);
-    if (lines.length > maxLines) {
-      finalLines[maxLines - 1] = truncateText(finalLines[maxLines - 1], Math.max(12, finalLines[maxLines - 1].length - 1));
+  function truncateCanvasTextToWidth(ctx, text, maxWidth) {
+    const source = String(text || '').trim();
+    if (!source) return '';
+    const ellipsis = '…';
+    if (ctx.measureText(source).width <= maxWidth) return source;
+
+    let low = 0;
+    let high = source.length;
+    let best = '';
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = source.slice(0, mid).trim().replace(/[.,;:!?-]+$/g, '').trim() + ellipsis;
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        best = candidate;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
     }
+    return best || ellipsis;
+  }
 
-    ctx.textAlign = align || 'left';
-    finalLines.forEach((line, index) => {
-      ctx.fillText(line, x, startY + (index * lineHeight));
-    });
-    return finalLines.length;
+  function fitCanvasText(ctx, text, maxWidth, maxLines, fontTemplate, maxSize, minSize) {
+    for (let size = maxSize; size >= minSize; size -= 2) {
+      ctx.font = fontTemplate.replace('__SIZE__', String(size));
+      const lineCount = splitCanvasLines(ctx, text, maxWidth).length;
+      if (lineCount <= maxLines) {
+        return {
+          size,
+          lineCount,
+          lineHeight: Math.round(size * 1.14)
+        };
+      }
+    }
+    return {
+      size: minSize,
+      lineCount: splitCanvasLines(ctx, text, maxWidth).length,
+      lineHeight: Math.round(minSize * 1.14)
+    };
+  }
+
+  function fitCanvasTextBox(ctx, text, maxWidth, maxHeight, maxLines, fontTemplate, maxSize, minSize, lineHeightRatio) {
+    const ratio = lineHeightRatio || 1.14;
+    for (let size = maxSize; size >= minSize; size -= 2) {
+      ctx.font = fontTemplate.replace('__SIZE__', String(size));
+      const lines = splitCanvasLines(ctx, text, maxWidth);
+      const lineCount = Math.min(lines.length, maxLines);
+      const lineHeight = Math.round(size * ratio);
+      if (lineCount <= maxLines && (lineCount * lineHeight) <= maxHeight) {
+        return { size, lineCount, lineHeight };
+      }
+    }
+    return {
+      size: minSize,
+      lineCount: Math.min(splitCanvasLines(ctx, text, maxWidth).length, maxLines),
+      lineHeight: Math.round(minSize * ratio)
+    };
+  }
+
+  function drawFittedCanvasText(ctx, options) {
+    const fit = options.maxHeight
+      ? fitCanvasTextBox(
+          ctx,
+          options.text,
+          options.maxWidth,
+          options.maxHeight,
+          options.maxLines,
+          options.fontTemplate,
+          options.maxSize,
+          options.minSize,
+          options.lineHeightRatio
+        )
+      : fitCanvasText(
+          ctx,
+          options.text,
+          options.maxWidth,
+          options.maxLines,
+          options.fontTemplate,
+          options.maxSize,
+          options.minSize
+        );
+    const lineHeight = fit.lineHeight || Math.round(fit.size * (options.lineHeightRatio || 1.14));
+    ctx.font = options.fontTemplate.replace('__SIZE__', String(fit.size));
+    const renderedLines = wrapCanvasText(
+      ctx,
+      options.text,
+      options.x,
+      options.y,
+      options.maxWidth,
+      lineHeight,
+      options.maxLines,
+      options.align
+    );
+    return {
+      lineCount: renderedLines,
+      lineHeight,
+      height: renderedLines * lineHeight,
+      size: fit.size
+    };
   }
 
   function shareInsightArtifact(insight) {
-    const normalized = normalizeInsightRecord(insight);
+    const normalized = {
+      ...normalizeInsightRecord(insight),
+      shareSource: 'saved_insight'
+    };
     const dataUrl = buildInsightShareCard(normalized);
     const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
     showShareModal(dataUrl, caption, {
@@ -5385,7 +5975,7 @@
   // Keep the reflection share and invite flows separate so users don't need
   // to understand a mode switch before they act.
 
-  function addShareButtonV2(question, answerText) {
+  function addShareButtonV2(question, answerText, themeHint) {
     const existing = document.getElementById('amt-share-section');
     if (existing) existing.remove();
 
@@ -5396,7 +5986,7 @@
     const reflectionInsight = normalizeInsightRecord({
       question,
       answer: answerText,
-      theme: inferTheme(question, answerText),
+      theme: themeHint || inferTheme(question, answerText),
       savedAt: Date.now()
     });
     const pageUrl = buildTrackedPageUrl({
@@ -5404,6 +5994,10 @@
       medium: 'share',
       campaign: 'growth_sprint',
       ref: 'invite_button',
+      intent: 'shared_reflection',
+      question: question,
+      content: 'direct_prompt',
+      inviteReflection: true,
       theme: reflectionInsight.theme || ''
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
@@ -5436,7 +6030,7 @@
 
         try {
           if (navigator.share) {
-            await navigator.share({ title: titleToShare, text: textToShare, url: pageUrl });
+            await navigator.share({ title: titleToShare, text: textToShare });
             trackRewardEvent('share');
             emitProductEvent('share_cta_used', { action: 'invite_friend', method: 'native_share' });
             return;

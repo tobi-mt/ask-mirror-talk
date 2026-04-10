@@ -2,8 +2,16 @@
    Ask Mirror Talk Widget — Premium UX
    ======================================== */
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 /* Container */
 .ask-mirror-talk {
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
   padding: 36px 28px;
@@ -17,6 +25,11 @@
   overflow: hidden;
   -webkit-text-size-adjust: 100%;     /* prevent iOS text inflation */
   text-size-adjust: 100%;
+}
+
+.ask-mirror-talk,
+.ask-mirror-talk * {
+  box-sizing: border-box;
 }
 
 /* Subtle top accent bar */
@@ -5367,7 +5380,27 @@ body.amt-light-mode .amt-suggestions-label {
 }
 .amt-journal-edit-cancel-btn:hover { background: #f5f0e8; }
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (display-mode: standalone) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  #page,
+  #content,
+  .site,
+  .site-content,
+  .ast-container,
+  .ast-article-single,
+  .entry-content {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
   .ask-mirror-talk,
   #ask-mirror-talk-form,
   .ask-mirror-talk-response,
@@ -5384,7 +5417,28 @@ body.amt-light-mode .amt-suggestions-label {
   }
 
   .ask-mirror-talk {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 16px;
+    padding-right: 16px;
     overflow-x: hidden;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .amt-heading-row,
+  .amt-stats-bar,
+  .amt-share-actions-row,
+  .amt-answer-utilities,
+  .amt-mood-buttons {
+    max-width: 100%;
+  }
+
+  .amt-scm-panel,
+  .amt-about-panel,
+  .amt-journal-panel {
+    width: min(calc(100vw - 24px), 100%);
+    max-width: calc(100vw - 24px);
   }
 
   .amt-heading-row,
@@ -5541,7 +5595,7 @@ body.amt-light-mode .amt-suggestions-label {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 480px), (display-mode: standalone) and (max-width: 640px) {
   .amt-heading-controls {
     justify-content: flex-start;
   }

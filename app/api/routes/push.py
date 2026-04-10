@@ -31,6 +31,10 @@ class PushPreferencesRequest(BaseModel):
     notify_midday: bool = True
 
 
+class PushHeartbeatRequest(BaseModel):
+    endpoint: str
+
+
 @router.get("/api/push/vapid-key")
 def get_vapid_public_key():
     """Return the VAPID public key so the browser can subscribe."""
@@ -148,6 +152,7 @@ def update_push_preferences(
                 SET notify_qotd = :qotd,
                     notify_new_episodes = :episodes,
                     notify_midday = :midday,
+                    user_ip = :ip,
                     updated_at = NOW()
                 WHERE endpoint = :endpoint AND active = true
             """),
@@ -156,6 +161,7 @@ def update_push_preferences(
                 "qotd": payload.notify_qotd,
                 "episodes": payload.notify_new_episodes,
                 "midday": payload.notify_midday,
+                "ip": get_client_ip(request),
             },
         )
         db.commit()
@@ -171,6 +177,40 @@ def update_push_preferences(
         db.rollback()
         logger.error("Push preferences error: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update preferences") from e
+
+
+@router.post("/api/push/heartbeat")
+def push_heartbeat(
+    payload: PushHeartbeatRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Refresh last-seen activity for an existing subscription."""
+    try:
+        result = db.execute(
+            text("""
+                UPDATE push_subscriptions
+                SET user_ip = :ip,
+                    updated_at = NOW()
+                WHERE endpoint = :endpoint AND active = true
+            """),
+            {
+                "endpoint": payload.endpoint,
+                "ip": get_client_ip(request),
+            },
+        )
+        db.commit()
+
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("Push heartbeat error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to refresh push heartbeat") from e
 
 
 @router.post("/api/push/send-qotd")

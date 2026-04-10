@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.71';
+    return '5.4.88';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -138,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.71: dynamic premium reflection-card variants with stable alignment and a fresh PWA shell version
+    $version = ask_mirror_talk_theme_version(); // v5.4.87: reflection-card question labels are quieter and spaced further below the main statement
     
     // Core styles
     wp_enqueue_style(
@@ -214,6 +214,9 @@ function ask_mirror_talk_pwa_head() {
     ?>
     <!-- PWA Manifest — served dynamically from /manifest.json with correct icon URLs -->
     <link rel="manifest" href="/manifest.json">
+
+    <!-- Explicit viewport keeps iOS standalone/PWA rendering pinned to device width -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
     <!-- Standard PWA meta tag (Android / Chrome) -->
     <meta name="theme-color" content="#943e08">

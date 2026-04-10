@@ -10,6 +10,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from hashlib import sha256
 from urllib.parse import quote
 
 from pywebpush import webpush, WebPushException
@@ -226,13 +227,48 @@ def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: 
 
 
 def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "Don't lose the thread"
+    seed_parts = [datetime.now(timezone.utc).date().isoformat(), recent_theme or "", "returning" if is_returning else "new"]
+    seed = sha256("|".join(seed_parts).encode("utf-8")).hexdigest()
+    variant = int(seed[:8], 16) % 5
+
+    theme_phrase = (recent_theme or "").strip().lower()
+    theme_suffix = f" in {theme_phrase}" if theme_phrase else ""
+
+    title_options = [
+        "Keep this alive",
+        "Stay with it tonight",
+        "Hold the thread",
+        "Return before today closes",
+        "One more honest moment",
+    ]
+
     if is_returning and recent_theme:
-        body = f"One honest question tonight keeps your reflection rhythm alive around {recent_theme.lower()}."
+        body_options = [
+            f"You were already moving through{theme_suffix}. One honest question tonight keeps that thread alive.",
+            f"Come back to what still feels unfinished{theme_suffix}. A quiet return tonight is enough.",
+            f"Don't let today's reflection fade{theme_suffix}. One more honest question can keep it open.",
+            f"There may still be something waiting for you{theme_suffix}. Return for one clear question tonight.",
+            f"If {theme_phrase} still lingers, follow it a little further tonight.",
+        ]
     elif is_returning:
-        body = "One honest question tonight keeps your reflection rhythm alive."
+        body_options = [
+            "You already opened something worth keeping. One honest question tonight keeps that rhythm alive.",
+            "Come back before the day closes. One thoughtful question is enough to keep the thread going.",
+            "Don't let today's reflection end half-finished. Return for one clear question tonight.",
+            "A quiet return tonight can keep your reflection rhythm alive.",
+            "If something from today is still with you, follow it with one honest question tonight.",
+        ]
     else:
-        body = "Ask one thoughtful question tonight to keep your reflection rhythm alive."
+        body_options = [
+            "One thoughtful question tonight can start a steadier reflection rhythm.",
+            "Before today ends, ask one honest question and let the thread begin.",
+            "A single quiet question tonight can open more than you expect.",
+            "Start small tonight. One honest question is enough.",
+            "Come back for one thoughtful question before the day slips away.",
+        ]
+
+    title = title_options[variant]
+    body = body_options[variant]
     return title, _clip_sentence(body, 102)
 
 
@@ -1071,10 +1107,14 @@ def send_streak_protection_notification(db: Session) -> dict:
     rows = db.execute(
         text("""
             SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key,
-                   COALESCE(w.user_ip, '') AS user_ip
+                   COALESCE(w.user_ip, '') AS user_ip,
+                   COALESCE(w.timezone, 'UTC') AS timezone_name,
+                   w.updated_at
             FROM push_subscriptions w
             WHERE w.active = true
               AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 20
+              AND (w.updated_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                    < (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
               AND NOT EXISTS (
                     SELECT 1
                     FROM qa_logs q
@@ -1107,7 +1147,7 @@ def send_streak_protection_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth, user_ip = row
+        sub_id, endpoint, p256dh, auth, user_ip, timezone_name, updated_at = row
         recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
         recent_theme = _primary_theme_from_questions(recent_questions)
         is_returning = bool(recent_questions)

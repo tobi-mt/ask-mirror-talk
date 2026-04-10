@@ -273,11 +273,47 @@ def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str
 
 
 def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = "Before the day ends"
+    seed_parts = [datetime.now(timezone.utc).date().isoformat(), recent_theme or "", "night", "returning" if is_returning else "new"]
+    seed = sha256("|".join(seed_parts).encode("utf-8")).hexdigest()
+    variant = int(seed[:8], 16) % 5
+
+    theme_phrase = (recent_theme or "").strip().lower()
+
+    title_options = [
+        "Before the day ends",
+        "Before today closes",
+        "Stay with this a little longer",
+        "One quiet return tonight",
+        "Come back to what stayed",
+    ]
+
     if is_returning and recent_theme:
-        body = f"Return to what stayed with you today, especially in {recent_theme.lower()}."
+        body_options = [
+            f"Return to what stayed with you today, especially in {theme_phrase}.",
+            f"There may still be something waiting for you in {theme_phrase} tonight.",
+            f"Come back to what still feels unfinished in {theme_phrase}.",
+            f"If {theme_phrase} stayed with you today, follow it a little further tonight.",
+            f"Before sleep, return to what felt most alive in {theme_phrase}.",
+        ]
+    elif is_returning:
+        body_options = [
+            "Return to what stayed with you today.",
+            "Come back to what still feels unfinished from today.",
+            "Before sleep, follow what stayed with you a little further.",
+            "One honest question tonight can help close the day with clarity.",
+            "There may still be something from today asking for your attention.",
+        ]
     else:
-        body = "Return to what stayed with you today."
+        body_options = [
+            "Return to what stayed with you today.",
+            "One quiet question tonight can help you close the day with clarity.",
+            "Before sleep, give the day one honest moment of reflection.",
+            "Come back to what still feels present before today ends.",
+            "A calm return tonight can change how tomorrow begins.",
+        ]
+
+    title = title_options[variant]
+    body = body_options[variant]
     return title, _clip_sentence(body, 100)
 
 

@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.88';
+    return '5.4.89';
 }
 
 function ask_mirror_talk_shortcode() {

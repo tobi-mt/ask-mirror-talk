@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.88 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.89 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -5032,12 +5032,6 @@
     };
   }
 
-  function getInsightShareFamily(insight) {
-    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}|family`);
-    const stableFamilies = ['editorial', 'minimal', 'atmospheric'];
-    return stableFamilies[seed % stableFamilies.length];
-  }
-
   function extractShareHeadline(insight) {
     const excerpt = String(insight.excerpt || '').trim();
     if (!excerpt) return truncateText(insight.question || '', 140);
@@ -5063,6 +5057,32 @@
       highlight: words.slice(highlightStart, highlightStart + highlightSize).join(' '),
       tail: words.slice(highlightStart + highlightSize).join(' ')
     };
+  }
+
+  function canUsePosterFamily(insight, headline) {
+    const text = String(headline || extractShareHeadline(insight) || '').trim();
+    const words = text.split(/\s+/).filter(Boolean);
+    const longestWord = words.reduce((max, word) => Math.max(max, word.length), 0);
+    return words.length >= 6 && words.length <= 18 && text.length >= 44 && text.length <= 150 && longestWord <= 16;
+  }
+
+  function canUseSpotlightFamily(insight, headline) {
+    const text = String(headline || extractShareHeadline(insight) || '').trim();
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length < 7 || words.length > 20 || text.length > 160) return false;
+    const split = splitHeadlineForSpotlight(text);
+    return !!(split.lead && split.highlight && split.tail &&
+      split.highlight.length >= 8 && split.highlight.length <= 34 &&
+      split.tail.length >= 12 && split.tail.length <= 72);
+  }
+
+  function getInsightShareFamily(insight) {
+    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}|family`);
+    const headline = extractShareHeadline(insight);
+    const eligibleFamilies = ['editorial', 'minimal', 'atmospheric'];
+    if (canUsePosterFamily(insight, headline)) eligibleFamilies.push('poster');
+    if (canUseSpotlightFamily(insight, headline)) eligibleFamilies.push('spotlight');
+    return eligibleFamilies[seed % eligibleFamilies.length];
   }
 
   function drawShareCardShell(ctx, style, W, H, variant) {
@@ -5164,10 +5184,21 @@
     const first = words.slice(0, pivot).join(' ');
     const second = words.slice(pivot).join(' ');
 
-    const firstFit = fitCanvasText(ctx, first, W - 192, 2, '500 __SIZE__px Georgia, serif', 72, 52);
-    const firstLineHeight = Math.round(firstFit.size * 1.14);
-    ctx.font = `500 ${firstFit.size}px Georgia, serif`;
-    const firstLines = splitCanvasLines(ctx, first, W - 192).slice(0, 2);
+    const firstMetrics = drawFittedCanvasText(ctx, {
+      text: first,
+      x: 96,
+      y: 286,
+      maxWidth: W - 192,
+      maxHeight: 190,
+      maxLines: 2,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 72,
+      minSize: 44,
+      lineHeightRatio: 1.14
+    });
+    ctx.font = `500 ${firstMetrics.size}px Georgia, serif`;
+    const firstLines = splitCanvasLines(ctx, first, W - 192).slice(0, firstMetrics.lineCount);
     const firstBlockWidth = Math.min(
       700,
       Math.max(
@@ -5175,7 +5206,7 @@
         Math.ceil(Math.max(...firstLines.map(line => ctx.measureText(line).width), 0) + 52)
       )
     );
-    const firstBoxHeight = 30 + (firstLines.length * firstLineHeight);
+    const firstBoxHeight = 34 + firstMetrics.height;
 
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
@@ -5187,36 +5218,47 @@
       x: 96,
       y: 286,
       maxWidth: W - 192,
+      maxHeight: 190,
       maxLines: 2,
       align: 'left',
       fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: firstFit.size,
-      minSize: 52,
+      maxSize: firstMetrics.size,
+      minSize: 44,
       lineHeightRatio: 1.14
     });
 
-    const secondY = 286 + (firstLines.length * firstLineHeight) + 24;
-    const secondFit = fitCanvasText(ctx, second || first, W - 192, 3, '500 __SIZE__px Georgia, serif', 76, 56);
-    const secondLineHeight = Math.round(secondFit.size * 1.13);
+    const secondY = 252 + firstBoxHeight + 34;
     ctx.fillStyle = style.text;
-    drawFittedCanvasText(ctx, {
+    const secondMetrics = drawFittedCanvasText(ctx, {
       text: second || first,
       x: 96,
       y: secondY,
       maxWidth: W - 192,
+      maxHeight: 260,
       maxLines: 3,
       align: 'left',
       fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: secondFit.size,
-      minSize: 56,
+      maxSize: 76,
+      minSize: 42,
       lineHeightRatio: 1.13
     });
 
-    const secondLines = Math.min(splitCanvasLines(ctx, second || first, W - 192).length, 3);
-    const questionY = Math.min(820, secondY + (secondLines * secondLineHeight) + 96);
-    ctx.fillStyle = 'rgba(255,255,255,0.86)';
-    ctx.font = '500 30px Georgia, serif';
-    wrapCanvasText(ctx, truncateText(normalized.question, 120), 96, questionY, W - 220, 44, 3, 'left');
+    const footerTop = H - 160;
+    const questionY = Math.min(footerTop - 120, secondY + secondMetrics.height + 82);
+    ctx.fillStyle = 'rgba(255,255,255,0.74)';
+    drawFittedCanvasText(ctx, {
+      text: truncateText(normalized.question, 120),
+      x: 96,
+      y: questionY,
+      maxWidth: W - 220,
+      maxHeight: 90,
+      maxLines: 2,
+      align: 'left',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 28,
+      minSize: 18,
+      lineHeightRatio: 1.2
+    });
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -5234,66 +5276,85 @@
     ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W / 2, 106);
 
     const splitY = 268;
+    let runningY = splitY;
     if (headline.lead) {
       ctx.fillStyle = style.text;
-      drawFittedCanvasText(ctx, {
+      const leadMetrics = drawFittedCanvasText(ctx, {
         text: headline.lead,
         x: W / 2,
-        y: splitY,
+        y: runningY,
         maxWidth: W - 180,
+        maxHeight: 170,
         maxLines: 2,
         align: 'center',
         fontTemplate: '500 __SIZE__px Georgia, serif',
         maxSize: 66,
-        minSize: 48,
+        minSize: 40,
         lineHeightRatio: 1.12
       });
+      runningY += leadMetrics.height + 28;
     }
 
     if (headline.highlight) {
-      const leadFit = headline.lead ? fitCanvasText(ctx, headline.lead, W - 180, 2, '500 __SIZE__px Georgia, serif', 66, 48) : { lineCount: 0, lineHeight: 74 };
-      const highlightY = splitY + (leadFit.lineCount * leadFit.lineHeight) + 24;
+      const highlightY = runningY;
       ctx.fillStyle = style.accentSoft;
-      _roundRect(ctx, 118, highlightY - 54, W - 236, 92, 18);
+      _roundRect(ctx, 118, highlightY - 54, W - 236, 104, 18);
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.lineWidth = 1.3;
-      _roundRect(ctx, 118, highlightY - 54, W - 236, 92, 18);
+      _roundRect(ctx, 118, highlightY - 54, W - 236, 104, 18);
       ctx.stroke();
       ctx.fillStyle = '#fffdf8';
-      drawFittedCanvasText(ctx, {
+      const highlightMetrics = drawFittedCanvasText(ctx, {
         text: headline.highlight,
         x: W / 2,
         y: highlightY,
         maxWidth: W - 220,
+        maxHeight: 86,
         maxLines: 2,
         align: 'center',
         fontTemplate: '700 __SIZE__px Georgia, serif',
         maxSize: 70,
-        minSize: 50,
+        minSize: 42,
         lineHeightRatio: 1.08
       });
+      runningY += Math.max(110, highlightMetrics.height + 36);
 
       if (headline.tail) {
         ctx.fillStyle = style.text;
-        drawFittedCanvasText(ctx, {
+        const tailMetrics = drawFittedCanvasText(ctx, {
           text: headline.tail,
           x: W / 2,
-          y: highlightY + 132,
+          y: runningY,
           maxWidth: W - 180,
+          maxHeight: 190,
           maxLines: 3,
           align: 'center',
           fontTemplate: '500 __SIZE__px Georgia, serif',
           maxSize: 66,
-          minSize: 46,
+          minSize: 38,
           lineHeightRatio: 1.12
         });
+        runningY += tailMetrics.height + 70;
       }
     }
 
-    ctx.fillStyle = 'rgba(255,255,255,0.80)';
-    ctx.font = '500 28px Georgia, serif';
-    wrapCanvasText(ctx, truncateText(normalized.question, 120), W / 2, 962, W - 220, 42, 3, 'center');
+    const footerTop = H - 154;
+    const questionY = Math.min(footerTop - 96, Math.max(944, runningY + 24));
+    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    drawFittedCanvasText(ctx, {
+      text: truncateText(normalized.question, 120),
+      x: W / 2,
+      y: questionY,
+      maxWidth: W - 220,
+      maxHeight: 90,
+      maxLines: 2,
+      align: 'center',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 26,
+      minSize: 18,
+      lineHeightRatio: 1.2
+    });
     drawShareFooter(ctx, style, W, H - 154, 'center');
   }
 

@@ -139,6 +139,30 @@ _PERSONAL_STORY_MARKERS = (
     "my childhood",
 )
 
+_PROGRESS_TIME_MARKERS = (
+    "daily",
+    "practice",
+    "over time",
+    "with time",
+    "day by day",
+    "step by step",
+    "habit",
+    "habits",
+    "consistent",
+    "consistently",
+    "repetition",
+    "repeated",
+    "repeat",
+    "track",
+    "tracking",
+    "change",
+    "changing",
+    "growth",
+    "progress",
+    "gradually",
+    "gradual",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -333,6 +357,23 @@ def _looks_anecdotal_personal_story(text_value: str) -> bool:
     return pronoun_hits >= 4 and narrative_hits >= 2
 
 
+def _question_wants_progress_evidence(question: str) -> bool:
+    lower = (question or "").strip().lower()
+    if not lower:
+        return False
+    return any(marker in lower for marker in _PROGRESS_TIME_MARKERS)
+
+
+def _progress_alignment_score(question: str, text_value: str) -> float:
+    if not _question_wants_progress_evidence(question):
+        return 0.0
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return 0.0
+    hits = sum(1 for marker in _PROGRESS_TIME_MARKERS if marker in lower)
+    return min(1.0, hits / 4.0)
+
+
 def rerank_citation_moments(
     question: str,
     answer_text: str,
@@ -353,6 +394,7 @@ def rerank_citation_moments(
     answer_tokens = _tokenize_for_overlap(answer_text)
     wants_personal_example = _question_wants_personal_example(question)
     reflective_guidance = _is_reflective_guidance_question(question)
+    wants_progress_evidence = _question_wants_progress_evidence(question)
 
     chunks_by_episode: dict[int, list[dict]] = defaultdict(list)
     for chunk in answer_chunks:
@@ -404,6 +446,7 @@ def rerank_citation_moments(
         semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
         text_value = (chunk.get("text") or "").strip()
         anecdotal_story = _looks_anecdotal_personal_story(text_value)
+        progress_alignment = _progress_alignment_score(question, text_value)
 
         has_lexical_support = max(question_overlap, answer_overlap) >= 0.10
         has_good_precision = precision >= 0.36
@@ -411,6 +454,7 @@ def rerank_citation_moments(
         looks_generic = _looks_generic_source_moment(text_value)
         looks_bridgey = _looks_bridge_or_polite_exchange(text_value)
         story_penalty = reflective_guidance and not wants_personal_example and anecdotal_story
+        weak_progress_alignment = wants_progress_evidence and progress_alignment < 0.25
 
         if (
             has_good_precision
@@ -420,6 +464,7 @@ def rerank_citation_moments(
             and not looks_generic
             and not looks_bridgey
             and not story_penalty
+            and not weak_progress_alignment
         ):
             filtered.append(chunk)
         else:
@@ -456,6 +501,7 @@ def refine_citation_segments(
     answer_tokens = _tokenize_for_overlap(answer_text)
     wants_personal_example = _question_wants_personal_example(question)
     reflective_guidance = _is_reflective_guidance_question(question)
+    wants_progress_evidence = _question_wants_progress_evidence(question)
     refined_chunks: list[dict] = []
 
     for chunk in citation_chunks:
@@ -505,6 +551,7 @@ def refine_citation_segments(
                     answer_tokens=answer_tokens,
                     semantic=0.0,
                 )
+                progress_alignment = _progress_alignment_score(question, window_text)
                 score = base_precision * 0.40 + lexical_score * 0.60
 
                 # Prefer self-contained, quoteable moments over tiny fragments.
@@ -521,6 +568,10 @@ def refine_citation_segments(
                     score -= 0.28
                 if reflective_guidance and not wants_personal_example and _looks_anecdotal_personal_story(window_text):
                     score -= 0.22
+                if wants_progress_evidence:
+                    score += progress_alignment * 0.12
+                    if progress_alignment < 0.25:
+                        score -= 0.12
 
                 # Early-episode snippets are often intros; only allow them when they
                 # show unmistakable lexical support for the actual topic.
@@ -560,6 +611,7 @@ def refine_citation_segments(
             and not wants_personal_example
             and _looks_anecdotal_personal_story(chosen_text)
         )
+        weak_progress_alignment = wants_progress_evidence and _progress_alignment_score(question, chosen_text) < 0.25
         suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
 
         if (
@@ -568,6 +620,7 @@ def refine_citation_segments(
             or generic_window
             or bridge_window
             or anecdotal_window
+            or weak_progress_alignment
             or suspicious_intro
         ):
             logger.info(
@@ -629,6 +682,7 @@ def select_citation_segments(
     is_meta_question = _is_abstract_or_meta_question(question)
     wants_personal_example = _question_wants_personal_example(question)
     reflective_guidance = _is_reflective_guidance_question(question)
+    wants_progress_evidence = _question_wants_progress_evidence(question)
     min_question_overlap_count = 2 if reflective_guidance and not wants_personal_example else 1
 
     episode_meta = {
@@ -684,6 +738,7 @@ def select_citation_segments(
                     semantic=0.0,
                 )
                 question_overlap_count = _overlap_count(question_tokens, window_text)
+                progress_alignment = _progress_alignment_score(question, window_text)
                 overlap = max(question_overlap, answer_overlap)
                 if overlap < 0.12:
                     continue
@@ -691,6 +746,8 @@ def select_citation_segments(
                 if question_overlap < min_question_overlap:
                     continue
                 if question_overlap_count < min_question_overlap_count:
+                    continue
+                if wants_progress_evidence and progress_alignment < 0.25:
                     continue
 
                 score = (
@@ -711,6 +768,8 @@ def select_citation_segments(
                     score -= 0.28
                 if reflective_guidance and question_overlap_count >= 2:
                     score += 0.05
+                if wants_progress_evidence:
+                    score += progress_alignment * 0.14
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
@@ -733,6 +792,7 @@ def select_citation_segments(
                         "citation_question_overlap": round(question_overlap, 4),
                         "citation_question_overlap_count": question_overlap_count,
                         "citation_answer_overlap": round(answer_overlap, 4),
+                        "citation_progress_alignment": round(progress_alignment, 4),
                         "is_strongest_match": False,
                     }
 
@@ -741,6 +801,7 @@ def select_citation_segments(
             and float(best_candidate["citation_precision_score"]) >= 0.44
             and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
             and int(best_candidate.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
+            and float(best_candidate.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
             and _looks_self_contained_quote(best_candidate.get("text", ""))
             and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
             and not (
@@ -765,6 +826,7 @@ def select_citation_segments(
         ) >= 0.14
         and float(item.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
         and int(item.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
+        and float(item.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
     ]
 
     very_strong = [

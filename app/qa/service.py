@@ -562,6 +562,11 @@ def answer_question_stream(
         },
     )
 
+    # ── Mark the answer complete before optional follow-ups finish ──
+    # This lowers perceived latency and keeps analytics focused on answer
+    # readiness rather than the slower follow-up generation call.
+    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
+
     # ── Collect follow-ups (background thread should be done by now) ──
     try:
         follow_ups = follow_up_future.result(timeout=15)
@@ -572,7 +577,6 @@ def answer_question_stream(
         _follow_up_executor.shutdown(wait=False)
 
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
-    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
 
     # Cache for next time (normalized question for better hit rate)
     cache.put(norm_q, query_embedding, {

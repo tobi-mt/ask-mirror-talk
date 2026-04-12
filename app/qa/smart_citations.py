@@ -360,6 +360,60 @@ def _trim_conversational_tail(text_value: str) -> str:
     return trimmed or text_value
 
 
+def _split_quote_sentences(text_value: str) -> list[str]:
+    text_value = (text_value or "").strip()
+    if not text_value:
+        return []
+    return [part.strip() for part in re.split(r'(?<=[.!?])\s+', text_value) if part.strip()]
+
+
+def _sentence_quality_for_question(question: str, sentence: str) -> float:
+    lower = (sentence or "").strip().lower()
+    if not lower:
+        return -1.0
+    score = 0.0
+    if _has_declarative_guidance_shape(sentence):
+        score += 0.45
+    if _looks_conversational_or_setup(sentence):
+        score -= 0.50
+    if _looks_bridge_or_polite_exchange(sentence):
+        score -= 0.60
+    if _looks_generic_source_moment(sentence):
+        score -= 0.20
+    score += _topic_specific_alignment_score(question, sentence) * 0.45
+    score += _progress_alignment_score(question, sentence) * 0.20
+    score += _courage_theme_alignment_score(question, sentence) * 0.20
+    if len(sentence) < 45:
+        score -= 0.12
+    return score
+
+
+def _polish_quote_for_question(question: str, text_value: str) -> str:
+    text_value = _trim_conversational_tail(text_value)
+    sentences = _split_quote_sentences(text_value)
+    if len(sentences) <= 1:
+        return text_value
+
+    scored = [(idx, _sentence_quality_for_question(question, sentence), sentence) for idx, sentence in enumerate(sentences)]
+    best_idx, best_score, _ = max(scored, key=lambda item: item[1])
+    if best_score < 0.15:
+        return text_value
+
+    selected = [sentences[best_idx]]
+    next_idx = best_idx + 1
+    while next_idx < len(sentences):
+        next_score = _sentence_quality_for_question(question, sentences[next_idx])
+        if next_score < 0.05:
+            break
+        if len(" ".join(selected + [sentences[next_idx]])) > 260:
+            break
+        selected.append(sentences[next_idx])
+        next_idx += 1
+
+    polished = " ".join(selected).strip()
+    return polished or text_value
+
+
 def _topic_specific_alignment_score(question: str, text_value: str) -> float:
     lower_q = (question or "").strip().lower()
     lower_t = (text_value or "").strip().lower()
@@ -612,7 +666,7 @@ def rerank_citation_moments(
         question_overlap = float(chunk.get("citation_question_overlap", 0.0) or 0.0)
         answer_overlap = float(chunk.get("citation_answer_overlap", 0.0) or 0.0)
         semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
-        text_value = _trim_conversational_tail((chunk.get("text") or "").strip())
+        text_value = _polish_quote_for_question(question, (chunk.get("text") or "").strip())
         chunk["text"] = text_value
         anecdotal_story = _looks_anecdotal_personal_story(text_value)
         progress_alignment = _progress_alignment_score(question, text_value)
@@ -723,7 +777,7 @@ def refine_citation_segments(
                     break
 
                 window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
-                window_text = _trim_conversational_tail(window_text)
+                window_text = _polish_quote_for_question(question, window_text)
                 if len(window_text) < 60:
                     continue
 
@@ -797,7 +851,7 @@ def refine_citation_segments(
         chosen_question_overlap = float(chosen.get("citation_question_overlap", 0.0) or 0.0)
         chosen_answer_overlap = float(chosen.get("citation_answer_overlap", 0.0) or 0.0)
         chosen_start = float(chosen.get("start_time", 0.0) or 0.0)
-        chosen_text = _trim_conversational_tail((chosen.get("text") or "").strip())
+        chosen_text = _polish_quote_for_question(question, (chosen.get("text") or "").strip())
         chosen["text"] = chosen_text
 
         weak_overlap = max(chosen_question_overlap, chosen_answer_overlap) < 0.10
@@ -937,7 +991,7 @@ def select_citation_segments(
                     break
 
                 window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
-                window_text = _trim_conversational_tail(window_text)
+                window_text = _polish_quote_for_question(question, window_text)
                 if not _is_standalone_evidence(window_text):
                     continue
 

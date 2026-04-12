@@ -115,9 +115,35 @@ def _select_sentences(text: str, max_sentences: int = 3) -> list[str]:
 
 
 def _make_quote(text: str, max_len: int = 160) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
     if len(text) <= max_len:
         return text
-    return text[: max_len - 1].rstrip() + "…"
+
+    # Prefer a clean sentence boundary over a clipped-looking fragment.
+    sentences = _split_sentences(text)
+    for sentence in sentences:
+        if len(sentence) <= max_len:
+            return sentence
+
+    clipped = text[:max_len].rstrip()
+    boundary = max(
+        clipped.rfind(". "),
+        clipped.rfind("! "),
+        clipped.rfind("? "),
+        clipped.rfind("; "),
+        clipped.rfind(": "),
+    )
+    if boundary >= int(max_len * 0.55):
+        return clipped[:boundary + 1].strip()
+
+    boundary = clipped.rfind(", ")
+    if boundary >= int(max_len * 0.70):
+        return clipped[:boundary].rstrip()
+
+    last_space = clipped.rfind(" ")
+    if last_space > 0:
+        clipped = clipped[:last_space]
+    return clipped.rstrip(" ,;:-") + "…"
 
 
 # Common podcast intro/outro phrases that don't contain substantive wisdom
@@ -210,7 +236,12 @@ def generate_follow_up_questions(question: str, answer: str, chunks: list[dict])
     return _generate_follow_up_questions(question, answer, chunks)
 
 
-def compose_answer(question: str, chunks: list[dict], citation_override: list[dict] = None) -> dict:
+def compose_answer(
+    question: str,
+    chunks: list[dict],
+    citation_override: list[dict] = None,
+    include_followups: bool = True,
+) -> dict:
     """
     Generate an intelligent answer using OpenAI GPT based on relevant chunks.
     Falls back to basic extraction if OpenAI is not available.
@@ -256,10 +287,13 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
     # Use citation_chunks (which may be overridden for smart episode selection)
     citations = _build_citations(citation_chunks)
 
-    # Generate follow-up questions
-    follow_up_questions = generate_follow_up_questions(question, answer_text, citation_chunks)
+    result = {"answer": answer_text, "citations": citations}
+    if include_followups:
+        result["follow_up_questions"] = generate_follow_up_questions(question, answer_text, citation_chunks)
+    else:
+        result["follow_up_questions"] = []
 
-    return {"answer": answer_text, "citations": citations, "follow_up_questions": follow_up_questions}
+    return result
 
 
 def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]) -> list[str]:

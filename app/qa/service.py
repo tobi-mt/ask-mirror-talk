@@ -274,7 +274,8 @@ def answer_question(
     # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
     answer_started_at = time.perf_counter()
     response = compose_answer(question, chunk_payloads,
-                              citation_override=citation_payloads if use_smart_citations else None)
+                              citation_override=citation_payloads if use_smart_citations else None,
+                              include_followups=False)
     answer_ms = int((time.perf_counter() - answer_started_at) * 1000)
 
     # Follow-up generation is useful but not part of the core answer itself.

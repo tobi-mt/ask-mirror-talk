@@ -181,6 +181,34 @@ _COURAGE_THEME_MARKERS = (
     "resilient",
 )
 
+_VAGUE_EXAMPLE_MARKERS = (
+    "for example",
+    "maybe",
+    "also in the past",
+    "it could also be about",
+    "or maybe",
+    "in one way or the other",
+    "for instance",
+)
+
+_DECLARATIVE_GUIDANCE_MARKERS = (
+    "you can",
+    "you have to",
+    "you need to",
+    "it's about",
+    "it is about",
+    "it's not about",
+    "it takes",
+    "it requires",
+    "the key is",
+    "the goal is",
+    "what matters is",
+    "boundaries are",
+    "forgiveness is",
+    "grief is",
+    "trust is",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -251,6 +279,42 @@ def _looks_bridge_or_polite_exchange(text_value: str) -> bool:
     return False
 
 
+def _looks_conversational_or_setup(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return True
+    if _looks_bridge_or_polite_exchange(lower):
+        return True
+    if lower.count("?") >= 1:
+        return True
+    if any(marker in lower for marker in _VAGUE_EXAMPLE_MARKERS):
+        return True
+    if lower.startswith("so ") or lower.startswith("and ") or lower.startswith("because ") or lower.startswith("cause "):
+        return True
+    return False
+
+
+def _has_declarative_guidance_shape(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return False
+    if any(marker in lower for marker in _DECLARATIVE_GUIDANCE_MARKERS):
+        return True
+    sentences = [part.strip() for part in re.split(r"[.!?]+", lower) if part.strip()]
+    if not sentences:
+        return False
+    first = sentences[0]
+    return (
+        first.startswith("you ")
+        or first.startswith("your ")
+        or first.startswith("forgiveness ")
+        or first.startswith("grief ")
+        or first.startswith("boundaries ")
+        or first.startswith("trust ")
+        or first.startswith("healing ")
+    )
+
+
 def _is_standalone_evidence(text_value: str) -> bool:
     lower = (text_value or "").strip().lower()
     if not lower:
@@ -258,6 +322,8 @@ def _is_standalone_evidence(text_value: str) -> bool:
     if _looks_generic_source_moment(lower):
         return False
     if _looks_bridge_or_polite_exchange(lower):
+        return False
+    if _looks_conversational_or_setup(lower):
         return False
     if len(lower) < 110:
         return False
@@ -484,6 +550,8 @@ def rerank_citation_moments(
         anecdotal_story = _looks_anecdotal_personal_story(text_value)
         progress_alignment = _progress_alignment_score(question, text_value)
         courage_alignment = _courage_theme_alignment_score(question, text_value)
+        conversational_setup = _looks_conversational_or_setup(text_value)
+        declarative_guidance = _has_declarative_guidance_shape(text_value)
 
         has_lexical_support = max(question_overlap, answer_overlap) >= 0.10
         has_good_precision = precision >= 0.36
@@ -493,6 +561,7 @@ def rerank_citation_moments(
         story_penalty = reflective_guidance and not wants_personal_example and anecdotal_story
         weak_progress_alignment = wants_progress_evidence and progress_alignment < 0.25
         weak_courage_alignment = wants_courage_theme and courage_alignment < 0.25
+        weak_guidance_shape = reflective_guidance and not declarative_guidance
 
         if (
             has_good_precision
@@ -501,9 +570,11 @@ def rerank_citation_moments(
             and has_min_semantic_support
             and not looks_generic
             and not looks_bridgey
+            and not conversational_setup
             and not story_penalty
             and not weak_progress_alignment
             and not weak_courage_alignment
+            and not weak_guidance_shape
         ):
             filtered.append(chunk)
         else:
@@ -607,6 +678,8 @@ def refine_citation_segments(
                     score -= 0.18
                 if _looks_bridge_or_polite_exchange(window_text):
                     score -= 0.28
+                if _looks_conversational_or_setup(window_text):
+                    score -= 0.32
                 if reflective_guidance and not wants_personal_example and _looks_anecdotal_personal_story(window_text):
                     score -= 0.22
                 if wants_progress_evidence:
@@ -617,6 +690,10 @@ def refine_citation_segments(
                     score += courage_alignment * 0.14
                     if courage_alignment < 0.25:
                         score -= 0.14
+                if reflective_guidance and _has_declarative_guidance_shape(window_text):
+                    score += 0.08
+                elif reflective_guidance:
+                    score -= 0.10
 
                 # Early-episode snippets are often intros; only allow them when they
                 # show unmistakable lexical support for the actual topic.
@@ -651,6 +728,7 @@ def refine_citation_segments(
         weak_precision = chosen_precision < 0.38
         generic_window = _looks_generic_source_moment(chosen_text)
         bridge_window = _looks_bridge_or_polite_exchange(chosen_text)
+        conversational_window = _looks_conversational_or_setup(chosen_text)
         anecdotal_window = (
             reflective_guidance
             and not wants_personal_example
@@ -658,6 +736,7 @@ def refine_citation_segments(
         )
         weak_progress_alignment = wants_progress_evidence and _progress_alignment_score(question, chosen_text) < 0.25
         weak_courage_alignment = wants_courage_theme and _courage_theme_alignment_score(question, chosen_text) < 0.25
+        weak_guidance_shape = reflective_guidance and not _has_declarative_guidance_shape(chosen_text)
         suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
 
         if (
@@ -665,9 +744,11 @@ def refine_citation_segments(
             or weak_question_overlap
             or generic_window
             or bridge_window
+            or conversational_window
             or anecdotal_window
             or weak_progress_alignment
             or weak_courage_alignment
+            or weak_guidance_shape
             or suspicious_intro
         ):
             logger.info(
@@ -799,6 +880,10 @@ def select_citation_segments(
                 if wants_progress_evidence and progress_alignment < 0.25:
                     continue
                 if wants_courage_theme and courage_alignment < 0.25:
+                    continue
+                if reflective_guidance and _looks_conversational_or_setup(window_text):
+                    continue
+                if reflective_guidance and not _has_declarative_guidance_shape(window_text):
                     continue
 
                 score = (

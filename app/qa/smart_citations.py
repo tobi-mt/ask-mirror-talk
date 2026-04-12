@@ -57,6 +57,13 @@ _GENERIC_SEGMENT_MARKERS = {
     "support the show",
     "share this episode",
     "politicians in d.c.",
+    "thank you so much for sharing that",
+    "i really appreciate you",
+    "i appreciate you taking",
+    "this is what i do on a daily basis",
+    "the language that i speak on a daily basis",
+    "i have 450 employees",
+    "i pray all the time",
 }
 
 _HOST_BRIDGE_PATTERNS = (
@@ -74,6 +81,11 @@ _HOST_BRIDGE_PATTERNS = (
     "hit that subscribe",
     "friendly nudge",
     "support the show",
+    "thank you so much for sharing",
+    "i really appreciate you",
+    "i appreciate you taking",
+    "this is what i do on a daily basis",
+    "the language that i speak on a daily basis",
 )
 
 _META_QUESTION_MARKERS = (
@@ -126,7 +138,7 @@ def _score_candidate_text(
     answer_overlap = _overlap_score(answer_tokens, text_value)
     score = (
         semantic * 0.55 +
-        question_overlap * 0.25 +
+        question_overlap * 0.30 +
         answer_overlap * 0.20
     )
     if len((text_value or "").strip()) < 90:
@@ -147,11 +159,26 @@ def _looks_generic_source_moment(text_value: str) -> bool:
     return token_count < 4
 
 
+def _looks_bridge_or_polite_exchange(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return True
+    if sum(1 for pattern in _HOST_BRIDGE_PATTERNS if pattern in lower) >= 1:
+        return True
+    if lower.startswith("thank you") or lower.startswith("i appreciate you"):
+        return True
+    if "for sharing that" in lower or "thanks for sharing" in lower:
+        return True
+    return False
+
+
 def _is_standalone_evidence(text_value: str) -> bool:
     lower = (text_value or "").strip().lower()
     if not lower:
         return False
     if _looks_generic_source_moment(lower):
+        return False
+    if _looks_bridge_or_polite_exchange(lower):
         return False
     if len(lower) < 110:
         return False
@@ -283,8 +310,16 @@ def rerank_citation_moments(
         has_good_precision = precision >= 0.36
         has_min_semantic_support = semantic >= 0.50
         looks_generic = _looks_generic_source_moment(text_value)
+        looks_bridgey = _looks_bridge_or_polite_exchange(text_value)
 
-        if has_good_precision and has_lexical_support and has_min_semantic_support and not looks_generic:
+        if (
+            has_good_precision
+            and has_lexical_support
+            and question_overlap >= 0.08
+            and has_min_semantic_support
+            and not looks_generic
+            and not looks_bridgey
+        ):
             filtered.append(chunk)
         else:
             logger.info(
@@ -294,7 +329,7 @@ def rerank_citation_moments(
                 question_overlap,
                 answer_overlap,
                 semantic,
-                looks_generic,
+                looks_generic or looks_bridgey,
             )
 
     return filtered
@@ -378,6 +413,8 @@ def refine_citation_segments(
 
                 if _looks_generic_source_moment(window_text):
                     score -= 0.18
+                if _looks_bridge_or_polite_exchange(window_text):
+                    score -= 0.28
 
                 # Early-episode snippets are often intros; only allow them when they
                 # show unmistakable lexical support for the actual topic.
@@ -407,12 +444,14 @@ def refine_citation_segments(
         chosen_start = float(chosen.get("start_time", 0.0) or 0.0)
         chosen_text = (chosen.get("text") or "").strip()
 
-        weak_overlap = max(chosen_question_overlap, chosen_answer_overlap) < 0.08
-        weak_precision = chosen_precision < 0.34
+        weak_overlap = max(chosen_question_overlap, chosen_answer_overlap) < 0.10
+        weak_question_overlap = chosen_question_overlap < 0.08
+        weak_precision = chosen_precision < 0.38
         generic_window = _looks_generic_source_moment(chosen_text)
+        bridge_window = _looks_bridge_or_polite_exchange(chosen_text)
         suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
 
-        if (weak_precision and weak_overlap) or generic_window or suspicious_intro:
+        if (weak_precision and weak_overlap) or weak_question_overlap or generic_window or bridge_window or suspicious_intro:
             logger.info(
                 "Dropping low-trust citation segment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, start=%.1f)",
                 episode_id,
@@ -525,11 +564,13 @@ def select_citation_segments(
                 overlap = max(question_overlap, answer_overlap)
                 if overlap < 0.12:
                     continue
+                if question_overlap < 0.08:
+                    continue
 
                 score = (
                     min(episode_boost, 1.0) * 0.35 +
-                    question_overlap * 0.35 +
-                    answer_overlap * 0.30
+                    question_overlap * 0.42 +
+                    answer_overlap * 0.23
                 )
 
                 if 130 <= len(window_text) <= 320:
@@ -538,6 +579,8 @@ def select_citation_segments(
                     score += 0.06
                 else:
                     score -= 0.07
+                if _looks_bridge_or_polite_exchange(window_text):
+                    score -= 0.40
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
@@ -564,8 +607,10 @@ def select_citation_segments(
 
         if (
             best_candidate
-            and float(best_candidate["citation_precision_score"]) >= 0.40
+            and float(best_candidate["citation_precision_score"]) >= 0.44
+            and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
             and _looks_self_contained_quote(best_candidate.get("text", ""))
+            and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
         ):
             best_per_episode.append(best_candidate)
 
@@ -576,11 +621,12 @@ def select_citation_segments(
 
     strong = [
         item for item in best_per_episode
-        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.40
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.46
         and max(
             float(item.get("citation_question_overlap", 0.0) or 0.0),
             float(item.get("citation_answer_overlap", 0.0) or 0.0),
         ) >= 0.14
+        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
     ]
 
     very_strong = [

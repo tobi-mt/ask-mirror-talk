@@ -209,6 +209,34 @@ _DECLARATIVE_GUIDANCE_MARKERS = (
     "trust is",
 )
 
+_BOUNDARY_THEME_MARKERS = (
+    "boundary",
+    "boundaries",
+    "personal space",
+    "what i need",
+    "healthy boundaries",
+)
+
+_FORGIVENESS_THEME_MARKERS = (
+    "forgive",
+    "forgiveness",
+    "release",
+    "resentment",
+    "trust",
+    "betrayal",
+    "justice",
+)
+
+_GRIEF_THEME_MARKERS = (
+    "grief",
+    "grieving",
+    "loss",
+    "mourning",
+    "honor how you're feeling",
+    "feelings",
+    "sadness",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -313,6 +341,44 @@ def _has_declarative_guidance_shape(text_value: str) -> bool:
         or first.startswith("trust ")
         or first.startswith("healing ")
     )
+
+
+def _trim_conversational_tail(text_value: str) -> str:
+    text_value = (text_value or "").strip()
+    if not text_value:
+        return ""
+    sentences = [part.strip() for part in re.split(r'(?<=[.!?])\s+', text_value) if part.strip()]
+    kept: list[str] = []
+    for sentence in sentences:
+        lower = sentence.lower()
+        if _looks_bridge_or_polite_exchange(lower):
+            break
+        if _looks_conversational_or_setup(lower) and kept:
+            break
+        kept.append(sentence)
+    trimmed = " ".join(kept).strip()
+    return trimmed or text_value
+
+
+def _topic_specific_alignment_score(question: str, text_value: str) -> float:
+    lower_q = (question or "").strip().lower()
+    lower_t = (text_value or "").strip().lower()
+    if not lower_q or not lower_t:
+        return 0.0
+    marker_groups = []
+    if "boundar" in lower_q:
+        marker_groups.append(_BOUNDARY_THEME_MARKERS)
+    if "forgiv" in lower_q or "trust" in lower_q or "betray" in lower_q:
+        marker_groups.append(_FORGIVENESS_THEME_MARKERS)
+    if "grief" in lower_q or "loss" in lower_q:
+        marker_groups.append(_GRIEF_THEME_MARKERS)
+    if not marker_groups:
+        return 0.0
+    best = 0.0
+    for group in marker_groups:
+        hits = sum(1 for marker in group if marker in lower_t)
+        best = max(best, min(1.0, hits / 2.0))
+    return best
 
 
 def _is_standalone_evidence(text_value: str) -> bool:
@@ -546,12 +612,14 @@ def rerank_citation_moments(
         question_overlap = float(chunk.get("citation_question_overlap", 0.0) or 0.0)
         answer_overlap = float(chunk.get("citation_answer_overlap", 0.0) or 0.0)
         semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
-        text_value = (chunk.get("text") or "").strip()
+        text_value = _trim_conversational_tail((chunk.get("text") or "").strip())
+        chunk["text"] = text_value
         anecdotal_story = _looks_anecdotal_personal_story(text_value)
         progress_alignment = _progress_alignment_score(question, text_value)
         courage_alignment = _courage_theme_alignment_score(question, text_value)
         conversational_setup = _looks_conversational_or_setup(text_value)
         declarative_guidance = _has_declarative_guidance_shape(text_value)
+        topic_alignment = _topic_specific_alignment_score(question, text_value)
 
         has_lexical_support = max(question_overlap, answer_overlap) >= 0.10
         has_good_precision = precision >= 0.36
@@ -562,6 +630,7 @@ def rerank_citation_moments(
         weak_progress_alignment = wants_progress_evidence and progress_alignment < 0.25
         weak_courage_alignment = wants_courage_theme and courage_alignment < 0.25
         weak_guidance_shape = reflective_guidance and not declarative_guidance
+        weak_topic_alignment = topic_alignment < 0.25 if topic_alignment or any(word in (question or "").lower() for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss")) else False
 
         if (
             has_good_precision
@@ -575,6 +644,7 @@ def rerank_citation_moments(
             and not weak_progress_alignment
             and not weak_courage_alignment
             and not weak_guidance_shape
+            and not weak_topic_alignment
         ):
             filtered.append(chunk)
         else:
@@ -653,6 +723,7 @@ def refine_citation_segments(
                     break
 
                 window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
+                window_text = _trim_conversational_tail(window_text)
                 if len(window_text) < 60:
                     continue
 
@@ -664,6 +735,7 @@ def refine_citation_segments(
                 )
                 progress_alignment = _progress_alignment_score(question, window_text)
                 courage_alignment = _courage_theme_alignment_score(question, window_text)
+                topic_alignment = _topic_specific_alignment_score(question, window_text)
                 score = base_precision * 0.40 + lexical_score * 0.60
 
                 # Prefer self-contained, quoteable moments over tiny fragments.
@@ -690,6 +762,10 @@ def refine_citation_segments(
                     score += courage_alignment * 0.14
                     if courage_alignment < 0.25:
                         score -= 0.14
+                if topic_alignment > 0.0:
+                    score += topic_alignment * 0.16
+                    if topic_alignment < 0.25:
+                        score -= 0.16
                 if reflective_guidance and _has_declarative_guidance_shape(window_text):
                     score += 0.08
                 elif reflective_guidance:
@@ -721,7 +797,8 @@ def refine_citation_segments(
         chosen_question_overlap = float(chosen.get("citation_question_overlap", 0.0) or 0.0)
         chosen_answer_overlap = float(chosen.get("citation_answer_overlap", 0.0) or 0.0)
         chosen_start = float(chosen.get("start_time", 0.0) or 0.0)
-        chosen_text = (chosen.get("text") or "").strip()
+        chosen_text = _trim_conversational_tail((chosen.get("text") or "").strip())
+        chosen["text"] = chosen_text
 
         weak_overlap = max(chosen_question_overlap, chosen_answer_overlap) < 0.10
         weak_question_overlap = chosen_question_overlap < 0.08
@@ -737,6 +814,8 @@ def refine_citation_segments(
         weak_progress_alignment = wants_progress_evidence and _progress_alignment_score(question, chosen_text) < 0.25
         weak_courage_alignment = wants_courage_theme and _courage_theme_alignment_score(question, chosen_text) < 0.25
         weak_guidance_shape = reflective_guidance and not _has_declarative_guidance_shape(chosen_text)
+        topic_alignment = _topic_specific_alignment_score(question, chosen_text)
+        weak_topic_alignment = topic_alignment < 0.25 if topic_alignment or any(word in (question or "").lower() for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss")) else False
         suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
 
         if (
@@ -749,6 +828,7 @@ def refine_citation_segments(
             or weak_progress_alignment
             or weak_courage_alignment
             or weak_guidance_shape
+            or weak_topic_alignment
             or suspicious_intro
         ):
             logger.info(
@@ -857,6 +937,7 @@ def select_citation_segments(
                     break
 
                 window_text = " ".join((seg.text or "").strip() for seg in window_segments).strip()
+                window_text = _trim_conversational_tail(window_text)
                 if not _is_standalone_evidence(window_text):
                     continue
 
@@ -869,6 +950,7 @@ def select_citation_segments(
                 question_overlap_count = _overlap_count(question_tokens, window_text)
                 progress_alignment = _progress_alignment_score(question, window_text)
                 courage_alignment = _courage_theme_alignment_score(question, window_text)
+                topic_alignment = _topic_specific_alignment_score(question, window_text)
                 overlap = max(question_overlap, answer_overlap)
                 if overlap < 0.12:
                     continue
@@ -880,6 +962,8 @@ def select_citation_segments(
                 if wants_progress_evidence and progress_alignment < 0.25:
                     continue
                 if wants_courage_theme and courage_alignment < 0.25:
+                    continue
+                if topic_alignment > 0.0 and topic_alignment < 0.25:
                     continue
                 if reflective_guidance and _looks_conversational_or_setup(window_text):
                     continue
@@ -908,6 +992,8 @@ def select_citation_segments(
                     score += progress_alignment * 0.14
                 if wants_courage_theme:
                     score += courage_alignment * 0.16
+                if topic_alignment > 0.0:
+                    score += topic_alignment * 0.18
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
@@ -932,6 +1018,7 @@ def select_citation_segments(
                         "citation_answer_overlap": round(answer_overlap, 4),
                         "citation_progress_alignment": round(progress_alignment, 4),
                         "citation_courage_alignment": round(courage_alignment, 4),
+                        "citation_topic_alignment": round(topic_alignment, 4),
                         "is_strongest_match": False,
                     }
 
@@ -942,6 +1029,7 @@ def select_citation_segments(
             and int(best_candidate.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
             and float(best_candidate.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
             and float(best_candidate.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
+            and float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
             and _looks_self_contained_quote(best_candidate.get("text", ""))
             and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
             and not (
@@ -968,6 +1056,7 @@ def select_citation_segments(
         and int(item.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
         and float(item.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
         and float(item.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
+        and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
     ]
 
     very_strong = [

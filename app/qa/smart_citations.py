@@ -111,6 +111,29 @@ _META_QUESTION_MARKERS = (
     "actually supporting",
 )
 
+_PERSONAL_STORY_MARKERS = (
+    "my fiance",
+    "my fiancée",
+    "at the time",
+    "when i was",
+    "when i got",
+    "when i went",
+    "when i started",
+    "when i stopped",
+    "in my life",
+    "in my marriage",
+    "in my relationship",
+    "i had to",
+    "i used to",
+    "i remember",
+    "i was working",
+    "i had 450 employees",
+    "my employees",
+    "my company",
+    "my business",
+    "my childhood",
+)
+
 
 def _tokenize_for_overlap(text: str) -> set[str]:
     words = re.findall(r"[a-zA-Z][a-zA-Z'-]{2,}", (text or "").lower())
@@ -237,6 +260,62 @@ def _is_abstract_or_meta_question(question: str) -> bool:
     return False
 
 
+def _question_wants_personal_example(question: str) -> bool:
+    lower = (question or "").strip().lower()
+    if not lower:
+        return False
+    return any(
+        marker in lower
+        for marker in (
+            "for example",
+            "an example",
+            "example of",
+            "share a story",
+            "share a personal story",
+            "personal story",
+            "personal example",
+            "real example",
+            "real life example",
+            "real-life example",
+            "tell me a story",
+            "tell me about a time",
+            "what happened when",
+        )
+    )
+
+
+def _is_reflective_guidance_question(question: str) -> bool:
+    lower = (question or "").strip().lower()
+    if not lower or _is_abstract_or_meta_question(lower):
+        return False
+    return (
+        lower.startswith("how do i ")
+        or lower.startswith("how can i ")
+        or lower.startswith("how do we ")
+        or lower.startswith("what does ")
+        or lower.startswith("what can i ")
+        or lower.startswith("how should i ")
+        or lower.startswith("how will i ")
+        or lower.startswith("how do you know")
+    )
+
+
+def _looks_anecdotal_personal_story(text_value: str) -> bool:
+    lower = (text_value or "").strip().lower()
+    if not lower:
+        return False
+    if any(marker in lower for marker in _PERSONAL_STORY_MARKERS):
+        return True
+    pronoun_hits = len(re.findall(r"\b(i|me|my|mine)\b", lower))
+    narrative_hits = len(
+        re.findall(
+            r"\b(was|were|had|did|left|worked|started|stopped|felt|realized|remember|grew|grew up|went)\b",
+            lower,
+        )
+    )
+    return pronoun_hits >= 4 and narrative_hits >= 2
+
+
 def rerank_citation_moments(
     question: str,
     answer_text: str,
@@ -255,6 +334,8 @@ def rerank_citation_moments(
 
     question_tokens = _tokenize_for_overlap(question)
     answer_tokens = _tokenize_for_overlap(answer_text)
+    wants_personal_example = _question_wants_personal_example(question)
+    reflective_guidance = _is_reflective_guidance_question(question)
 
     chunks_by_episode: dict[int, list[dict]] = defaultdict(list)
     for chunk in answer_chunks:
@@ -305,12 +386,14 @@ def rerank_citation_moments(
         answer_overlap = float(chunk.get("citation_answer_overlap", 0.0) or 0.0)
         semantic = float(chunk.get("citation_semantic_score", 0.0) or 0.0)
         text_value = (chunk.get("text") or "").strip()
+        anecdotal_story = _looks_anecdotal_personal_story(text_value)
 
         has_lexical_support = max(question_overlap, answer_overlap) >= 0.10
         has_good_precision = precision >= 0.36
         has_min_semantic_support = semantic >= 0.50
         looks_generic = _looks_generic_source_moment(text_value)
         looks_bridgey = _looks_bridge_or_polite_exchange(text_value)
+        story_penalty = reflective_guidance and not wants_personal_example and anecdotal_story
 
         if (
             has_good_precision
@@ -319,17 +402,19 @@ def rerank_citation_moments(
             and has_min_semantic_support
             and not looks_generic
             and not looks_bridgey
+            and not story_penalty
         ):
             filtered.append(chunk)
         else:
             logger.info(
-                "Dropping weak citation moment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, semantic=%.3f, generic=%s)",
+                "Dropping weak citation moment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, semantic=%.3f, generic=%s, story=%s)",
                 (chunk.get("episode") or {}).get("id"),
                 precision,
                 question_overlap,
                 answer_overlap,
                 semantic,
                 looks_generic or looks_bridgey,
+                anecdotal_story,
             )
 
     return filtered
@@ -352,6 +437,8 @@ def refine_citation_segments(
 
     question_tokens = _tokenize_for_overlap(question)
     answer_tokens = _tokenize_for_overlap(answer_text)
+    wants_personal_example = _question_wants_personal_example(question)
+    reflective_guidance = _is_reflective_guidance_question(question)
     refined_chunks: list[dict] = []
 
     for chunk in citation_chunks:
@@ -415,6 +502,8 @@ def refine_citation_segments(
                     score -= 0.18
                 if _looks_bridge_or_polite_exchange(window_text):
                     score -= 0.28
+                if reflective_guidance and not wants_personal_example and _looks_anecdotal_personal_story(window_text):
+                    score -= 0.22
 
                 # Early-episode snippets are often intros; only allow them when they
                 # show unmistakable lexical support for the actual topic.
@@ -449,16 +538,29 @@ def refine_citation_segments(
         weak_precision = chosen_precision < 0.38
         generic_window = _looks_generic_source_moment(chosen_text)
         bridge_window = _looks_bridge_or_polite_exchange(chosen_text)
+        anecdotal_window = (
+            reflective_guidance
+            and not wants_personal_example
+            and _looks_anecdotal_personal_story(chosen_text)
+        )
         suspicious_intro = chosen_start < 45 and max(chosen_question_overlap, chosen_answer_overlap) < 0.16
 
-        if (weak_precision and weak_overlap) or weak_question_overlap or generic_window or bridge_window or suspicious_intro:
+        if (
+            (weak_precision and weak_overlap)
+            or weak_question_overlap
+            or generic_window
+            or bridge_window
+            or anecdotal_window
+            or suspicious_intro
+        ):
             logger.info(
-                "Dropping low-trust citation segment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, start=%.1f)",
+                "Dropping low-trust citation segment for episode %s (precision=%.3f, q_overlap=%.3f, a_overlap=%.3f, start=%.1f, anecdotal=%s)",
                 episode_id,
                 chosen_precision,
                 chosen_question_overlap,
                 chosen_answer_overlap,
                 chosen_start,
+                anecdotal_window,
             )
             continue
 
@@ -508,6 +610,8 @@ def select_citation_segments(
     question_tokens = _tokenize_for_overlap(question)
     answer_tokens = _tokenize_for_overlap(answer_text)
     is_meta_question = _is_abstract_or_meta_question(question)
+    wants_personal_example = _question_wants_personal_example(question)
+    reflective_guidance = _is_reflective_guidance_question(question)
 
     episode_meta = {
         int(item["episode"]["id"]): item
@@ -564,7 +668,8 @@ def select_citation_segments(
                 overlap = max(question_overlap, answer_overlap)
                 if overlap < 0.12:
                     continue
-                if question_overlap < 0.08:
+                min_question_overlap = 0.10 if reflective_guidance and not wants_personal_example else 0.08
+                if question_overlap < min_question_overlap:
                     continue
 
                 score = (
@@ -581,6 +686,8 @@ def select_citation_segments(
                     score -= 0.07
                 if _looks_bridge_or_polite_exchange(window_text):
                     score -= 0.40
+                if reflective_guidance and not wants_personal_example and _looks_anecdotal_personal_story(window_text):
+                    score -= 0.28
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
@@ -608,9 +715,14 @@ def select_citation_segments(
         if (
             best_candidate
             and float(best_candidate["citation_precision_score"]) >= 0.44
-            and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
+            and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
             and _looks_self_contained_quote(best_candidate.get("text", ""))
             and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
+            and not (
+                reflective_guidance
+                and not wants_personal_example
+                and _looks_anecdotal_personal_story(best_candidate.get("text", ""))
+            )
         ):
             best_per_episode.append(best_candidate)
 
@@ -626,7 +738,7 @@ def select_citation_segments(
             float(item.get("citation_question_overlap", 0.0) or 0.0),
             float(item.get("citation_answer_overlap", 0.0) or 0.0),
         ) >= 0.14
-        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
+        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
     ]
 
     very_strong = [
@@ -645,9 +757,9 @@ def select_citation_segments(
         return []
 
     if len(strong) >= min_citations:
-        selected = strong[:max_citations]
+        selected = strong[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
     else:
-        selected = best_per_episode[:max_citations]
+        selected = best_per_episode[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
 
     if not is_meta_question:
         # For normal questions, still refuse citations if we can't find at least

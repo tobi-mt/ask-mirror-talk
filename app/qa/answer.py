@@ -119,11 +119,24 @@ def _make_quote(text: str, max_len: int = 160) -> str:
     if len(text) <= max_len:
         return text
 
-    # Prefer a clean sentence boundary over a clipped-looking fragment.
     sentences = _split_sentences(text)
-    for sentence in sentences:
-        if len(sentence) <= max_len:
-            return sentence
+    if sentences:
+        assembled = ""
+        for sentence in sentences:
+            candidate = sentence if not assembled else f"{assembled} {sentence}"
+            if len(candidate) > max_len:
+                break
+            assembled = candidate
+
+        # Prefer a multi-sentence or at least substantial quote over a tiny opener.
+        if assembled and len(assembled) >= min(90, max_len - 20):
+            return assembled
+
+        longer_sentences = [sentence for sentence in sentences if len(sentence) >= 60]
+        if longer_sentences:
+            best = longer_sentences[0]
+            if len(best) <= max_len:
+                return best
 
     clipped = text[:max_len].rstrip()
     boundary = max(

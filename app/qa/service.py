@@ -1,6 +1,7 @@
 import gc
 import time
 import logging
+import concurrent.futures
 from sqlalchemy.orm import Session
 
 from app.indexing.embeddings import embed_text
@@ -276,6 +277,18 @@ def answer_question(
                               citation_override=citation_payloads if use_smart_citations else None)
     answer_ms = int((time.perf_counter() - answer_started_at) * 1000)
 
+    # Follow-up generation is useful but not part of the core answer itself.
+    # Run it in parallel with citation refinement and logging so the non-stream
+    # endpoint does not pay the full extra OpenAI roundtrip serially.
+    from app.qa.answer import generate_follow_up_questions
+    follow_up_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    follow_up_future = follow_up_executor.submit(
+        generate_follow_up_questions,
+        question,
+        response["answer"],
+        citation_payloads if citation_payloads is not None else chunk_payloads,
+    )
+
     citation_ms = 0
     if use_smart_citations and citation_payloads:
         citation_started_at = time.perf_counter()
@@ -323,6 +336,14 @@ def answer_question(
             "cached": False,
         },
     )
+
+    try:
+        response["follow_up_questions"] = follow_up_future.result(timeout=15)
+    except Exception as exc:
+        logger.warning("Follow-up generation failed in non-stream flow: %s", exc)
+        response["follow_up_questions"] = []
+    finally:
+        follow_up_executor.shutdown(wait=False)
 
     # Cache this response for future similar questions
     result = {
@@ -502,8 +523,7 @@ def answer_question_stream(
     answer_ms = int((time.perf_counter() - stream_answer_started_at) * 1000)
 
     # ── Send citations immediately — no extra latency ──
-    from app.qa.answer import _build_citations, _generate_follow_up_questions
-    import concurrent.futures
+    from app.qa.answer import _build_citations, generate_follow_up_questions
 
     citation_started_at = time.perf_counter()
     refined_citation_chunks = (
@@ -525,7 +545,7 @@ def answer_question_stream(
     _follow_up_ctx = citation_payloads or chunk_payloads
     _follow_up_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     follow_up_future = _follow_up_executor.submit(
-        _generate_follow_up_questions, question, full_answer, _follow_up_ctx
+        generate_follow_up_questions, question, full_answer, _follow_up_ctx
     )
 
     yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"

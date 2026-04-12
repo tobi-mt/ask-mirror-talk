@@ -202,6 +202,14 @@ def _build_citations(chunks: list[dict]) -> list[dict]:
     return citations
 
 
+def generate_follow_up_questions(question: str, answer: str, chunks: list[dict]) -> list[str]:
+    """
+    Public wrapper so callers can generate follow-up questions without going
+    through compose_answer and can do so in parallel with other work.
+    """
+    return _generate_follow_up_questions(question, answer, chunks)
+
+
 def compose_answer(question: str, chunks: list[dict], citation_override: list[dict] = None) -> dict:
     """
     Generate an intelligent answer using OpenAI GPT based on relevant chunks.
@@ -249,7 +257,7 @@ def compose_answer(question: str, chunks: list[dict], citation_override: list[di
     citations = _build_citations(citation_chunks)
 
     # Generate follow-up questions
-    follow_up_questions = _generate_follow_up_questions(question, answer_text, citation_chunks)
+    follow_up_questions = generate_follow_up_questions(question, answer_text, citation_chunks)
 
     return {"answer": answer_text, "citations": citations, "follow_up_questions": follow_up_questions}
 

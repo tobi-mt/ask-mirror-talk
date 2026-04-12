@@ -168,6 +168,28 @@ def _is_standalone_evidence(text_value: str) -> bool:
     return True
 
 
+def _looks_self_contained_quote(text_value: str) -> bool:
+    """
+    Prefer windows that can stand alone on a card or citation rail without
+    sounding like a clipped transcript fragment.
+    """
+    text_value = (text_value or "").strip()
+    if not text_value:
+        return False
+    if len(text_value) < 120:
+        return False
+
+    starts_clean = bool(re.match(r'^[A-Z0-9"“\'(]', text_value))
+    ends_clean = text_value[-1] in ".!?”\"'"
+    if starts_clean and ends_clean:
+        return True
+
+    # Allow a slightly looser fallback if the window is otherwise strong and
+    # clearly sentence-like.
+    sentence_count = len(re.findall(r'[.!?]', text_value))
+    return starts_clean and sentence_count >= 2
+
+
 def _is_abstract_or_meta_question(question: str) -> bool:
     lower = (question or "").strip().lower()
     if not lower:
@@ -512,10 +534,18 @@ def select_citation_segments(
 
                 if 130 <= len(window_text) <= 320:
                     score += 0.05
+                if _looks_self_contained_quote(window_text):
+                    score += 0.06
+                else:
+                    score -= 0.07
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
                     score -= 0.30
+                if window_text[:1].islower():
+                    score -= 0.05
+                if window_text.endswith(",") or window_text.endswith(";") or window_text.endswith(":"):
+                    score -= 0.05
 
                 if score > best_score:
                     best_score = score
@@ -532,7 +562,11 @@ def select_citation_segments(
                         "is_strongest_match": False,
                     }
 
-        if best_candidate and float(best_candidate["citation_precision_score"]) >= 0.34:
+        if (
+            best_candidate
+            and float(best_candidate["citation_precision_score"]) >= 0.40
+            and _looks_self_contained_quote(best_candidate.get("text", ""))
+        ):
             best_per_episode.append(best_candidate)
 
     best_per_episode.sort(

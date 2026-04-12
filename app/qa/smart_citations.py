@@ -115,6 +115,11 @@ _PERSONAL_STORY_MARKERS = (
     "my fiance",
     "my fiancée",
     "at the time",
+    "every time i get angry",
+    "every time i feel",
+    "every time i was",
+    "i know exactly where it's coming from",
+    "left me",
     "when i was",
     "when i got",
     "when i went",
@@ -148,6 +153,15 @@ def _overlap_score(source_tokens: set[str], candidate_text: str) -> float:
         return 0.0
     overlap = source_tokens & candidate_tokens
     return len(overlap) / max(1, min(len(source_tokens), 12))
+
+
+def _overlap_count(source_tokens: set[str], candidate_text: str) -> int:
+    if not source_tokens:
+        return 0
+    candidate_tokens = _tokenize_for_overlap(candidate_text)
+    if not candidate_tokens:
+        return 0
+    return len(source_tokens & candidate_tokens)
 
 
 def _score_candidate_text(
@@ -313,6 +327,9 @@ def _looks_anecdotal_personal_story(text_value: str) -> bool:
             lower,
         )
     )
+    emotion_hits = len(re.findall(r"\b(angry|sad|hurt|afraid|fearful|anxious|lonely|upset)\b", lower))
+    if pronoun_hits >= 2 and emotion_hits >= 1 and narrative_hits >= 1:
+        return True
     return pronoun_hits >= 4 and narrative_hits >= 2
 
 
@@ -612,6 +629,7 @@ def select_citation_segments(
     is_meta_question = _is_abstract_or_meta_question(question)
     wants_personal_example = _question_wants_personal_example(question)
     reflective_guidance = _is_reflective_guidance_question(question)
+    min_question_overlap_count = 2 if reflective_guidance and not wants_personal_example else 1
 
     episode_meta = {
         int(item["episode"]["id"]): item
@@ -665,11 +683,14 @@ def select_citation_segments(
                     answer_tokens=answer_tokens,
                     semantic=0.0,
                 )
+                question_overlap_count = _overlap_count(question_tokens, window_text)
                 overlap = max(question_overlap, answer_overlap)
                 if overlap < 0.12:
                     continue
                 min_question_overlap = 0.10 if reflective_guidance and not wants_personal_example else 0.08
                 if question_overlap < min_question_overlap:
+                    continue
+                if question_overlap_count < min_question_overlap_count:
                     continue
 
                 score = (
@@ -688,6 +709,8 @@ def select_citation_segments(
                     score -= 0.40
                 if reflective_guidance and not wants_personal_example and _looks_anecdotal_personal_story(window_text):
                     score -= 0.28
+                if reflective_guidance and question_overlap_count >= 2:
+                    score += 0.05
                 if window_start < 60 and overlap < 0.18:
                     score -= 0.25
                 if sum(1 for pattern in _GENERIC_SEGMENT_MARKERS if pattern in window_text.lower()) >= 1:
@@ -708,6 +731,7 @@ def select_citation_segments(
                         "relevance_score": float(episode_context.get("relevance_score", 0.0) or 0.0),
                         "citation_precision_score": round(score, 4),
                         "citation_question_overlap": round(question_overlap, 4),
+                        "citation_question_overlap_count": question_overlap_count,
                         "citation_answer_overlap": round(answer_overlap, 4),
                         "is_strongest_match": False,
                     }
@@ -716,6 +740,7 @@ def select_citation_segments(
             best_candidate
             and float(best_candidate["citation_precision_score"]) >= 0.44
             and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
+            and int(best_candidate.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
             and _looks_self_contained_quote(best_candidate.get("text", ""))
             and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
             and not (
@@ -739,6 +764,7 @@ def select_citation_segments(
             float(item.get("citation_answer_overlap", 0.0) or 0.0),
         ) >= 0.14
         and float(item.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
+        and int(item.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
     ]
 
     very_strong = [

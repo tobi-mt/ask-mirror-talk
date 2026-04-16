@@ -438,6 +438,11 @@ def _topic_specific_alignment_score(question: str, text_value: str) -> float:
     return best
 
 
+def _question_has_topic_specific_expectation(question: str) -> bool:
+    lower_q = (question or "").strip().lower()
+    return any(word in lower_q for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss"))
+
+
 def _is_standalone_evidence(text_value: str) -> bool:
     lower = (text_value or "").strip().lower()
     if not lower:
@@ -1130,6 +1135,24 @@ def select_citation_segments(
         and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.15 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
     ]
 
+    reflective_single = [
+        item for item in best_per_episode
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.34
+        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.06
+        and _looks_self_contained_quote(item.get("text", ""))
+        and not _looks_bridge_or_polite_exchange(item.get("text", ""))
+        and not _looks_conversational_or_setup(item.get("text", ""))
+        and not _looks_generic_source_moment(item.get("text", ""))
+        and not _looks_anecdotal_personal_story(item.get("text", ""))
+        and (
+            _has_declarative_guidance_shape(item.get("text", ""))
+            or float(item.get("citation_topic_alignment", 0.0) or 0.0) >= 0.25
+        )
+        and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (
+            0.15 if _question_has_topic_specific_expectation(question) else 0.0
+        )
+    ]
+
     very_strong = [
         item for item in best_per_episode
         if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.48
@@ -1155,13 +1178,21 @@ def select_citation_segments(
         and len(calibrated_single) >= 1
     ):
         selected = calibrated_single[:1]
+    elif (
+        reflective_guidance
+        and not wants_personal_example
+        and not wants_progress_evidence
+        and not wants_courage_theme
+        and len(reflective_single) >= 1
+    ):
+        selected = reflective_single[:1]
     else:
         selected = best_per_episode[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
 
     if not is_meta_question:
         # For normal questions, still refuse citations if we can't find at least
         # one clearly solid supporting moment.
-        if not strong and not calibrated_single and len(selected) > 0:
+        if not strong and not calibrated_single and not reflective_single and len(selected) > 0:
             logger.info("No strong citation support found; returning broader reflection for question: %s", question[:140])
             return []
 

@@ -1118,8 +1118,8 @@ def select_citation_segments(
 
     calibrated_single = [
         item for item in best_per_episode
-        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.42
-        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.39
+        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.08
         and int(item.get("citation_question_overlap_count", 0) or 0) >= 1
         and _has_declarative_guidance_shape(item.get("text", ""))
         and _looks_self_contained_quote(item.get("text", ""))
@@ -1127,6 +1127,7 @@ def select_citation_segments(
         and not _looks_conversational_or_setup(item.get("text", ""))
         and not _looks_generic_source_moment(item.get("text", ""))
         and not _looks_anecdotal_personal_story(item.get("text", ""))
+        and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.15 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
     ]
 
     very_strong = [

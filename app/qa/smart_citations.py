@@ -192,6 +192,8 @@ _VAGUE_EXAMPLE_MARKERS = (
 )
 
 _DECLARATIVE_GUIDANCE_MARKERS = (
+    "we have to",
+    "we need to",
     "you can",
     "you have to",
     "you need to",
@@ -203,6 +205,7 @@ _DECLARATIVE_GUIDANCE_MARKERS = (
     "the key is",
     "the goal is",
     "what matters is",
+    "it's okay to",
     "boundaries are",
     "forgiveness is",
     "grief is",
@@ -1113,6 +1116,19 @@ def select_citation_segments(
         and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
     ]
 
+    calibrated_single = [
+        item for item in best_per_episode
+        if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.42
+        and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.10
+        and int(item.get("citation_question_overlap_count", 0) or 0) >= 1
+        and _has_declarative_guidance_shape(item.get("text", ""))
+        and _looks_self_contained_quote(item.get("text", ""))
+        and not _looks_bridge_or_polite_exchange(item.get("text", ""))
+        and not _looks_conversational_or_setup(item.get("text", ""))
+        and not _looks_generic_source_moment(item.get("text", ""))
+        and not _looks_anecdotal_personal_story(item.get("text", ""))
+    ]
+
     very_strong = [
         item for item in best_per_episode
         if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.48
@@ -1130,13 +1146,21 @@ def select_citation_segments(
 
     if len(strong) >= min_citations:
         selected = strong[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
+    elif (
+        reflective_guidance
+        and not wants_personal_example
+        and not wants_progress_evidence
+        and not wants_courage_theme
+        and len(calibrated_single) >= 1
+    ):
+        selected = calibrated_single[:1]
     else:
         selected = best_per_episode[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
 
     if not is_meta_question:
         # For normal questions, still refuse citations if we can't find at least
         # one clearly solid supporting moment.
-        if not strong and len(selected) > 0:
+        if not strong and not calibrated_single and len(selected) > 0:
             logger.info("No strong citation support found; returning broader reflection for question: %s", question[:140])
             return []
 

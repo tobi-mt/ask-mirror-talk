@@ -1036,6 +1036,38 @@ def finalize_citation_confidence(citation_chunks: list[dict]) -> list[dict]:
     return ordered
 
 
+def _prune_reflective_extra_citations(selected: list[dict]) -> list[dict]:
+    if len(selected) <= 1:
+        return selected
+
+    ordered = [dict(item) for item in selected]
+    top_precision = float(ordered[0].get("citation_precision_score", 0.0) or 0.0)
+    kept = [ordered[0]]
+
+    for item in ordered[1:]:
+        text = item.get("text", "") or ""
+        precision = float(item.get("citation_precision_score", 0.0) or 0.0)
+        question_overlap = float(item.get("citation_question_overlap", 0.0) or 0.0)
+        topic_alignment = float(item.get("citation_topic_alignment", 0.0) or 0.0)
+
+        if precision < max(0.50, top_precision - 0.05):
+            continue
+        if question_overlap < 0.12 and topic_alignment < 0.30:
+            continue
+        if not _looks_self_contained_quote(text):
+            continue
+        if _looks_bridge_or_polite_exchange(text) or _looks_conversational_or_setup(text):
+            continue
+        if _looks_generic_source_moment(text) or _looks_anecdotal_personal_story(text):
+            continue
+        if not (_has_declarative_guidance_shape(text) or topic_alignment >= 0.35):
+            continue
+
+        kept.append(item)
+
+    return kept
+
+
 def select_citation_segments(
     db: Session,
     *,
@@ -1340,6 +1372,9 @@ def select_citation_segments(
         selected = reflective_single[:1]
     else:
         selected = best_per_episode[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
+
+    if reflective_guidance and not wants_personal_example and len(selected) > 1:
+        selected = _prune_reflective_extra_citations(selected)
 
     if not is_meta_question:
         should_log_single_quote_diagnostics = (

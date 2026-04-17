@@ -495,6 +495,46 @@ def diagnose_single_quote_candidates(question: str, candidates: list[dict], limi
     return diagnosed
 
 
+def _window_candidate_rejection_reasons(
+    question: str,
+    *,
+    window_text: str,
+    overlap: float,
+    question_overlap: float,
+    question_overlap_count: int,
+    progress_alignment: float,
+    courage_alignment: float,
+    topic_alignment: float,
+    reflective_guidance: bool,
+    wants_personal_example: bool,
+    wants_progress_evidence: bool,
+    wants_courage_theme: bool,
+    min_question_overlap_count: int,
+) -> list[str]:
+    reasons: list[str] = []
+    min_question_overlap = 0.10 if reflective_guidance and not wants_personal_example else 0.08
+
+    if not _is_standalone_evidence(window_text):
+        reasons.append("not_standalone_evidence")
+    if overlap < 0.12:
+        reasons.append("overlap<0.12")
+    if question_overlap < min_question_overlap:
+        reasons.append(f"question_overlap<{min_question_overlap:.2f}")
+    if question_overlap_count < min_question_overlap_count:
+        reasons.append(f"question_overlap_count<{min_question_overlap_count}")
+    if wants_progress_evidence and progress_alignment < 0.25:
+        reasons.append("progress_alignment<0.25")
+    if wants_courage_theme and courage_alignment < 0.25:
+        reasons.append("courage_alignment<0.25")
+    if topic_alignment > 0.0 and topic_alignment < 0.25:
+        reasons.append("topic_alignment<0.25")
+    if reflective_guidance and _looks_conversational_or_setup(window_text):
+        reasons.append("conversational_or_setup")
+    if reflective_guidance and not _has_declarative_guidance_shape(window_text):
+        reasons.append("no_declarative_guidance")
+    return reasons
+
+
 def _is_standalone_evidence(text_value: str) -> bool:
     lower = (text_value or "").strip().lower()
     if not lower:
@@ -1043,6 +1083,7 @@ def select_citation_segments(
 
         best_candidate = None
         best_score = float("-inf")
+        near_miss_windows: list[dict] = []
         for start_idx in range(len(segments)):
             for end_idx in range(start_idx, min(start_idx + 4, len(segments))):
                 window_segments = segments[start_idx:end_idx + 1]
@@ -1067,22 +1108,35 @@ def select_citation_segments(
                 courage_alignment = _courage_theme_alignment_score(question, window_text)
                 topic_alignment = _topic_specific_alignment_score(question, window_text)
                 overlap = max(question_overlap, answer_overlap)
-                if overlap < 0.12:
-                    continue
-                min_question_overlap = 0.10 if reflective_guidance and not wants_personal_example else 0.08
-                if question_overlap < min_question_overlap:
-                    continue
-                if question_overlap_count < min_question_overlap_count:
-                    continue
-                if wants_progress_evidence and progress_alignment < 0.25:
-                    continue
-                if wants_courage_theme and courage_alignment < 0.25:
-                    continue
-                if topic_alignment > 0.0 and topic_alignment < 0.25:
-                    continue
-                if reflective_guidance and _looks_conversational_or_setup(window_text):
-                    continue
-                if reflective_guidance and not _has_declarative_guidance_shape(window_text):
+                rejection_reasons = _window_candidate_rejection_reasons(
+                    question,
+                    window_text=window_text,
+                    overlap=overlap,
+                    question_overlap=question_overlap,
+                    question_overlap_count=question_overlap_count,
+                    progress_alignment=progress_alignment,
+                    courage_alignment=courage_alignment,
+                    topic_alignment=topic_alignment,
+                    reflective_guidance=reflective_guidance,
+                    wants_personal_example=wants_personal_example,
+                    wants_progress_evidence=wants_progress_evidence,
+                    wants_courage_theme=wants_courage_theme,
+                    min_question_overlap_count=min_question_overlap_count,
+                )
+                if rejection_reasons:
+                    if overlap >= 0.08 or question_overlap >= 0.06 or topic_alignment >= 0.12:
+                        near_miss_windows.append({
+                            "text": window_text,
+                            "start_time": window_start,
+                            "end_time": window_end,
+                            "question_overlap": round(question_overlap, 4),
+                            "answer_overlap": round(answer_overlap, 4),
+                            "question_overlap_count": question_overlap_count,
+                            "progress_alignment": round(progress_alignment, 4),
+                            "courage_alignment": round(courage_alignment, 4),
+                            "topic_alignment": round(topic_alignment, 4),
+                            "reasons": rejection_reasons,
+                        })
                     continue
 
                 score = (
@@ -1155,6 +1209,29 @@ def select_citation_segments(
                 )
             ):
                 best_per_episode.append(best_candidate)
+        elif (
+            reflective_guidance
+            and not wants_personal_example
+            and not wants_progress_evidence
+            and not wants_courage_theme
+            and near_miss_windows
+        ):
+            near_miss_windows.sort(
+                key=lambda item: (
+                    max(
+                        float(item.get("question_overlap", 0.0) or 0.0),
+                        float(item.get("answer_overlap", 0.0) or 0.0),
+                    ),
+                    float(item.get("topic_alignment", 0.0) or 0.0),
+                ),
+                reverse=True,
+            )
+            logger.info(
+                "Early candidate diagnostics for question '%s' episode %s: %s",
+                question[:140],
+                episode_id,
+                near_miss_windows[:2],
+            )
 
     best_per_episode.sort(
         key=lambda item: float(item.get("citation_precision_score", 0.0) or 0.0),

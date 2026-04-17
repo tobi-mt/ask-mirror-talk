@@ -978,6 +978,7 @@ def select_citation_segments(
         segments_by_episode[int(episode_id)].append(segment)
 
     best_per_episode: list[dict] = []
+    single_quote_candidates: list[dict] = []
     for episode_id, segments in segments_by_episode.items():
         episode_context = episode_meta.get(int(episode_id))
         if not episode_context or not segments:
@@ -1084,25 +1085,30 @@ def select_citation_segments(
                         "is_strongest_match": False,
                     }
 
-        if (
-            best_candidate
-            and float(best_candidate["citation_precision_score"]) >= 0.44
-            and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
-            and int(best_candidate.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
-            and float(best_candidate.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
-            and float(best_candidate.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
-            and float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
-            and _looks_self_contained_quote(best_candidate.get("text", ""))
-            and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
-            and not (
-                reflective_guidance
-                and not wants_personal_example
-                and _looks_anecdotal_personal_story(best_candidate.get("text", ""))
-            )
-        ):
-            best_per_episode.append(best_candidate)
+        if best_candidate:
+            single_quote_candidates.append(best_candidate)
+            if (
+                float(best_candidate["citation_precision_score"]) >= 0.44
+                and float(best_candidate.get("citation_question_overlap", 0.0) or 0.0) >= (0.12 if reflective_guidance and not wants_personal_example else 0.10)
+                and int(best_candidate.get("citation_question_overlap_count", 0) or 0) >= min_question_overlap_count
+                and float(best_candidate.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
+                and float(best_candidate.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
+                and float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
+                and _looks_self_contained_quote(best_candidate.get("text", ""))
+                and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
+                and not (
+                    reflective_guidance
+                    and not wants_personal_example
+                    and _looks_anecdotal_personal_story(best_candidate.get("text", ""))
+                )
+            ):
+                best_per_episode.append(best_candidate)
 
     best_per_episode.sort(
+        key=lambda item: float(item.get("citation_precision_score", 0.0) or 0.0),
+        reverse=True,
+    )
+    single_quote_candidates.sort(
         key=lambda item: float(item.get("citation_precision_score", 0.0) or 0.0),
         reverse=True,
     )
@@ -1122,7 +1128,7 @@ def select_citation_segments(
     ]
 
     calibrated_single = [
-        item for item in best_per_episode
+        item for item in single_quote_candidates
         if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.39
         and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.08
         and int(item.get("citation_question_overlap_count", 0) or 0) >= 1
@@ -1136,7 +1142,7 @@ def select_citation_segments(
     ]
 
     reflective_single = [
-        item for item in best_per_episode
+        item for item in single_quote_candidates
         if float(item.get("citation_precision_score", 0.0) or 0.0) >= 0.34
         and float(item.get("citation_question_overlap", 0.0) or 0.0) >= 0.06
         and _looks_self_contained_quote(item.get("text", ""))

@@ -443,6 +443,19 @@ def _question_has_topic_specific_expectation(question: str) -> bool:
     return any(word in lower_q for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss"))
 
 
+def _effective_min_question_overlap_count(
+    question: str,
+    *,
+    reflective_guidance: bool,
+    wants_personal_example: bool,
+) -> int:
+    if not (reflective_guidance and not wants_personal_example):
+        return 1
+    if _question_has_topic_specific_expectation(question):
+        return 1
+    return 2
+
+
 def _single_quote_rejection_reasons(
     question: str,
     item: dict,
@@ -1046,7 +1059,11 @@ def select_citation_segments(
     reflective_guidance = _is_reflective_guidance_question(question)
     wants_progress_evidence = _question_wants_progress_evidence(question)
     wants_courage_theme = _question_wants_courage_theme(question)
-    min_question_overlap_count = 2 if reflective_guidance and not wants_personal_example else 1
+    min_question_overlap_count = _effective_min_question_overlap_count(
+        question,
+        reflective_guidance=reflective_guidance,
+        wants_personal_example=wants_personal_example,
+    )
 
     episode_meta = {
         int(item["episode"]["id"]): item

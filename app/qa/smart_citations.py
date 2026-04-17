@@ -443,6 +443,58 @@ def _question_has_topic_specific_expectation(question: str) -> bool:
     return any(word in lower_q for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss"))
 
 
+def _single_quote_rejection_reasons(
+    question: str,
+    item: dict,
+    *,
+    min_precision: float = 0.34,
+    min_question_overlap: float = 0.06,
+) -> list[str]:
+    text = item.get("text", "") or ""
+    reasons: list[str] = []
+    precision = float(item.get("citation_precision_score", 0.0) or 0.0)
+    question_overlap = float(item.get("citation_question_overlap", 0.0) or 0.0)
+    topic_alignment = float(item.get("citation_topic_alignment", 0.0) or 0.0)
+
+    if precision < min_precision:
+        reasons.append(f"precision<{min_precision:.2f}")
+    if question_overlap < min_question_overlap:
+        reasons.append(f"question_overlap<{min_question_overlap:.2f}")
+    if not _looks_self_contained_quote(text):
+        reasons.append("not_self_contained")
+    if _looks_bridge_or_polite_exchange(text):
+        reasons.append("bridge_or_polite")
+    if _looks_conversational_or_setup(text):
+        reasons.append("conversational_or_setup")
+    if _looks_generic_source_moment(text):
+        reasons.append("generic_source")
+    if _looks_anecdotal_personal_story(text):
+        reasons.append("anecdotal_story")
+    if not (
+        _has_declarative_guidance_shape(text)
+        or topic_alignment >= 0.25
+    ):
+        reasons.append("no_guidance_or_strong_topic_alignment")
+    if _question_has_topic_specific_expectation(question) and topic_alignment < 0.15:
+        reasons.append("topic_alignment_too_low")
+    return reasons
+
+
+def diagnose_single_quote_candidates(question: str, candidates: list[dict], limit: int = 5) -> list[dict]:
+    diagnosed: list[dict] = []
+    for item in candidates[:limit]:
+        diagnosed.append({
+            "episode_id": (item.get("episode") or {}).get("id"),
+            "episode_title": (item.get("episode") or {}).get("title"),
+            "precision": float(item.get("citation_precision_score", 0.0) or 0.0),
+            "question_overlap": float(item.get("citation_question_overlap", 0.0) or 0.0),
+            "topic_alignment": float(item.get("citation_topic_alignment", 0.0) or 0.0),
+            "text": item.get("text", ""),
+            "reasons": _single_quote_rejection_reasons(question, item),
+        })
+    return diagnosed
+
+
 def _is_standalone_evidence(text_value: str) -> bool:
     lower = (text_value or "").strip().lower()
     if not lower:
@@ -1196,6 +1248,24 @@ def select_citation_segments(
         selected = best_per_episode[:(2 if reflective_guidance and not wants_personal_example else max_citations)]
 
     if not is_meta_question:
+        should_log_single_quote_diagnostics = (
+            reflective_guidance
+            and not wants_personal_example
+            and not wants_progress_evidence
+            and not wants_courage_theme
+            and not strong
+            and not calibrated_single
+            and not reflective_single
+            and single_quote_candidates
+        )
+
+        if should_log_single_quote_diagnostics:
+            logger.info(
+                "Single-quote diagnostics for question '%s': %s",
+                question[:140],
+                diagnose_single_quote_candidates(question, single_quote_candidates, limit=3),
+            )
+
         # For normal questions, still refuse citations if we can't find at least
         # one clearly solid supporting moment.
         if not strong and not calibrated_single and not reflective_single and len(selected) > 0:

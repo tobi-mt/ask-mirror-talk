@@ -443,6 +443,21 @@ def _question_has_topic_specific_expectation(question: str) -> bool:
     return any(word in lower_q for word in ("boundar", "forgiv", "trust", "betray", "grief", "loss"))
 
 
+def _has_explicit_topic_specific_support(question: str, text_value: str, topic_alignment: float) -> bool:
+    if not _question_has_topic_specific_expectation(question):
+        return True
+    lower = (text_value or "").strip().lower()
+    if topic_alignment >= 0.25:
+        return True
+    if any(marker in lower for marker in _BOUNDARY_THEME_MARKERS) and any(word in (question or "").lower() for word in ("boundar", "guilt", "say no")):
+        return True
+    if any(marker in lower for marker in _FORGIVENESS_THEME_MARKERS) and any(word in (question or "").lower() for word in ("forgiv", "trust", "betray")):
+        return True
+    if any(marker in lower for marker in _GRIEF_THEME_MARKERS) and any(word in (question or "").lower() for word in ("grief", "loss")):
+        return True
+    return False
+
+
 def _effective_min_question_overlap_count(
     question: str,
     *,
@@ -1249,6 +1264,11 @@ def select_citation_segments(
                 and float(best_candidate.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
                 and float(best_candidate.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
                 and float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
+                and _has_explicit_topic_specific_support(
+                    question,
+                    best_candidate.get("text", ""),
+                    float(best_candidate.get("citation_topic_alignment", 0.0) or 0.0),
+                )
                 and _looks_self_contained_quote(best_candidate.get("text", ""))
                 and not _looks_bridge_or_polite_exchange(best_candidate.get("text", ""))
                 and not (
@@ -1303,6 +1323,11 @@ def select_citation_segments(
         and float(item.get("citation_progress_alignment", 0.0) or 0.0) >= (0.25 if wants_progress_evidence else 0.0)
         and float(item.get("citation_courage_alignment", 0.0) or 0.0) >= (0.25 if wants_courage_theme else 0.0)
         and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.25 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
+        and _has_explicit_topic_specific_support(
+            question,
+            item.get("text", ""),
+            float(item.get("citation_topic_alignment", 0.0) or 0.0),
+        )
     ]
 
     calibrated_single = [
@@ -1317,6 +1342,11 @@ def select_citation_segments(
         and not _looks_generic_source_moment(item.get("text", ""))
         and not _looks_anecdotal_personal_story(item.get("text", ""))
         and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (0.15 if float(item.get("citation_topic_alignment", 0.0) or 0.0) > 0 else 0.0)
+        and _has_explicit_topic_specific_support(
+            question,
+            item.get("text", ""),
+            float(item.get("citation_topic_alignment", 0.0) or 0.0),
+        )
     ]
 
     reflective_single = [
@@ -1334,6 +1364,11 @@ def select_citation_segments(
         )
         and float(item.get("citation_topic_alignment", 0.0) or 0.0) >= (
             0.15 if _question_has_topic_specific_expectation(question) else 0.0
+        )
+        and _has_explicit_topic_specific_support(
+            question,
+            item.get("text", ""),
+            float(item.get("citation_topic_alignment", 0.0) or 0.0),
         )
     ]
 

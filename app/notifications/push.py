@@ -281,35 +281,35 @@ def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tupl
 
     title_options = [
         "Before the day ends",
-        "Before today closes",
-        "Stay with this a little longer",
         "One quiet return tonight",
-        "Come back to what stayed",
+        "Sit with what stayed",
+        "A gentler close to the day",
+        "Come back before rest",
     ]
 
     if is_returning and recent_theme:
         body_options = [
             f"Return to what stayed with you today, especially in {theme_phrase}.",
-            f"There may still be something waiting for you in {theme_phrase} tonight.",
-            f"Come back to what still feels unfinished in {theme_phrase}.",
-            f"If {theme_phrase} stayed with you today, follow it a little further tonight.",
-            f"Before sleep, return to what felt most alive in {theme_phrase}.",
+            f"If {theme_phrase} is still with you tonight, follow it gently a little further.",
+            f"Before rest, sit with what still feels unfinished in {theme_phrase}.",
+            f"Let tonight hold one more honest moment in {theme_phrase}.",
+            f"Come back to the part of {theme_phrase} that still feels alive tonight.",
         ]
     elif is_returning:
         body_options = [
             "Return to what stayed with you today.",
-            "Come back to what still feels unfinished from today.",
-            "Before sleep, follow what stayed with you a little further.",
-            "One honest question tonight can help close the day with clarity.",
-            "There may still be something from today asking for your attention.",
+            "Before rest, come back to what still feels unfinished from today.",
+            "Let one honest question help you close the day a little more gently.",
+            "There may still be something from today asking for your quiet attention.",
+            "Follow what stayed with you a little further before the day closes.",
         ]
     else:
         body_options = [
             "Return to what stayed with you today.",
-            "One quiet question tonight can help you close the day with clarity.",
+            "One quiet question tonight can help you close the day with more peace.",
             "Before sleep, give the day one honest moment of reflection.",
-            "Come back to what still feels present before today ends.",
-            "A calm return tonight can change how tomorrow begins.",
+            "Come back to what still feels present before today slips away.",
+            "A calm return tonight can soften how tomorrow begins.",
         ]
 
     title = title_options[variant]

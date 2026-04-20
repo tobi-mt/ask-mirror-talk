@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.89 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.95 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -335,8 +335,8 @@
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
-          ? `What stayed with me most from today's reflection on ${todayTheme}, and why is it still with me tonight?`
-          : `What stayed with me most from today's reflection, and why is it still with me tonight?`,
+          ? `Before the day closes, what from today's reflection on ${todayTheme} is still asking for my attention tonight?`
+          : `Before the day closes, what from today's reflection is still asking for my attention tonight?`,
         strategy: 'today_last_session',
         theme: todayTheme || null
       };
@@ -346,8 +346,8 @@
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
-          ? `What from today still wants my attention tonight, especially around ${todayTheme}?`
-          : `What from today still wants my attention tonight?`,
+          ? `What did I write down today around ${todayTheme} that deserves one more quiet look before rest?`
+          : `What did I write down today that deserves one more quiet look before rest?`,
         strategy: 'today_note',
         theme: todayTheme || null
       };
@@ -357,8 +357,8 @@
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
         question: todayTheme
-          ? `What truth from today's saved insight on ${todayTheme} do I need to carry into tomorrow?`
-          : `What truth from today's saved insight do I need to carry into tomorrow?`,
+          ? `What truth from today's saved insight on ${todayTheme} do I want to carry gently into tomorrow?`
+          : `What truth from today's saved insight do I want to carry gently into tomorrow?`,
         strategy: 'today_saved_insight',
         theme: todayTheme || null
       };
@@ -372,7 +372,7 @@
       ].filter(Boolean).filter(theme => theme !== todayTheme);
       const rotatedTheme = chooseRotatingTheme(recapCandidates, recap.topTheme, RECENT_NIGHT_THEMES_KEY);
       return {
-        question: `What keeps returning for me around ${rotatedTheme}, and what is it asking me to notice before the day ends?`,
+        question: `What keeps returning for me around ${rotatedTheme}, and what is it inviting me to notice before I rest?`,
         strategy: 'weekly_recap',
         theme: rotatedTheme
       };
@@ -383,14 +383,14 @@
         rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, latestQotd.theme);
       }
       return {
-        question: `What is today's question still trying to show me: ${latestQotd.question}`,
+        question: `What is today's question still trying to show me tonight: ${latestQotd.question}`,
         strategy: 'qotd_fallback',
         theme: latestQotd.theme || null
       };
     }
 
     return {
-      question: 'What from today is still asking for my attention before the day ends?',
+      question: 'What from today is still asking for my quiet attention before the day ends?',
       strategy: 'default',
       theme: null
     };
@@ -1690,6 +1690,155 @@
     return value.slice(0, Math.max(0, maxLen - 1)).trimEnd() + '…';
   }
 
+  function normalizeReflectionText(text) {
+    return String(text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^\s+|\s+$/g, '');
+  }
+
+  function splitReflectionSentences(text) {
+    const clean = normalizeReflectionText(text);
+    if (!clean) return [];
+    const matches = clean.match(/[^.!?]+[.!?]?/g) || [clean];
+    return matches
+      .map(sentence => sentence.trim())
+      .filter(Boolean);
+  }
+
+  function getThemeReflectionKeywords(theme) {
+    const lower = String(theme || '').toLowerCase().trim();
+    const tokens = lower.split(/[^a-z]+/).filter(token => token.length >= 4);
+    const map = {
+      relationships: ['relationship', 'relationships', 'love', 'connection', 'respect', 'partnership'],
+      relationship: ['relationship', 'relationships', 'love', 'connection', 'respect', 'partnership'],
+      grief: ['grief', 'loss', 'mourning', 'sorrow', 'healing', 'heartache'],
+      healing: ['healing', 'repair', 'restore', 'restoration', 'wholeness', 'mend'],
+      forgiveness: ['forgiveness', 'forgive', 'release', 'trust', 'reconcile'],
+      boundaries: ['boundaries', 'boundary', 'needs', 'self-respect', 'guilt', 'protect'],
+      leadership: ['leadership', 'leader', 'leaders', 'leading', 'influence', 'stewardship'],
+      courage: ['courage', 'fear', 'brave', 'bravery', 'risk', 'bold'],
+      faith: ['faith', 'trust', 'hope', 'prayer', 'god', 'belief'],
+      selfworth: ['worth', 'worthy', 'value', 'identity', 'comparison', 'confidence'],
+      'self-worth': ['worth', 'worthy', 'value', 'identity', 'comparison', 'confidence'],
+      growth: ['growth', 'growing', 'becoming', 'progress', 'change', 'transform'],
+      peace: ['peace', 'calm', 'rest', 'quiet', 'steady', 'stillness'],
+      'inner-peace': ['peace', 'calm', 'rest', 'quiet', 'steady', 'stillness'],
+      'inner peace': ['peace', 'calm', 'rest', 'quiet', 'steady', 'stillness'],
+      purpose: ['purpose', 'calling', 'meaning', 'direction', 'clarity'],
+      vulnerability: ['vulnerability', 'honesty', 'open', 'authentic', 'truth'],
+      fear: ['fear', 'anxiety', 'doubt', 'brave', 'courage'],
+      empowerment: ['voice', 'confidence', 'power', 'agency', 'speak'],
+      transition: ['transition', 'change', 'season', 'move', 'beginning'],
+      communication: ['conversation', 'communicate', 'listening', 'speak', 'repair'],
+      community: ['community', 'belonging', 'support', 'together', 'care'],
+      identity: ['identity', 'becoming', 'name', 'self', 'worth']
+    };
+    const normalizedKey = lower.replace(/[^a-z]+/g, '');
+    return Array.from(new Set([].concat(tokens, map[lower] || [], map[normalizedKey] || [])));
+  }
+
+  function scoreReflectionSentence(sentence, options) {
+    const text = trimDanglingHeadlineTail(sentence);
+    const lower = text.toLowerCase();
+    const words = text.split(/\s+/).filter(Boolean);
+    if (!text || words.length < 5) return -100;
+
+    let score = 0;
+    const length = text.length;
+    if (length >= 58 && length <= 150) score += 5;
+    else if (length >= 42 && length <= 175) score += 3;
+    else if (length > 200) score -= 4;
+    else score -= 1;
+
+    if (words.length >= 9 && words.length <= 22) score += 3;
+    else if (words.length >= 6 && words.length <= 26) score += 1;
+    else if (words.length > 30) score -= 3;
+
+    if (/[.!?]$/.test(String(sentence || '').trim())) score += 1;
+    if (!/[,:;]\s*(and|or|but)$/i.test(text)) score += 1;
+
+    if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(lower)) score -= 8;
+    if (/^(this reflection|what stayed with me|what likely stayed with you|one thing that stood out|in this reflection)\b/i.test(lower)) score -= 8;
+    if (/^(i|i['’]?m|i['’]?ve|i['’]?d|my)\b/i.test(lower)) score -= 3;
+    if (/^(there is|there are|it is|it can be|sometimes|often|maybe)\b/i.test(lower)) score -= 1;
+
+    if (/\b(you|your|healing|grief|forgiveness|boundaries|courage|faith|peace|trust|hope|love|rest|clarity|strength|vulnerability|leadership|connection|respect|worth)\b/i.test(lower)) {
+      score += 3;
+    }
+
+    if (/\b(means|begins|starts|requires|invites|calls|creates|grows|becomes|allows|asks|teaches|reveals|reminds)\b/i.test(lower)) {
+      score += 2;
+    }
+
+    if (/\b(stay with|return to|carry|notice|trust|allow|honor|protect|release|choose|create space|hold|listen)\b/i.test(lower)) {
+      score += 2;
+    }
+
+    if (/\b(journey|process|season|practice|rhythm|steady|gentle|honest|sacred|quiet)\b/i.test(lower)) {
+      score += 1;
+    }
+
+    if (/\b(maybe|perhaps|for example|for instance|kind of|sort of|really|actually)\b/i.test(lower)) score -= 2;
+    if (/\b(podcast|episode|guest|speaker|story|program|tool)\b/i.test(lower)) score -= 3;
+    if (/\b(thank you|welcome back|let me ask|one thing i love|what i want to ask)\b/i.test(lower)) score -= 6;
+
+    const themeKeywords = (options && options.themeKeywords) || [];
+    const matchedKeywords = themeKeywords.filter(keyword => lower.includes(keyword));
+    if (matchedKeywords.length >= 2) score += 4;
+    else if (matchedKeywords.length === 1) score += 2;
+
+    if ((options && options.preferUniversal) && !/^(i|i['’]?m|i['’]?ve|my)\b/i.test(lower)) score += 2;
+    if ((options && options.preferShort) && length <= 120) score += 1;
+    if ((options && options.excludeText) && lower === String(options.excludeText || '').toLowerCase().trim()) score -= 10;
+
+    return score;
+  }
+
+  function selectReflectionLine(text, options) {
+    const sentences = splitReflectionSentences(text);
+    if (!sentences.length) return '';
+
+    let best = '';
+    let bestScore = -Infinity;
+
+    sentences.forEach(sentence => {
+      const cleaned = trimDanglingHeadlineTail(sentence);
+      const score = scoreReflectionSentence(cleaned, options);
+      if (score > bestScore || (score === bestScore && cleaned.length > best.length)) {
+        best = cleaned;
+        bestScore = score;
+      }
+    });
+
+    return best || trimDanglingHeadlineTail(sentences[0]);
+  }
+
+  function selectSupportingReflectionLine(text, theme, headline) {
+    const clean = normalizeReflectionText(text);
+    if (!clean) return '';
+
+    const candidate = selectReflectionLine(clean, {
+      themeKeywords: getThemeReflectionKeywords(theme),
+      preferUniversal: true,
+      excludeText: headline || ''
+    });
+
+    if (candidate && trimDanglingHeadlineTail(candidate).toLowerCase() !== trimDanglingHeadlineTail(headline || '').toLowerCase()) {
+      return candidate;
+    }
+
+    const sentences = splitReflectionSentences(clean);
+    const alt = sentences.find(sentence => {
+      const scored = scoreReflectionSentence(sentence, {
+        themeKeywords: getThemeReflectionKeywords(theme),
+        preferUniversal: true,
+        excludeText: headline || ''
+      });
+      return scored >= 4 && trimDanglingHeadlineTail(sentence).toLowerCase() !== trimDanglingHeadlineTail(headline || '').toLowerCase();
+    });
+    return trimDanglingHeadlineTail(alt || candidate || clean);
+  }
+
   function getThemeStarter(theme) {
     return THEME_STARTERS[theme] || `What does Mirror Talk say about ${String(theme || 'this theme').toLowerCase()}?`;
   }
@@ -1821,15 +1970,78 @@
     return null;
   }
 
-  function extractInsightExcerpt(answerText) {
-    const clean = String(answerText || '')
-      .replace(/\s+/g, ' ')
-      .replace(/^\s+|\s+$/g, '');
+  function extractInsightExcerpt(answerText, theme) {
+    const clean = normalizeReflectionText(answerText);
     if (!clean) return '';
 
-    const sentences = clean.match(/[^.!?]+[.!?]+/g) || [];
-    const candidate = sentences.find(sentence => sentence.trim().length >= 70) || sentences[0] || clean;
+    const headlineCandidate = selectReflectionLine(clean, {
+      themeKeywords: getThemeReflectionKeywords(theme),
+      preferUniversal: true,
+      preferShort: true
+    }) || clean;
+    const candidate = selectSupportingReflectionLine(clean, theme, headlineCandidate) || headlineCandidate;
     return truncateText(candidate.trim(), 210);
+  }
+
+  function extractShareHeadline(insight) {
+    const excerpt = String(insight.excerpt || '').trim();
+    const themeKeywords = getThemeReflectionKeywords(insight.theme || '');
+    const answerHeadline = selectReflectionLine(insight.answer || '', {
+      themeKeywords,
+      preferUniversal: true,
+      preferShort: true
+    });
+    const answerExcerpt = extractInsightExcerpt(insight.answer || '', insight.theme || '');
+    if (!excerpt) {
+      return trimDanglingHeadlineTail(answerHeadline || answerExcerpt || truncateText(insight.question || '', 140));
+    }
+
+    let candidate = selectReflectionLine(excerpt, {
+      themeKeywords,
+      preferUniversal: true,
+      preferShort: true,
+      excludeText: answerExcerpt
+    });
+
+    candidate = trimDanglingHeadlineTail(candidate || excerpt);
+    if (isWeakShareHeadlineCandidate(candidate) && answerExcerpt) {
+      candidate = trimDanglingHeadlineTail(answerHeadline || answerExcerpt);
+    }
+
+    return candidate || trimDanglingHeadlineTail(truncateText(insight.question || '', 140));
+  }
+
+  function trimDanglingHeadlineTail(text) {
+    let cleaned = String(text || '')
+      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    cleaned = cleaned
+      .replace(/[,:;]\s*(and|or|but)$/i, '')
+      .replace(/\b(and|or|but|because|which|that|about|around|into|with|for|of|on|to)$/i, '')
+      .trim()
+      .replace(/[,:;]+$/g, '')
+      .trim();
+
+    return cleaned;
+  }
+
+  function isWeakShareHeadlineCandidate(text) {
+    const cleaned = trimDanglingHeadlineTail(text);
+    const lower = cleaned.toLowerCase();
+    if (!cleaned) return true;
+    if (cleaned.length < 32) return true;
+    if (
+      lower.startsWith('what stayed with me') ||
+      lower.startsWith('what from today') ||
+      lower.startsWith('what keeps returning for me') ||
+      lower.startsWith("what is today's question") ||
+      lower.startsWith('what needs my attention most')
+    ) {
+      return true;
+    }
+    return false;
   }
 
   function formatRelativeTime(timestamp) {
@@ -1903,7 +2115,7 @@
 
   function saveLastSession(question, answer, themeHint) {
     const theme = themeHint || inferTheme(question, answer) || '';
-    const excerpt = extractInsightExcerpt(answer);
+    const excerpt = extractInsightExcerpt(answer, theme);
     saveLastSessionRecord({
       question,
       answer: answer.substring(0, 2000),
@@ -3475,6 +3687,9 @@
     const backup = allNotes.slice(0, 8).map(entry => ({
       prompt: clampText(entry && entry.prompt, 120),
       note: clampText(entry && entry.note, 280),
+      theme: clampText(entry && entry.theme, 40),
+      sourceQuestion: clampText(entry && entry.sourceQuestion, 120),
+      sourceExcerpt: clampText(entry && entry.sourceExcerpt, 180),
       savedAt: Number((entry && entry.savedAt) || Date.now()),
     }));
     try { localStorage.setItem('amt_reflect_notes', JSON.stringify(allNotes)); } catch (e) {}
@@ -4692,13 +4907,33 @@
     document.body.removeChild(a);
   }
 
+  function buildJournalReflectionInsight(entry) {
+    const note = String((entry && entry.note) || '').trim();
+    const prompt = String((entry && entry.prompt) || '').trim();
+    const theme = String((entry && entry.theme) || inferTheme(prompt, note) || 'Reflection').trim();
+    const sourceExcerpt = String((entry && entry.sourceExcerpt) || '').trim();
+    const answerBody = [note, sourceExcerpt].filter(Boolean).join(' ');
+
+    return normalizeInsightRecord({
+      question: String((entry && entry.sourceQuestion) || prompt || 'What stayed with me from this reflection?').trim(),
+      answer: answerBody || note || prompt,
+      excerpt: note || sourceExcerpt || prompt,
+      theme,
+      savedAt: Number((entry && entry.savedAt) || Date.now())
+    });
+  }
+
   function showShareModal(dataUrl, caption, options) {
     const modalOptions = options || {};
-    const modalTitle = modalOptions.title || 'Share your achievement';
-    const modalHint = modalOptions.hint || 'On supported phones, share the image directly from the system share sheet. If that is not available, copy the link or download the card.';
+    const modalTitle = modalOptions.title || 'Share your reflection';
+    const modalHint = modalOptions.hint || 'This card is ready to share. On supported phones, open the system share sheet and send it straight into your message or social app.';
     const downloadName = modalOptions.filename || 'mirror-talk-achievement.png';
     const shareContextLabel = modalOptions.contextLabel || 'Reflection card';
-    const invitePrompt = modalOptions.invitePrompt || 'Share the reflection itself, or pass on a direct Mirror Talk link to someone who needs it.';
+    const invitePrompt = modalOptions.invitePrompt || 'Start with one person who may need this reflection today, or save it to keep close.';
+    const previewText = String(modalOptions.previewText || '').trim();
+    const nativeShareLabel = modalOptions.nativeShareLabel || 'Share card now';
+    const copyTextLabel = modalOptions.copyTextLabel || 'Copy ready caption';
+    const copyLinkLabel = modalOptions.copyLinkLabel || 'Copy reflection link';
 
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
@@ -4720,7 +4955,7 @@
 
     const nativeShareBtn = canNativeShare
       ? `<button class="amt-scm-btn amt-scm-native" id="amt-scm-native-btn">
-           📲 Share with image
+           📲 ${escapeHtml(nativeShareLabel)}
          </button>`
       : '';
 
@@ -4738,15 +4973,16 @@
         <h3 class="amt-scm-title">${escapeHtml(modalTitle)}</h3>
         <p class="amt-scm-context">${escapeHtml(shareContextLabel)}</p>
         <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
+        ${previewText ? `<p class="amt-scm-preview-line">“${escapeHtml(previewText)}”</p>` : ''}
         <p class="amt-scm-hint">${escapeHtml(modalHint)}</p>
         <p class="amt-scm-invite">${escapeHtml(invitePrompt)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
           <button class="amt-scm-btn amt-scm-copy-link">
-            🔗 Copy link
+            🔗 ${escapeHtml(copyLinkLabel)}
           </button>
           <a class="amt-scm-btn amt-scm-download" href="${dataUrl}" download="${escapeHtml(downloadName)}">⬇️ Download image</a>
-          <button class="amt-scm-btn amt-scm-copy">📋 Copy text</button>
+          <button class="amt-scm-btn amt-scm-copy">📋 ${escapeHtml(copyTextLabel)}</button>
         </div>
         <p class="amt-scm-platform-note" style="display:none;"></p>
       </div>
@@ -4822,7 +5058,7 @@
           await navigator.clipboard.writeText(pageUrl);
           markShareComplete();
           this.textContent = '✅ Link copied';
-          setTimeout(() => { this.textContent = '🔗 Copy link'; }, 2500);
+          setTimeout(() => { this.textContent = `🔗 ${copyLinkLabel}`; }, 2500);
         } catch (e) {
           this.textContent = '⚠️ Copy failed';
         }
@@ -4835,7 +5071,7 @@
         await navigator.clipboard.writeText(shareText);
         markShareComplete();
         this.textContent = '✅ Copied!';
-        setTimeout(() => { this.textContent = '📋 Copy text'; }, 2500);
+        setTimeout(() => { this.textContent = `📋 ${copyTextLabel}`; }, 2500);
       } catch (e) {
         this.textContent = '⚠️ Copy failed';
       }
@@ -4868,7 +5104,7 @@
     const question = String((insight && insight.question) || '').trim();
     const answer = String((insight && insight.answer) || '').trim();
     const theme = String((insight && insight.theme) || inferTheme(question, answer) || 'Reflection').trim();
-    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer) || truncateText(question, 180)).trim();
+    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer, theme) || truncateText(question, 180)).trim();
 
     return {
       question,
@@ -4958,9 +5194,13 @@
         accent: '#f0c678',
         accentSoft: 'rgba(240,198,120,0.22)',
         text: '#fff7ea',
+        textSoft: 'rgba(255,247,234,0.78)',
+        panelEdge: 'rgba(255,244,220,0.30)',
+        frameGlow: 'rgba(240,198,120,0.18)',
         card: 'rgba(255,250,243,0.965)',
         cardText: '#2f261e',
-        kicker: 'A quiet return to what still feels sacred'
+        kicker: 'A quiet return to what still feels sacred',
+        motif: 'halo'
       },
       fear: {
         bg: ['#170d18', '#5f1832', '#f06f51'],
@@ -4969,9 +5209,13 @@
         accent: '#ffb29a',
         accentSoft: 'rgba(255,178,154,0.24)',
         text: '#fff0ea',
+        textSoft: 'rgba(255,240,234,0.77)',
+        panelEdge: 'rgba(255,214,203,0.28)',
+        frameGlow: 'rgba(255,178,154,0.16)',
         card: 'rgba(255,247,244,0.965)',
         cardText: '#33231f',
-        kicker: 'A reflection shaped by what fear is trying to protect'
+        kicker: 'A reflection shaped by what fear is trying to protect',
+        motif: 'ember'
       },
       healing: {
         bg: ['#0c1f24', '#15616f', '#5dc7ab'],
@@ -4980,9 +5224,13 @@
         accent: '#b8f0d6',
         accentSoft: 'rgba(184,240,214,0.22)',
         text: '#f2fffb',
+        textSoft: 'rgba(242,255,251,0.78)',
+        panelEdge: 'rgba(214,255,241,0.26)',
+        frameGlow: 'rgba(184,240,214,0.16)',
         card: 'rgba(247,255,251,0.97)',
         cardText: '#20312a',
-        kicker: 'A reflection for gentler repair and steadier ground'
+        kicker: 'A reflection for gentler repair and steadier ground',
+        motif: 'tide'
       },
       grief: {
         bg: ['#171423', '#48306f', '#8d7bf4'],
@@ -4991,9 +5239,13 @@
         accent: '#d7ccff',
         accentSoft: 'rgba(215,204,255,0.24)',
         text: '#f4f1ff',
+        textSoft: 'rgba(244,241,255,0.78)',
+        panelEdge: 'rgba(225,218,255,0.30)',
+        frameGlow: 'rgba(215,204,255,0.18)',
         card: 'rgba(250,248,255,0.965)',
         cardText: '#282434',
-        kicker: 'A reflection that stays tender without turning away'
+        kicker: 'A reflection that stays tender without turning away',
+        motif: 'veil'
       },
       relationships: {
         bg: ['#1b111d', '#6d2f52', '#ef8a84'],
@@ -5002,9 +5254,13 @@
         accent: '#ffc6bf',
         accentSoft: 'rgba(255,198,191,0.22)',
         text: '#fff1f0',
+        textSoft: 'rgba(255,241,240,0.78)',
+        panelEdge: 'rgba(255,223,218,0.28)',
+        frameGlow: 'rgba(255,198,191,0.16)',
         card: 'rgba(255,248,247,0.965)',
         cardText: '#342425',
-        kicker: 'A reflection shaped for honest connection'
+        kicker: 'A reflection shaped for honest connection',
+        motif: 'threads'
       },
       'self-worth': {
         bg: ['#1f1612', '#87522c', '#f0b763'],
@@ -5013,9 +5269,103 @@
         accent: '#ffd8a6',
         accentSoft: 'rgba(255,216,166,0.24)',
         text: '#fff6ec',
+        textSoft: 'rgba(255,246,236,0.77)',
+        panelEdge: 'rgba(255,227,188,0.28)',
+        frameGlow: 'rgba(255,216,166,0.17)',
         card: 'rgba(255,249,242,0.97)',
         cardText: '#37281e',
-        kicker: 'A reflection that returns you to your own center'
+        kicker: 'A reflection that returns you to your own center',
+        motif: 'orbit'
+      },
+      leadership: {
+        bg: ['#101925', '#244567', '#7fb9d9'],
+        orbA: 'rgba(127, 185, 217, 0.42)',
+        orbB: 'rgba(224, 243, 255, 0.16)',
+        accent: '#d4ecff',
+        accentSoft: 'rgba(212,236,255,0.20)',
+        text: '#f4fbff',
+        textSoft: 'rgba(244,251,255,0.78)',
+        panelEdge: 'rgba(214,235,248,0.24)',
+        frameGlow: 'rgba(179,224,255,0.14)',
+        card: 'rgba(248,252,255,0.97)',
+        cardText: '#1f2d36',
+        kicker: 'A reflection shaped by courage, clarity, and stewardship',
+        motif: 'beacon'
+      },
+      boundaries: {
+        bg: ['#16181f', '#35506f', '#b8d1e8'],
+        orbA: 'rgba(184, 209, 232, 0.38)',
+        orbB: 'rgba(245, 249, 255, 0.15)',
+        accent: '#e7f2ff',
+        accentSoft: 'rgba(231,242,255,0.20)',
+        text: '#f7fbff',
+        textSoft: 'rgba(247,251,255,0.78)',
+        panelEdge: 'rgba(230,240,250,0.24)',
+        frameGlow: 'rgba(201,226,246,0.14)',
+        card: 'rgba(249,252,255,0.97)',
+        cardText: '#20313c',
+        kicker: 'A reflection for steadier yeses and kinder noes',
+        motif: 'lattice'
+      },
+      courage: {
+        bg: ['#1a1010', '#7f2f1d', '#f2a35b'],
+        orbA: 'rgba(242, 163, 91, 0.42)',
+        orbB: 'rgba(255, 236, 206, 0.16)',
+        accent: '#ffd2a6',
+        accentSoft: 'rgba(255,210,166,0.22)',
+        text: '#fff6ee',
+        textSoft: 'rgba(255,246,238,0.78)',
+        panelEdge: 'rgba(255,224,195,0.26)',
+        frameGlow: 'rgba(255,210,166,0.15)',
+        card: 'rgba(255,249,244,0.97)',
+        cardText: '#34251d',
+        kicker: 'A reflection for the brave next step, not the perfect one',
+        motif: 'ember'
+      },
+      purpose: {
+        bg: ['#14151e', '#2f4a68', '#f0bf73'],
+        orbA: 'rgba(240, 191, 115, 0.40)',
+        orbB: 'rgba(255, 242, 212, 0.15)',
+        accent: '#ffe0a7',
+        accentSoft: 'rgba(255,224,167,0.20)',
+        text: '#fff8ee',
+        textSoft: 'rgba(255,248,238,0.77)',
+        panelEdge: 'rgba(255,231,193,0.25)',
+        frameGlow: 'rgba(255,224,167,0.14)',
+        card: 'rgba(255,251,245,0.97)',
+        cardText: '#32261d',
+        kicker: 'A reflection for listening to what keeps calling you forward',
+        motif: 'path'
+      },
+      forgiveness: {
+        bg: ['#161722', '#4f4878', '#cdb4ff'],
+        orbA: 'rgba(205, 180, 255, 0.40)',
+        orbB: 'rgba(243, 236, 255, 0.16)',
+        accent: '#e6d7ff',
+        accentSoft: 'rgba(230,215,255,0.20)',
+        text: '#f7f2ff',
+        textSoft: 'rgba(247,242,255,0.78)',
+        panelEdge: 'rgba(232,224,255,0.24)',
+        frameGlow: 'rgba(224,208,255,0.15)',
+        card: 'rgba(252,249,255,0.97)',
+        cardText: '#28243a',
+        kicker: 'A reflection for what softens when you release your grip',
+        motif: 'halo'
+      },
+      'inner peace': {
+        bg: ['#102128', '#1d5a64', '#9ed7db'],
+        orbA: 'rgba(158, 215, 219, 0.38)',
+        orbB: 'rgba(231, 251, 255, 0.16)',
+        accent: '#d8f5f6',
+        accentSoft: 'rgba(216,245,246,0.20)',
+        text: '#f1ffff',
+        textSoft: 'rgba(241,255,255,0.77)',
+        panelEdge: 'rgba(217,245,245,0.24)',
+        frameGlow: 'rgba(199,240,242,0.14)',
+        card: 'rgba(247,255,255,0.97)',
+        cardText: '#203033',
+        kicker: 'A reflection for coming back to a steadier inner weather',
+        motif: 'horizon'
       }
     };
 
@@ -5026,23 +5376,124 @@
       accent: '#f5cf98',
       accentSoft: 'rgba(245,207,152,0.24)',
       text: '#fff7ed',
+      textSoft: 'rgba(255,247,237,0.77)',
+      panelEdge: 'rgba(255,229,191,0.26)',
+      frameGlow: 'rgba(245,207,152,0.16)',
       card: 'rgba(255,249,242,0.97)',
       cardText: '#31251c',
-      kicker: 'A reflection worth keeping close'
+      kicker: 'A reflection worth keeping close',
+      motif: 'orbit'
     };
   }
 
-  function extractShareHeadline(insight) {
-    const excerpt = String(insight.excerpt || '').trim();
-    if (!excerpt) return truncateText(insight.question || '', 140);
-    const sentences = excerpt.match(/[^.!?]+[.!?]?/g) || [excerpt];
-    const candidate = sentences
-      .map(s => s.trim())
-      .find(s => s.length >= 36 && s.length <= 170) || sentences[0].trim();
-    return String(candidate)
-      .replace(/^["'“”]+|["'“”]+$/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+  function drawThemeArtDirection(ctx, style, W, H, variant) {
+    const motif = String(style.motif || 'orbit');
+    ctx.save();
+
+    if (motif === 'halo') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(W * 0.72, H * 0.25, 168, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(W * 0.72, H * 0.25, 118, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (motif === 'ember') {
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.arc(150 + (i * 120), H - 150 - (i % 2 === 0 ? 10 : 28), 4 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (motif === 'tide') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(90, 900 + (i * 34));
+        ctx.bezierCurveTo(260, 860 + (i * 24), 520, 960 + (i * 24), 940, 900 + (i * 34));
+        ctx.stroke();
+      }
+    } else if (motif === 'veil') {
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      ctx.beginPath();
+      ctx.moveTo(0, H * 0.58);
+      ctx.bezierCurveTo(W * 0.24, H * 0.48, W * 0.48, H * 0.70, W, H * 0.58);
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
+      ctx.closePath();
+      ctx.fill();
+    } else if (motif === 'threads') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.055)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(94, 260);
+      ctx.bezierCurveTo(260, 180, 440, 190, 620, 300);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(420, 180);
+      ctx.bezierCurveTo(620, 240, 760, 220, 948, 146);
+      ctx.stroke();
+    } else if (motif === 'orbit') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(W * 0.54, H * 0.32, 320, 118, -0.28, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(W * 0.5, H * 0.72, 370, 142, 0.18, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (motif === 'beacon') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.065)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.62, 92);
+      ctx.lineTo(W * 0.62, H - 190);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(W * 0.62, 210);
+      ctx.lineTo(W - 92, 210);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(W * 0.62, 362);
+      ctx.lineTo(W - 132, 362);
+      ctx.stroke();
+    } else if (motif === 'lattice') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(120 + (i * 70), 160);
+        ctx.lineTo(210 + (i * 70), H - 150);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(W - 120 - (i * 70), 160);
+        ctx.lineTo(W - 210 - (i * 70), H - 150);
+        ctx.stroke();
+      }
+    } else if (motif === 'path') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.15, H - 180);
+      ctx.bezierCurveTo(W * 0.34, H - 290, W * 0.50, H - 430, W * 0.82, 220);
+      ctx.stroke();
+    } else if (motif === 'horizon') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(92, H * 0.52);
+      ctx.lineTo(W - 92, H * 0.52);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(W * 0.72, H * 0.52, 82, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
   }
 
   function splitHeadlineForSpotlight(line) {
@@ -5119,6 +5570,8 @@
     ctx.fillStyle = orbB;
     ctx.fillRect(0, 0, W, H);
 
+    drawThemeArtDirection(ctx, style, W, H, variant);
+
     const gloss = ctx.createLinearGradient(0, 0, W, H * 0.52);
     gloss.addColorStop(0, 'rgba(255,255,255,0.42)');
     gloss.addColorStop(0.18, 'rgba(255,255,255,0.16)');
@@ -5133,13 +5586,41 @@
     ctx.closePath();
     ctx.fill();
 
+    const verticalGlow = ctx.createLinearGradient(0, 0, 0, H);
+    verticalGlow.addColorStop(0, 'rgba(255,255,255,0.10)');
+    verticalGlow.addColorStop(0.32, 'rgba(255,255,255,0.03)');
+    verticalGlow.addColorStop(1, 'rgba(0,0,0,0.16)');
+    ctx.fillStyle = verticalGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    const vignette = ctx.createRadialGradient(W * 0.5, H * 0.52, H * 0.16, W * 0.5, H * 0.52, H * 0.88);
+    vignette.addColorStop(0, 'rgba(255,255,255,0)');
+    vignette.addColorStop(0.62, 'rgba(0,0,0,0.03)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.24)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
     ctx.fillStyle = 'rgba(255,255,255,0.045)';
     ctx.fillRect(54, 54, W - 108, H - 108);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.035)';
+    ctx.lineWidth = 1;
+    for (let y = 76; y < H - 76; y += 84) {
+      ctx.beginPath();
+      ctx.moveTo(70, y);
+      ctx.lineTo(W - 70, y);
+      ctx.stroke();
+    }
 
     for (let i = 0; i < 1200; i++) {
       ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.012)';
       ctx.fillRect(Math.random() * W, Math.random() * H, 1.2, 1.2);
     }
+
+    ctx.strokeStyle = style.frameGlow || 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 8;
+    _roundRect(ctx, 32, 32, W - 64, H - 64, 42);
+    ctx.stroke();
 
     ctx.strokeStyle = 'rgba(255,255,255,0.16)';
     ctx.lineWidth = 1.8;
@@ -5154,16 +5635,31 @@
 
   function drawShareFooter(ctx, style, W, y, align) {
     const footerX = align === 'left' ? 96 : W / 2;
+    const lineLeft = align === 'left' ? 96 : W / 2 - 168;
+    const lineRight = align === 'left' ? 442 : W / 2 + 168;
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(lineLeft, y - 26);
+    ctx.lineTo(lineRight, y - 26);
+    ctx.stroke();
+
     ctx.fillStyle = style.accent;
     ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = align;
     ctx.fillText('A saved reflection from the Mirror Talk library', footerX, y);
 
+    ctx.shadowColor = 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
     ctx.fillStyle = style.text;
     ctx.font = '700 36px Georgia, serif';
     ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, y + 88);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.74)';
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.74)';
     ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, y + 130);
   }
@@ -5208,9 +5704,13 @@
     );
     const firstBoxHeight = 34 + firstMetrics.height;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
     _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
     ctx.fill();
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.20)';
+    ctx.lineWidth = 1.1;
+    _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
+    ctx.stroke();
 
     ctx.fillStyle = '#fff9f1';
     drawFittedCanvasText(ctx, {
@@ -5241,23 +5741,6 @@
       maxSize: 76,
       minSize: 42,
       lineHeightRatio: 1.13
-    });
-
-    const footerTop = H - 160;
-    const questionY = Math.min(footerTop - 120, secondY + secondMetrics.height + 82);
-    ctx.fillStyle = 'rgba(255,255,255,0.74)';
-    drawFittedCanvasText(ctx, {
-      text: truncateText(normalized.question, 120),
-      x: 96,
-      y: questionY,
-      maxWidth: W - 220,
-      maxHeight: 90,
-      maxLines: 2,
-      align: 'left',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 28,
-      minSize: 18,
-      lineHeightRatio: 1.2
     });
 
     ctx.fillStyle = style.accent;
@@ -5339,22 +5822,6 @@
       }
     }
 
-    const footerTop = H - 154;
-    const questionY = Math.min(footerTop - 96, Math.max(944, runningY + 24));
-    ctx.fillStyle = 'rgba(255,255,255,0.76)';
-    drawFittedCanvasText(ctx, {
-      text: truncateText(normalized.question, 120),
-      x: W / 2,
-      y: questionY,
-      maxWidth: W - 220,
-      maxHeight: 90,
-      maxLines: 2,
-      align: 'center',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 26,
-      minSize: 18,
-      lineHeightRatio: 1.2
-    });
     drawShareFooter(ctx, style, W, H - 154, 'center');
   }
 
@@ -5372,9 +5839,13 @@
     ctx.textAlign = 'right';
     ctx.fillText('ASK MIRROR TALK', W - 92, 126);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
     _roundRect(ctx, 92, 226, W - 184, 628, 18);
     ctx.fill();
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.1;
+    _roundRect(ctx, 92, 226, W - 184, 628, 18);
+    ctx.stroke();
 
     ctx.fillStyle = style.text;
     const headlineMetrics = drawFittedCanvasText(ctx, {
@@ -5391,10 +5862,6 @@
       lineHeightRatio: 1.15
     });
 
-    const questionY = Math.max(972, 332 + headlineMetrics.height + 82);
-    ctx.fillStyle = 'rgba(255,255,255,0.68)';
-    ctx.font = '500 22px Georgia, serif';
-    wrapCanvasText(ctx, truncateText(normalized.question, 120), 92, questionY, W - 184, 32, 2, 'left');
     drawShareFooter(ctx, style, W, H - 154, 'left');
   }
 
@@ -5436,23 +5903,16 @@
       lineHeightRatio: 1.12
     });
 
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.78)';
     ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     wrapCanvasText(ctx, style.kicker, 96, 226, 420, 34, 3, 'left');
 
-    const footerTop = H - 154;
-    const questionY = Math.min(
-      footerTop - 92,
-      Math.max(1046, 736 + headlineMetrics.height + 78)
-    );
-    ctx.fillStyle = 'rgba(255,255,255,0.64)';
-    ctx.font = '500 21px Georgia, serif';
-    wrapCanvasText(ctx, truncateText(normalized.question, 118), 96, questionY, W - 220, 30, 2, 'left');
     drawShareFooter(ctx, style, W, H - 154, 'left');
   }
 
   function buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
+    const headline = extractShareHeadline(normalized);
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
@@ -5460,22 +5920,24 @@
     ctx.fillText('ASK MIRROR TALK', variant.questionAlign === 'left' ? 98 : W / 2, 114);
 
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.76)';
     ctx.fillText(style.kicker, variant.questionAlign === 'left' ? 98 : W / 2, 150);
 
     ctx.fillStyle = style.text;
-    ctx.font = '700 76px Georgia, serif';
-    const questionLineCount = wrapCanvasText(
-      ctx,
-      normalized.question,
-      variant.questionX,
-      250,
-      variant.questionWidth,
-      84,
-      4,
-      variant.questionAlign
-    );
-    const questionBottom = 250 + ((Math.max(questionLineCount, 1) - 1) * 84);
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: variant.questionX,
+      y: 250,
+      maxWidth: variant.questionWidth,
+      maxHeight: 360,
+      maxLines: 4,
+      align: variant.questionAlign,
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSize: 76,
+      minSize: 40,
+      lineHeightRatio: 1.1
+    });
+    const questionBottom = 250 + Math.max(headlineMetrics.height - 76, 0);
 
     const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -5511,7 +5973,7 @@
     _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 34);
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = 'rgba(255,255,255,0.44)';
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.40)';
     ctx.lineWidth = 1.5;
     _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 34);
     ctx.stroke();
@@ -5709,10 +6171,14 @@
     const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
     showShareModal(dataUrl, caption, {
       title: 'Share this reflection card',
-      hint: 'Share a polished reflection card inspired by your answer. On supported phones, the image can go straight into the system share sheet.',
+      hint: 'Share a polished reflection card that invites someone to pause, breathe, and reflect for a moment.',
       filename: 'mirror-talk-reflection.png',
       contextLabel: normalized.theme || 'Saved reflection',
-      invitePrompt: 'Use the card to share the insight itself, or invite someone into Ask Mirror Talk from the next action.'
+      invitePrompt: 'Lead with the reflection itself first. If it resonates, pass on the Mirror Talk link too.',
+      previewText: extractShareHeadline(normalized),
+      nativeShareLabel: 'Open share sheet',
+      copyTextLabel: 'Copy share caption',
+      copyLinkLabel: 'Copy reflection link'
     });
   }
 
@@ -5945,6 +6411,10 @@
     }
 
     const prompt = REFLECT_PROMPTS[Math.floor(Math.random() * REFLECT_PROMPTS.length)];
+    const lastSession = loadLastSession() || {};
+    const sourceTheme = String(lastSession.theme || inferTheme(lastSession.question || '', lastSession.answer || '') || '').trim();
+    const sourceQuestion = String(lastSession.question || '').trim();
+    const sourceExcerpt = String(lastSession.excerpt || extractInsightExcerpt(lastSession.answer || '', sourceTheme) || '').trim();
 
     section.innerHTML = `
       <div class="amt-reflect-inner">
@@ -5980,7 +6450,14 @@
       emitProductEvent('reflection_note_saved', { prompt, length: note.length });
       try {
         const existing = loadReflectionNotes();
-        existing.unshift({ note, prompt, savedAt: Date.now() });
+        existing.unshift({
+          note,
+          prompt,
+          theme: sourceTheme || '',
+          sourceQuestion,
+          sourceExcerpt,
+          savedAt: Date.now()
+        });
         saveReflectionNotes(existing);
       } catch (e) {}
       // Clear the textarea and show brief confirmation so the user can add another note
@@ -6062,11 +6539,13 @@
       theme: reflectionInsight.theme || ''
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
+    const reflectionLine = extractShareHeadline(reflectionInsight);
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
         <span class="amt-share-kicker">Keep or pass on what mattered</span>
         <p class="amt-share-caption">Turn this answer into a polished reflection card, or send someone a direct path into the Mirror Talk experience.</p>
+        <p class="amt-share-caption">${escapeHtml(reflectionLine)}</p>
       </div>
       <div class="amt-share-actions-row">
         <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
@@ -6200,13 +6679,18 @@
         ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After asking a question, look for the <strong>✍️ Take a moment to reflect…</strong> section below the response.</p>`
         : notes.map((entry, i) => `
           <div class="amt-journal-entry" data-index="${i}">
+            <div class="amt-insight-topline">
+              <span class="amt-insight-theme">${escapeHtml(entry.theme || 'Reflection')}</span>
+              <span class="amt-journal-date">${formatDate(entry.savedAt)}</span>
+            </div>
             <p class="amt-journal-prompt">${escapeHtml(entry.prompt || '')}</p>
             <p class="amt-journal-note" data-index="${i}">${escapeHtml(entry.note || '')}</p>
+            ${entry.sourceExcerpt ? `<p class="amt-insight-answer">“${escapeHtml(entry.sourceExcerpt)}”</p>` : ''}
             <div class="amt-journal-entry-footer">
-              <span class="amt-journal-date">${formatDate(entry.savedAt)}</span>
               <div class="amt-journal-entry-actions">
+                ${entry.sourceQuestion ? `<button type="button" class="amt-journal-revisit-btn" data-question="${escapeHtml(entry.sourceQuestion)}" title="Return to this reflection">↺ Revisit</button>` : ''}
                 <button type="button" class="amt-journal-edit-btn" data-index="${i}" title="Edit this note">✏️ Edit</button>
-                <button type="button" class="amt-journal-share-btn" data-index="${i}" title="Share this note">📤 Share</button>
+                <button type="button" class="amt-journal-share-btn" data-index="${i}" title="Turn this note into a reflection card">📤 Share card</button>
                 <button type="button" class="amt-journal-delete-btn" data-index="${i}" title="Delete this note">🗑</button>
               </div>
             </div>
@@ -6219,7 +6703,7 @@
           <button class="amt-journal-close" aria-label="Close">✕</button>
           <div class="amt-journal-header-copy">
             <h2 class="amt-journal-title">📓 My Reflection Notes</h2>
-            <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — private on this device, with browser recovery for reinstall</p>
+            <p class="amt-journal-subtitle">${notes.length} note${notes.length !== 1 ? 's' : ''} — your reflections, saved insights, and shareable moments in one private place</p>
           </div>
           <div class="amt-journal-list">${noteItems}</div>
         </div>
@@ -6237,6 +6721,15 @@
       document.addEventListener('keydown', function escHandler(e) {
         if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
       }, { once: true });
+
+      modal.querySelectorAll('.amt-journal-revisit-btn').forEach(revisitBtn => {
+        revisitBtn.addEventListener('click', () => {
+          const questionText = revisitBtn.dataset.question || '';
+          if (!questionText) return;
+          close();
+          focusFormWithQuestion(questionText);
+        });
+      });
 
       // Edit buttons — inline editing within the entry card
       modal.querySelectorAll('.amt-journal-edit-btn').forEach(editBtn => {
@@ -6294,21 +6787,10 @@
           let notes = loadReflectionNotes();
           const entry = notes[idx];
           if (!entry) return;
-
-          const shareText = `Reflection: ${entry.prompt}\n\nMy note: ${entry.note}`;
-          if (navigator.share) {
-            try {
-              await navigator.share({ title: 'My Mirror Talk Reflection', text: shareText, url: pageUrl });
-            } catch (e) {
-              if (e.name !== 'AbortError') console.warn('Share failed:', e);
-            }
-          } else {
-            try {
-              await navigator.clipboard.writeText(`${shareText}\n\n${pageUrl}`);
-              shareBtn.textContent = '✅ Copied!';
-              setTimeout(() => { shareBtn.textContent = '📤 Share'; }, 2500);
-            } catch (e) { console.warn('Copy failed:', e); }
-          }
+          shareInsightArtifact({
+            ...buildJournalReflectionInsight(entry),
+            shareSource: 'journal_note'
+          });
         });
       });
 

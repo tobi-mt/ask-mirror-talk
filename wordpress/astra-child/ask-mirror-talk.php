@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.4.89';
+    return '5.4.95';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -138,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.4.87: reflection-card question labels are quieter and spaced further below the main statement
+    $version = ask_mirror_talk_theme_version(); // v5.4.95: deeper reflection-card art direction, improved share flow, and stronger notes-to-insights continuity
     
     // Core styles
     wp_enqueue_style(

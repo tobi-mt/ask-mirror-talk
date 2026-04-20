@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.95 loaded');
+  console.log('Ask Mirror Talk Widget v5.4.100 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -42,6 +42,8 @@
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
   const RECENT_EXPLORE_THEMES_KEY = 'amt_recent_explore_themes';
   const RECENT_NIGHT_THEMES_KEY = 'amt_recent_night_themes';
+  const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
+  const TEST_FORCE_FAMILY = String(window.__AMT_TEST_FORCE_FAMILY__ || '').trim();
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
   let activeCampaignContext = null;
@@ -1705,6 +1707,37 @@
       .filter(Boolean);
   }
 
+  function isCompleteReflectionSentence(text) {
+    const clean = normalizeReflectionText(text);
+    if (!clean || clean.length < 28) return false;
+    if (!/[.!?]$/.test(clean)) return false;
+    if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
+    if (/[,:;]\s*(and|or|but)$/i.test(clean)) return false;
+    return true;
+  }
+
+  function ensureReflectionSentence(text) {
+    let clean = trimDanglingHeadlineTail(text);
+    if (!clean) return '';
+    clean = clean.replace(/[,:;]+$/g, '').trim();
+    if (!/[.!?]$/.test(clean)) clean += '.';
+    return clean;
+  }
+
+  function stripSpeakerAttribution(text) {
+    let clean = normalizeReflectionText(text);
+    if (!clean) return '';
+    clean = clean.replace(
+      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:emphasizes|says|shares|notes|explains|reminds(?:\s+us)?|suggests|teaches)\s+that\s+/,
+      ''
+    );
+    clean = clean.replace(
+      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:believes|argues|offers|shows)\s+/,
+      ''
+    );
+    return clean.trim();
+  }
+
   function getThemeReflectionKeywords(theme) {
     const lower = String(theme || '').toLowerCase().trim();
     const tokens = lower.split(/[^a-z]+/).filter(token => token.length >= 4);
@@ -1738,7 +1771,8 @@
   }
 
   function scoreReflectionSentence(sentence, options) {
-    const text = trimDanglingHeadlineTail(sentence);
+    const stripped = stripSpeakerAttribution(sentence);
+    const text = trimDanglingHeadlineTail(stripped || sentence);
     const lower = text.toLowerCase();
     const words = text.split(/\s+/).filter(Boolean);
     if (!text || words.length < 5) return -100;
@@ -1754,8 +1788,9 @@
     else if (words.length >= 6 && words.length <= 26) score += 1;
     else if (words.length > 30) score -= 3;
 
-    if (/[.!?]$/.test(String(sentence || '').trim())) score += 1;
+    if (/[.!?]$/.test(String(sentence || '').trim())) score += 2;
     if (!/[,:;]\s*(and|or|but)$/i.test(text)) score += 1;
+    if (isCompleteReflectionSentence(String(sentence || '').trim())) score += 3;
 
     if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(lower)) score -= 8;
     if (/^(this reflection|what stayed with me|what likely stayed with you|one thing that stood out|in this reflection)\b/i.test(lower)) score -= 8;
@@ -1781,6 +1816,7 @@
     if (/\b(maybe|perhaps|for example|for instance|kind of|sort of|really|actually)\b/i.test(lower)) score -= 2;
     if (/\b(podcast|episode|guest|speaker|story|program|tool)\b/i.test(lower)) score -= 3;
     if (/\b(thank you|welcome back|let me ask|one thing i love|what i want to ask)\b/i.test(lower)) score -= 6;
+    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(emphasizes|says|shares|notes|explains|reminds|suggests)\b/.test(String(sentence || '').trim())) score -= 8;
 
     const themeKeywords = (options && options.themeKeywords) || [];
     const matchedKeywords = themeKeywords.filter(keyword => lower.includes(keyword));
@@ -1802,7 +1838,7 @@
     let bestScore = -Infinity;
 
     sentences.forEach(sentence => {
-      const cleaned = trimDanglingHeadlineTail(sentence);
+      const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
       const score = scoreReflectionSentence(cleaned, options);
       if (score > bestScore || (score === bestScore && cleaned.length > best.length)) {
         best = cleaned;
@@ -1810,7 +1846,7 @@
       }
     });
 
-    return best || trimDanglingHeadlineTail(sentences[0]);
+    return ensureReflectionSentence(best || sentences[0]);
   }
 
   function selectSupportingReflectionLine(text, theme, headline) {
@@ -1836,7 +1872,134 @@
       });
       return scored >= 4 && trimDanglingHeadlineTail(sentence).toLowerCase() !== trimDanglingHeadlineTail(headline || '').toLowerCase();
     });
-    return trimDanglingHeadlineTail(alt || candidate || clean);
+    return ensureReflectionSentence(alt || candidate || clean);
+  }
+
+  function buildThemeReflectionFallback(theme) {
+    const key = String(theme || '').toLowerCase().trim();
+    const fallbacks = {
+      relationships: 'Return to the kind of connection you want to build and protect.',
+      grief: 'Stay gently with what hurts without turning away from it.',
+      healing: 'Honor what is still healing and what is slowly becoming whole.',
+      faith: 'Return to what still feels sacred and quietly alive.',
+      courage: 'Trust the next brave step more than the need to feel ready.',
+      fear: 'Listen for what fear is trying to protect before you answer it.',
+      boundaries: 'Make room for honesty, self-respect, and a steadier no.',
+      'self-worth': 'Come back to the truth that your worth does not need proving.',
+      leadership: 'Lead from clarity, steadiness, and the courage to stay human.',
+      purpose: 'Follow the thread that keeps calling you forward.'
+    };
+    return ensureReflectionSentence(fallbacks[key] || 'Pause with what feels most true and worth carrying forward.');
+  }
+
+  function extractReflectionBody(answerText, theme, headline) {
+    const sentences = splitReflectionSentences(answerText);
+    if (!sentences.length) return buildThemeReflectionFallback(theme);
+
+    const themeKeywords = getThemeReflectionKeywords(theme);
+    const headlineLower = trimDanglingHeadlineTail(headline || '').toLowerCase();
+    const ranked = sentences
+      .map(sentence => ({
+        text: ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence),
+        score: scoreReflectionSentence(sentence, {
+          themeKeywords,
+          preferUniversal: true,
+          excludeText: headline || ''
+        })
+      }))
+      .filter(item => item.text && item.text.toLowerCase() !== headlineLower)
+      .sort((a, b) => b.score - a.score);
+
+    const primary = ranked.find(item => item.score >= 4) || ranked[0];
+    if (!primary) return buildThemeReflectionFallback(theme);
+
+    const secondary = ranked.find(item =>
+      item !== primary &&
+      item.score >= 5 &&
+      (primary.text.length + item.text.length) <= 210
+    );
+
+    const combined = secondary ? `${primary.text} ${secondary.text}` : primary.text;
+    return truncateText(combined.trim(), 220);
+  }
+
+  function extractCardHeadline(text, theme) {
+    const sentences = splitReflectionSentences(text);
+    if (!sentences.length) return buildThemeReflectionFallback(theme);
+
+    const themeKeywords = getThemeReflectionKeywords(theme);
+    const ranked = sentences
+      .map(sentence => {
+        const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
+        const score = scoreReflectionSentence(cleaned, {
+          themeKeywords,
+          preferUniversal: true,
+          preferShort: true
+        });
+        const words = cleaned.split(/\s+/).filter(Boolean);
+        const lengthPenalty = cleaned.length > 126 ? 6 : cleaned.length > 112 ? 3 : 0;
+        const wordPenalty = words.length > 18 ? 4 : words.length > 15 ? 2 : 0;
+        return {
+          text: cleaned,
+          score: score - lengthPenalty - wordPenalty,
+          fitsHero: cleaned.length >= 38 && cleaned.length <= 126 && words.length >= 6 && words.length <= 18
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const bestHero = ranked.find(item => item.fitsHero && item.score >= 3);
+    return bestHero ? bestHero.text : buildThemeReflectionFallback(theme);
+  }
+
+  function listCardHeadlineCandidates(text, theme) {
+    const sentences = splitReflectionSentences(text);
+    const themeKeywords = getThemeReflectionKeywords(theme);
+    const ranked = sentences
+      .map(sentence => {
+        const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
+        const words = cleaned.split(/\s+/).filter(Boolean);
+        const score = scoreReflectionSentence(cleaned, {
+          themeKeywords,
+          preferUniversal: true,
+          preferShort: true
+        });
+        const lengthPenalty = cleaned.length > 126 ? 6 : cleaned.length > 112 ? 3 : 0;
+        const wordPenalty = words.length > 18 ? 4 : words.length > 15 ? 2 : 0;
+        return {
+          text: cleaned,
+          score: score - lengthPenalty - wordPenalty,
+          fitsHero: cleaned.length >= 38 && cleaned.length <= 126 && words.length >= 6 && words.length <= 18
+        };
+      })
+      .filter(item => item.text && item.score >= 0)
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.text);
+
+    const fallback = buildThemeReflectionFallback(theme);
+    const unique = [];
+    [...ranked, fallback].forEach(item => {
+      if (!item) return;
+      if (!unique.includes(item)) unique.push(item);
+    });
+    return unique;
+  }
+
+  function areReflectionLinesTooSimilar(a, b) {
+    const left = normalizeReflectionText(stripSpeakerAttribution(a) || a).toLowerCase();
+    const right = normalizeReflectionText(stripSpeakerAttribution(b) || b).toLowerCase();
+    if (!left || !right) return false;
+    if (left === right) return true;
+    if (left.includes(right) || right.includes(left)) return true;
+
+    const leftWords = new Set(left.split(/[^a-z0-9]+/).filter(word => word.length >= 4));
+    const rightWords = new Set(right.split(/[^a-z0-9]+/).filter(word => word.length >= 4));
+    if (!leftWords.size || !rightWords.size) return false;
+    let overlap = 0;
+    leftWords.forEach(word => {
+      if (rightWords.has(word)) overlap += 1;
+    });
+    const ratio = overlap / Math.max(1, Math.min(leftWords.size, rightWords.size));
+    return ratio >= 0.75;
   }
 
   function getThemeStarter(theme) {
@@ -1979,36 +2142,26 @@
       preferUniversal: true,
       preferShort: true
     }) || clean;
-    const candidate = selectSupportingReflectionLine(clean, theme, headlineCandidate) || headlineCandidate;
-    return truncateText(candidate.trim(), 210);
+    return extractReflectionBody(clean, theme, headlineCandidate);
   }
 
   function extractShareHeadline(insight) {
     const excerpt = String(insight.excerpt || '').trim();
     const themeKeywords = getThemeReflectionKeywords(insight.theme || '');
-    const answerHeadline = selectReflectionLine(insight.answer || '', {
-      themeKeywords,
-      preferUniversal: true,
-      preferShort: true
-    });
+    const answerHeadline = extractCardHeadline(insight.answer || '', insight.theme || '');
     const answerExcerpt = extractInsightExcerpt(insight.answer || '', insight.theme || '');
     if (!excerpt) {
-      return trimDanglingHeadlineTail(answerHeadline || answerExcerpt || truncateText(insight.question || '', 140));
+      return trimDanglingHeadlineTail(answerHeadline || answerExcerpt || buildThemeReflectionFallback(insight.theme || ''));
     }
 
-    let candidate = selectReflectionLine(excerpt, {
-      themeKeywords,
-      preferUniversal: true,
-      preferShort: true,
-      excludeText: answerExcerpt
-    });
+    let candidate = extractCardHeadline(excerpt, insight.theme || '');
 
     candidate = trimDanglingHeadlineTail(candidate || excerpt);
     if (isWeakShareHeadlineCandidate(candidate) && answerExcerpt) {
       candidate = trimDanglingHeadlineTail(answerHeadline || answerExcerpt);
     }
 
-    return candidate || trimDanglingHeadlineTail(truncateText(insight.question || '', 140));
+    return candidate || trimDanglingHeadlineTail(buildThemeReflectionFallback(insight.theme || ''));
   }
 
   function trimDanglingHeadlineTail(text) {
@@ -5104,7 +5257,7 @@
     const question = String((insight && insight.question) || '').trim();
     const answer = String((insight && insight.answer) || '').trim();
     const theme = String((insight && insight.theme) || inferTheme(question, answer) || 'Reflection').trim();
-    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer, theme) || truncateText(question, 180)).trim();
+    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer, theme) || buildThemeReflectionFallback(theme)).trim();
 
     return {
       question,
@@ -5528,12 +5681,8 @@
   }
 
   function getInsightShareFamily(insight) {
-    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}|family`);
-    const headline = extractShareHeadline(insight);
-    const eligibleFamilies = ['editorial', 'minimal', 'atmospheric'];
-    if (canUsePosterFamily(insight, headline)) eligibleFamilies.push('poster');
-    if (canUseSpotlightFamily(insight, headline)) eligibleFamilies.push('spotlight');
-    return eligibleFamilies[seed % eligibleFamilies.length];
+    if (TEST_FORCE_FAMILY) return TEST_FORCE_FAMILY;
+    return 'editorial';
   }
 
   function drawShareCardShell(ctx, style, W, H, variant) {
@@ -5654,14 +5803,14 @@
     ctx.shadowOffsetY = 4;
     ctx.fillStyle = style.text;
     ctx.font = '700 36px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, y + 88);
+    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, y + 76);
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
 
     ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.74)';
     ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, y + 130);
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, y + 112);
   }
 
   function buildPosterInsightShareCard(ctx, normalized, style, W, H, variant) {
@@ -5828,6 +5977,7 @@
   function buildMinimalInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
     const headline = extractShareHeadline(normalized);
+    const showExcerpt = !areReflectionLinesTooSimilar(headline, normalized.excerpt);
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.fillRect(82, 86, W - 164, 2);
@@ -5839,28 +5989,47 @@
     ctx.textAlign = 'right';
     ctx.fillText('ASK MIRROR TALK', W - 92, 126);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    _roundRect(ctx, 92, 226, W - 184, 628, 18);
-    ctx.fill();
-    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1.1;
-    _roundRect(ctx, 92, 226, W - 184, 628, 18);
-    ctx.stroke();
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.78)';
+    ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    wrapCanvasText(ctx, style.kicker, 92, 204, 520, 34, 2, 'left');
 
     ctx.fillStyle = style.text;
     const headlineMetrics = drawFittedCanvasText(ctx, {
       text: headline,
       x: 92,
-      y: 332,
+      y: 388,
       maxWidth: W - 184,
-      maxHeight: 470,
-      maxLines: 6,
+      maxHeight: showExcerpt ? 260 : 430,
+      maxLines: 4,
       align: 'left',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 80,
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: showExcerpt ? 68 : 74,
       minSize: 34,
-      lineHeightRatio: 1.15
+      lineHeightRatio: 1.12
     });
+
+    if (!showExcerpt) {
+      drawShareFooter(ctx, style, W, H - 154, 'left');
+      return;
+    }
+
+    const excerptBoxY = 510;
+    const excerptBoxH = 360;
+    ctx.fillStyle = 'rgba(255,255,255,0.09)';
+    _roundRect(ctx, 92, excerptBoxY, W - 184, excerptBoxH, 26);
+    ctx.fill();
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.1;
+    _roundRect(ctx, 92, excerptBoxY, W - 184, excerptBoxH, 26);
+    ctx.stroke();
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '70px Georgia, serif';
+    ctx.fillText('“', 116, excerptBoxY + 92);
+
+    ctx.fillStyle = style.cardText || style.text;
+    ctx.font = '500 40px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, 146, excerptBoxY + 132, W - 276, 54, 4, 'left');
 
     drawShareFooter(ctx, style, W, H - 154, 'left');
   }
@@ -5868,11 +6037,12 @@
   function buildAtmosphericInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
     const headline = extractShareHeadline(normalized);
+    const showExcerpt = !areReflectionLinesTooSimilar(headline, normalized.excerpt);
 
-    const veil = ctx.createLinearGradient(0, H * 0.22, 0, H);
+    const veil = ctx.createLinearGradient(0, H * 0.18, 0, H);
     veil.addColorStop(0, 'rgba(8,8,8,0.00)');
-    veil.addColorStop(0.28, 'rgba(8,8,8,0.14)');
-    veil.addColorStop(1, 'rgba(8,8,8,0.34)');
+    veil.addColorStop(0.34, 'rgba(8,8,8,0.10)');
+    veil.addColorStop(1, 'rgba(8,8,8,0.28)');
     ctx.fillStyle = veil;
     ctx.fillRect(0, 0, W, H);
 
@@ -5888,31 +6058,116 @@
     ctx.textAlign = 'right';
     ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W - 94, 112);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.78)';
+    ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    wrapCanvasText(ctx, style.kicker, 96, 226, 420, 34, 3, 'left');
+
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
     const headlineMetrics = drawFittedCanvasText(ctx, {
       text: headline,
       x: 96,
-      y: 736,
+      y: 664,
       maxWidth: W - 220,
-      maxHeight: 430,
-      maxLines: 5,
+      maxHeight: showExcerpt ? 280 : 410,
+      maxLines: 4,
       align: 'left',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 78,
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: showExcerpt ? 68 : 74,
       minSize: 34,
       lineHeightRatio: 1.12
     });
 
-    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.78)';
-    ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    wrapCanvasText(ctx, style.kicker, 96, 226, 420, 34, 3, 'left');
+    if (!showExcerpt) {
+      drawShareFooter(ctx, style, W, H - 154, 'left');
+      return;
+    }
+
+    const excerptBoxY = 810;
+    const excerptBoxH = 250;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    _roundRect(ctx, 92, excerptBoxY, W - 184, excerptBoxH, 30);
+    ctx.fill();
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.1;
+    _roundRect(ctx, 92, excerptBoxY, W - 184, excerptBoxH, 30);
+    ctx.stroke();
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '60px Georgia, serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('“', 124, excerptBoxY + 86);
+
+    ctx.fillStyle = style.cardText || style.text;
+    ctx.font = '500 34px Georgia, serif';
+    wrapCanvasText(ctx, normalized.excerpt, 154, excerptBoxY + 118, W - 300, 46, 3, 'left');
 
     drawShareFooter(ctx, style, W, H - 154, 'left');
   }
 
   function buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
-    const headline = extractShareHeadline(normalized);
+    const headlineOptions = {
+      maxWidth: variant.questionWidth,
+      maxHeightWithExcerpt: 360,
+      maxHeightWithoutExcerpt: 520,
+      maxLines: 4,
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSizeWithExcerpt: 76,
+      maxSizeWithoutExcerpt: 82,
+      minSize: 40,
+      lineHeightRatio: 1.1
+    };
+    const headlineCandidates = listCardHeadlineCandidates(
+      `${normalized.answer || ''} ${normalized.excerpt || ''}`,
+      normalized.theme || ''
+    );
+
+    let headline = headlineCandidates.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      )
+    ) || headlineCandidates.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithoutExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithoutExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      )
+    ) || buildThemeReflectionFallback(normalized.theme || '');
+
+    const supportingExcerpt = selectSupportingReflectionLine(
+      normalized.answer || normalized.excerpt || '',
+      normalized.theme || '',
+      headline
+    ) || normalized.excerpt || '';
+    const hasDistinctSupportingExcerpt = !!supportingExcerpt &&
+      !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = hasDistinctSupportingExcerpt &&
+      canRenderCanvasTextFully(
+        ctx,
+        headline,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      );
+    const headlineStartY = showExcerpt ? 250 : 308;
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
@@ -5927,17 +6182,17 @@
     const headlineMetrics = drawFittedCanvasText(ctx, {
       text: headline,
       x: variant.questionX,
-      y: 250,
-      maxWidth: variant.questionWidth,
-      maxHeight: 360,
-      maxLines: 4,
+      y: headlineStartY,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: showExcerpt ? headlineOptions.maxHeightWithExcerpt : headlineOptions.maxHeightWithoutExcerpt,
+      maxLines: headlineOptions.maxLines,
       align: variant.questionAlign,
-      fontTemplate: '700 __SIZE__px Georgia, serif',
-      maxSize: 76,
-      minSize: 40,
-      lineHeightRatio: 1.1
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: showExcerpt ? headlineOptions.maxSizeWithExcerpt : headlineOptions.maxSizeWithoutExcerpt,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
-    const questionBottom = 250 + Math.max(headlineMetrics.height - 76, 0);
+    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - 76, 0);
 
     const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -5961,10 +6216,39 @@
     ctx.fillText(themeLabel, variant.themeAlign === 'left' ? themeX + 46 : themeX + (themeWidth / 2), themeY + 27);
     ctx.textBaseline = 'alphabetic';
 
+    if (!showExcerpt) {
+      drawShareFooter(ctx, style, W, H - 188, variant.footerAlign);
+      if (ENABLE_TEST_EXPORTS) {
+        window.__AMT_LAST_RENDER_DEBUG__ = {
+          family: 'editorial',
+          headline,
+          supportingExcerpt,
+          showExcerpt: false,
+          panelMode: 'none'
+        };
+      }
+      return;
+    }
+
     const excerptBoxY = themeY + 106;
-    const excerptBoxH = 446;
     const panelInset = variant.panelInset;
     const panelWidth = W - (panelInset * 2);
+    const excerptTextWidth = panelWidth - ((variant.excerptX - panelInset) * 2);
+    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      maxWidth: excerptTextWidth,
+      maxHeight: 280,
+      maxLines: 5,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 43,
+      minSize: 30,
+      lineHeightRatio: 1.16
+    });
+    const excerptBoxH = Math.max(
+      244,
+      Math.min(446, 128 + excerptMetrics.height + 70)
+    );
+    const panelMode = excerptMetrics.lineCount <= 2 ? 'compact' : excerptMetrics.lineCount === 3 ? 'balanced' : 'full';
 
     ctx.shadowColor = 'rgba(0,0,0,0.18)';
     ctx.shadowBlur = 40;
@@ -5991,10 +6275,209 @@
     ctx.fillText('“', variant.excerptX - 10, excerptBoxY + 106);
 
     ctx.fillStyle = style.cardText;
-    ctx.font = '500 43px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, variant.excerptX, excerptBoxY + 158, panelWidth - ((variant.excerptX - panelInset) * 2), 60, 5, 'left');
+    ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
+    wrapCanvasText(ctx, supportingExcerpt, variant.excerptX, excerptBoxY + 158, excerptTextWidth, excerptMetrics.lineHeight, 5, 'left');
 
     drawShareFooter(ctx, style, W, excerptBoxY + excerptBoxH + 88, variant.footerAlign);
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = {
+        family: 'editorial',
+        headline,
+        supportingExcerpt,
+        showExcerpt: true,
+        panelMode,
+        excerptLineCount: excerptMetrics.lineCount,
+        excerptPanelHeight: excerptBoxH
+      };
+    }
+  }
+
+  function buildEditorialSereneInsightShareCard(ctx, normalized, style, W, H, variant) {
+    drawShareCardShell(ctx, style, W, H, variant);
+    const headlineOptions = {
+      maxWidth: 848,
+      maxHeightWithExcerpt: 310,
+      maxHeightWithoutExcerpt: 430,
+      maxLines: 4,
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSizeWithExcerpt: 72,
+      maxSizeWithoutExcerpt: 78,
+      minSize: 38,
+      lineHeightRatio: 1.1
+    };
+    const headlineCandidates = listCardHeadlineCandidates(
+      `${normalized.answer || ''} ${normalized.excerpt || ''}`,
+      normalized.theme || ''
+    );
+
+    const headline = headlineCandidates.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      )
+    ) || headlineCandidates.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithoutExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithoutExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      )
+    ) || buildThemeReflectionFallback(normalized.theme || '');
+
+    const supportingExcerpt = selectSupportingReflectionLine(
+      normalized.answer || normalized.excerpt || '',
+      normalized.theme || '',
+      headline
+    ) || normalized.excerpt || '';
+    const hasDistinctSupportingExcerpt = !!supportingExcerpt &&
+      !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = hasDistinctSupportingExcerpt &&
+      canRenderCanvasTextFully(
+        ctx,
+        headline,
+        headlineOptions.maxWidth,
+        headlineOptions.maxHeightWithExcerpt,
+        headlineOptions.maxLines,
+        headlineOptions.fontTemplate,
+        headlineOptions.maxSizeWithExcerpt,
+        headlineOptions.minSize,
+        headlineOptions.lineHeightRatio
+      );
+    const headlineStartY = showExcerpt ? 284 : 344;
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 22px Georgia, serif';
+    ctx.fillText('ASK MIRROR TALK', 96, 114);
+
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.76)';
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    wrapCanvasText(ctx, style.kicker, 96, 156, 520, 26, 2, 'left');
+
+    const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
+    ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    const pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
+    const pillX = W - pillWidth - 96;
+    const pillY = 96;
+    const themeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillWidth, pillY + 54);
+    themeGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
+    themeGrad.addColorStop(1, 'rgba(255,255,255,0.10)');
+    ctx.fillStyle = themeGrad;
+    _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.4;
+    _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
+    ctx.stroke();
+    ctx.fillStyle = style.accent;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(themeLabel, pillX + (pillWidth / 2), pillY + 27);
+    ctx.textBaseline = 'alphabetic';
+
+    ctx.fillStyle = style.text;
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: 110,
+      y: headlineStartY,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: showExcerpt ? headlineOptions.maxHeightWithExcerpt : headlineOptions.maxHeightWithoutExcerpt,
+      maxLines: headlineOptions.maxLines,
+      align: 'left',
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: showExcerpt ? headlineOptions.maxSizeWithExcerpt : headlineOptions.maxSizeWithoutExcerpt,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
+    });
+    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - 72, 0);
+
+    if (!showExcerpt) {
+      drawShareFooter(ctx, style, W, H - 188, 'center');
+      if (ENABLE_TEST_EXPORTS) {
+        window.__AMT_LAST_RENDER_DEBUG__ = {
+          family: 'editorial_serene',
+          headline,
+          supportingExcerpt,
+          showExcerpt: false,
+          panelMode: 'none'
+        };
+      }
+      return;
+    }
+
+    const excerptBoxY = questionBottom + 96;
+    const panelInset = 110;
+    const panelWidth = W - (panelInset * 2);
+    const excerptX = 154;
+    const excerptTextWidth = panelWidth - ((excerptX - panelInset) * 2);
+    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      maxWidth: excerptTextWidth,
+      maxHeight: 236,
+      maxLines: 4,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 40,
+      minSize: 29,
+      lineHeightRatio: 1.16
+    });
+    const excerptBoxH = Math.max(
+      218,
+      Math.min(348, 120 + excerptMetrics.height + 56)
+    );
+    const panelMode = excerptMetrics.lineCount <= 2 ? 'compact' : excerptMetrics.lineCount === 3 ? 'balanced' : 'full';
+
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 34;
+    ctx.shadowOffsetY = 14;
+    ctx.fillStyle = 'rgba(255,255,255,0.93)';
+    _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 30);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.30)';
+    ctx.lineWidth = 1.2;
+    _roundRect(ctx, panelInset, excerptBoxY, panelWidth, excerptBoxH, 30);
+    ctx.stroke();
+
+    const accentBar = ctx.createLinearGradient(panelInset, excerptBoxY, panelInset + 300, excerptBoxY);
+    accentBar.addColorStop(0, style.accent);
+    accentBar.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = accentBar;
+    _roundRect(ctx, panelInset + 26, excerptBoxY + 24, 278, 8, 4);
+    ctx.fill();
+
+    ctx.fillStyle = style.accent;
+    ctx.font = '78px Georgia, serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('“', excerptX - 12, excerptBoxY + 102);
+
+    ctx.fillStyle = style.cardText;
+    ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
+    wrapCanvasText(ctx, supportingExcerpt, excerptX, excerptBoxY + 148, excerptTextWidth, excerptMetrics.lineHeight, 4, 'left');
+
+    drawShareFooter(ctx, style, W, excerptBoxY + excerptBoxH + 92, 'center');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = {
+        family: 'editorial_serene',
+        headline,
+        supportingExcerpt,
+        showExcerpt: true,
+        panelMode,
+        excerptLineCount: excerptMetrics.lineCount,
+        excerptPanelHeight: excerptBoxH
+      };
+    }
   }
 
   function buildInsightShareCard(insight) {
@@ -6008,6 +6491,9 @@
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = null;
+    }
     if (family === 'poster') {
       buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'spotlight') {
@@ -6016,8 +6502,14 @@
       buildMinimalInsightShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'atmospheric') {
       buildAtmosphericInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'editorial_serene') {
+      buildEditorialSereneInsightShareCard(ctx, normalized, style, W, H, variant);
     } else {
       buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant);
+    }
+
+    if (ENABLE_TEST_EXPORTS && !window.__AMT_LAST_RENDER_DEBUG__) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family };
     }
 
     return canvas.toDataURL('image/png');
@@ -6120,6 +6612,14 @@
     };
   }
 
+  function canRenderCanvasTextFully(ctx, text, maxWidth, maxHeight, maxLines, fontTemplate, maxSize, minSize, lineHeightRatio) {
+    const fit = fitCanvasTextBox(ctx, text, maxWidth, maxHeight, maxLines, fontTemplate, maxSize, minSize, lineHeightRatio);
+    ctx.font = fontTemplate.replace('__SIZE__', String(fit.size));
+    const lines = splitCanvasLines(ctx, text, maxWidth);
+    const lineCount = lines.length;
+    return lineCount <= maxLines && (lineCount * fit.lineHeight) <= maxHeight;
+  }
+
   function drawFittedCanvasText(ctx, options) {
     const fit = options.maxHeight
       ? fitCanvasTextBox(
@@ -6158,6 +6658,40 @@
       lineCount: renderedLines,
       lineHeight,
       height: renderedLines * lineHeight,
+      size: fit.size
+    };
+  }
+
+  function getFittedCanvasTextMetrics(ctx, options) {
+    const fit = options.maxHeight
+      ? fitCanvasTextBox(
+          ctx,
+          options.text,
+          options.maxWidth,
+          options.maxHeight,
+          options.maxLines,
+          options.fontTemplate,
+          options.maxSize,
+          options.minSize,
+          options.lineHeightRatio
+        )
+      : fitCanvasText(
+          ctx,
+          options.text,
+          options.maxWidth,
+          options.maxLines,
+          options.fontTemplate,
+          options.maxSize,
+          options.minSize
+        );
+    const lineHeight = fit.lineHeight || Math.round(fit.size * (options.lineHeightRatio || 1.14));
+    ctx.font = options.fontTemplate.replace('__SIZE__', String(fit.size));
+    const lines = splitCanvasLines(ctx, options.text, options.maxWidth).slice(0, options.maxLines);
+    return {
+      lines,
+      lineCount: lines.length,
+      lineHeight,
+      height: lines.length * lineHeight,
       size: fit.size
     };
   }
@@ -7065,5 +7599,19 @@
   });
   const toastEl = document.getElementById('amt-milestone-toast');
   if (toastEl) _toastObserver.observe(toastEl, { childList: true });
+
+  if (ENABLE_TEST_EXPORTS) {
+    window.__AMT_TEST_EXPORTS__ = {
+      normalizeInsightRecord,
+      extractShareHeadline,
+      extractInsightExcerpt,
+      extractCardHeadline,
+      listCardHeadlineCandidates,
+      buildThemeReflectionFallback,
+      buildInsightShareCard,
+      getInsightShareThemeStyle,
+      getInsightShareVariant
+    };
+  }
 
 })();

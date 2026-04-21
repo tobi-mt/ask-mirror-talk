@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.0';
+    return '5.5.1';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -138,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.0: premium card templates (gradient immersive, neon contemplative, prismatic quote), enhanced reflection scoring, improved text completeness validation, better theme art direction
+    $version = ask_mirror_talk_theme_version(); // v5.5.1: added distinct Gratitude theme palette + rays motif, enhanced continuation UI with animations, premium card templates
     
     // Core styles
     wp_enqueue_style(

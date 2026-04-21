@@ -35,7 +35,7 @@ def normalize_question(q: str) -> str:
     return q
 
 # Default settings
-DEFAULT_SIMILARITY_THRESHOLD = 0.92  # Lowered from 0.95 to improve cache hit rate
+DEFAULT_SIMILARITY_THRESHOLD = 0.88  # Lowered to 0.88 to catch more question variations (was 0.92)
 DEFAULT_TTL_SECONDS = 14400  # 4 hours (answers don't change often)
 DEFAULT_MAX_ENTRIES = 500
 

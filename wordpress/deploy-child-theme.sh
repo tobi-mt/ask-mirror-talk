@@ -18,10 +18,8 @@ echo ""
 # Remove old zip if exists
 rm -f "$ZIP_NAME"
 
-# Create zip (exclude hidden files, .DS_Store, etc.)
-cd "$THEME_DIR"
-zip -r "../$ZIP_NAME" . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "*.md" -x "*.py" -x "icon_compare.png" -x "realsize_preview.png" -x "font_compare.png"
-cd ..
+# Create zip with directory wrapper (exclude hidden files, .DS_Store, etc.)
+zip -r "$ZIP_NAME" "$THEME_DIR" -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*" -x "$THEME_DIR/*.md" -x "$THEME_DIR/*.py" -x "$THEME_DIR/icon_compare.png" -x "$THEME_DIR/realsize_preview.png" -x "$THEME_DIR/font_compare.png"
 
 echo "✓ Created: $ZIP_NAME"
 echo ""

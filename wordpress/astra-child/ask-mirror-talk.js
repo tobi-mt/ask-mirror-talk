@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.0 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.1 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -5365,6 +5365,21 @@
   function getInsightShareThemeStyle(theme) {
     const key = String(theme || '').toLowerCase();
     const palettes = {
+      gratitude: {
+        bg: ['#1f1510', '#75462d', '#ebb483'],
+        orbA: 'rgba(235, 180, 131, 0.42)',
+        orbB: 'rgba(255, 235, 215, 0.17)',
+        accent: '#f5d4b3',
+        accentSoft: 'rgba(245,212,179,0.22)',
+        text: '#fff6ed',
+        textSoft: 'rgba(255,246,237,0.78)',
+        panelEdge: 'rgba(250,225,200,0.28)',
+        frameGlow: 'rgba(245,212,179,0.16)',
+        card: 'rgba(255,250,244,0.97)',
+        cardText: '#32271c',
+        kicker: 'A reflection worth keeping close',
+        motif: 'rays'
+      },
       faith: {
         bg: ['#130f1f', '#422448', '#d39d42'],
         orbA: 'rgba(224, 178, 82, 0.48)',
@@ -5633,6 +5648,21 @@
       ctx.moveTo(W * 0.62, 210);
       ctx.lineTo(W - 92, 210);
       ctx.stroke();
+    } else if (motif === 'rays') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.lineWidth = 2;
+      const centerX = W * 0.82;
+      const centerY = H * 0.18;
+      for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI / 3) + (i * Math.PI / 6);
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(
+          centerX + Math.cos(angle) * 160,
+          centerY + Math.sin(angle) * 160
+        );
+        ctx.stroke();
+      }
       ctx.beginPath();
       ctx.moveTo(W * 0.62, 362);
       ctx.lineTo(W - 132, 362);

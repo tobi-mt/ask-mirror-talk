@@ -98,6 +98,7 @@ class Settings(BaseSettings):
 
     # API
     rate_limit_per_minute: int = 20
+    rate_limit_per_day: int = 100  # Daily limit to prevent single IP domination
     allowed_origins: str = ""  # comma-separated origins for CORS
     question_guardrails_enabled: bool = True
 

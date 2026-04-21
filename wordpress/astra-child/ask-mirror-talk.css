@@ -4164,69 +4164,89 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-continuation-strip {
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid #efe8dd;
-  animation: fadeInUp 0.35s ease;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px solid #e7dccd;
+  animation: fadeInUp 0.5s ease, pulseOnce 2s ease 0.6s;
+}
+
+@keyframes pulseOnce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.01); }
 }
 
 .amt-continuation-strip-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #faf6ef, #f4ede2);
-  border: 1px solid #e7dccd;
+  gap: 14px;
+  padding: 20px 22px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff9f0 0%, #fef5e7 50%, #fff9f0 100%);
+  border: 2px solid #d9b88f;
+  box-shadow: 0 4px 16px rgba(139, 115, 85, 0.12);
 }
 
 .amt-continuation-kicker {
   display: inline-block;
   margin-bottom: 6px;
-  color: #8b7355;
+  color: #b8935f;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 11px;
-  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  font-weight: 800;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .amt-continuation-text {
   margin: 0;
-  color: #5f584f;
-  font-size: 14px;
-  line-height: 1.6;
+  color: #3d3731;
+  font-size: 15px;
+  line-height: 1.65;
+  font-weight: 500;
 }
 
 .amt-continuation-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .amt-continuation-btn {
   background: #fff;
-  border: 1px solid #d9cdbf;
+  border: 2px solid #d9cdbf;
   border-radius: 999px;
-  padding: 9px 14px;
+  padding: 12px 20px;
   color: #2e2a24;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 2px 8px rgba(46, 42, 36, 0.06);
 }
 
 .amt-continuation-btn:hover {
-  border-color: #8b7355;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(46, 42, 36, 0.08);
+  border-color: #b8935f;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 115, 85, 0.15);
 }
 
 .amt-continuation-btn-primary {
-  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  background: linear-gradient(135deg, #b8935f 0%, #8b7355 100%);
   color: #fff;
-  border-color: #2e2a24;
+  border-color: #b8935f;
+  box-shadow: 0 4px 12px rgba(184, 147, 95, 0.25);
+  animation: gentlePulse 3s ease-in-out infinite;
+}
+
+@keyframes gentlePulse {
+  0%, 100% { box-shadow: 0 4px 12px rgba(184, 147, 95, 0.25); }
+  50% { box-shadow: 0 6px 20px rgba(184, 147, 95, 0.35); }
+}
+
+.amt-continuation-btn-primary:hover {
+  background: linear-gradient(135deg, #c9a573 0%, #9d836a 100%);
+  border-color: #c9a573;
 }
 
 /* ── Response Reading Progress Bar ──────────────────────── */

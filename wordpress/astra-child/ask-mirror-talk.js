@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.4.100 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -335,10 +335,23 @@
 
     if (lastSession && lastSession.question && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today) {
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
+      
+      // Check if this theme keeps returning for the user
+      const recentHistory = loadRecentThemeHistory(RECENT_NIGHT_THEMES_KEY);
+      const isRecurringTheme = todayTheme && recentHistory.filter(t => t === todayTheme).length >= 2;
+      
+      if (isRecurringTheme) {
+        return {
+          question: `${todayTheme} keeps returning for you. What part of it still needs your attention before rest?`,
+          strategy: 'recurring_theme_session',
+          theme: todayTheme || null
+        };
+      }
+      
       return {
         question: todayTheme
-          ? `Before the day closes, what from today's reflection on ${todayTheme} is still asking for my attention tonight?`
-          : `Before the day closes, what from today's reflection is still asking for my attention tonight?`,
+          ? `Before the day closes, what from today's reflection on ${todayTheme} is still asking for your attention?`
+          : `Before the day closes, what from today's reflection is still asking for your attention?`,
         strategy: 'today_last_session',
         theme: todayTheme || null
       };
@@ -346,10 +359,11 @@
 
     if (notes.length > 0) {
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
+      const mostRecentNote = notes[0];
       return {
         question: todayTheme
-          ? `What did I write down today around ${todayTheme} that deserves one more quiet look before rest?`
-          : `What did I write down today that deserves one more quiet look before rest?`,
+          ? `What did you write about ${todayTheme} today that still feels alive before rest?`
+          : `What did you write down today that still holds your attention?`,
         strategy: 'today_note',
         theme: todayTheme || null
       };
@@ -893,7 +907,6 @@
 
   let loadingInterval = null;
   let activePlayer = null;
-  let lastDepthMessage = ''; // Track episode depth for display
 
   // Helper: Format timestamp for display (HH:MM:SS)
   function formatTimestamp(seconds) {
@@ -1451,7 +1464,6 @@
     output.classList.remove('amt-complete');
     responseContainer.classList.remove('error');
     responseContainer.classList.add('amt-streaming');
-    lastDepthMessage = '';
 
     // Scroll response into view once at start — use 'nearest' to avoid forcing
     // a scroll when the user is already looking at the right area.
@@ -1475,11 +1487,6 @@
           const event = JSON.parse(jsonStr);
 
           if (event.type === 'status') {
-            // Only capture the final depth message (e.g. "Drawing from 6 episodes…")
-            // — not the initial "Searching episodes…" loading message.
-            if (event.message && event.message.startsWith('Drawing from')) {
-              lastDepthMessage = event.message;
-            }
             // Update the loading text with backend progress
             const textEl = output.querySelector('.amt-loading-text');
             if (textEl) {
@@ -1528,15 +1535,6 @@
             // Remove streaming class and add completion class for CSS animations
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
-
-            // Show depth indicator (e.g. "Drawing from 6 episodes…")
-            if (lastDepthMessage) {
-              const depthEl = document.createElement('div');
-              depthEl.className = 'amt-depth-indicator';
-              depthEl.textContent = lastDepthMessage.replace('…', '');
-              // Append after the response text, before share button
-              output.appendChild(depthEl);
-            }
 
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
@@ -1710,17 +1708,44 @@
   function isCompleteReflectionSentence(text) {
     const clean = normalizeReflectionText(text);
     if (!clean || clean.length < 28) return false;
+    
+    // Must end with proper punctuation
     if (!/[.!?]$/.test(clean)) return false;
+    
+    // Can't be a question
     if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
-    if (/[,:;]\s*(and|or|but)$/i.test(clean)) return false;
-    return true;
+    
+    // Can't end mid-thought with conjunctions
+    if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) return false;
+    
+    // Must have reasonable word count for a complete thought
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length < 5) return false;
+    
+    // Should have action or being verb for completeness
+    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|requires|invites|calls|creates|grows|becomes|allows|asks|teaches|reveals|holds|carries|stay|trust|return|release|choose|protect|honor)\b/i.test(clean);
+    
+    return hasVerb;
   }
 
   function ensureReflectionSentence(text) {
     let clean = trimDanglingHeadlineTail(text);
     if (!clean) return '';
+    
+    // Remove trailing commas and semicolons
     clean = clean.replace(/[,:;]+$/g, '').trim();
-    if (!/[.!?]$/.test(clean)) clean += '.';
+    
+    // Only add period if sentence doesn't already end with punctuation
+    if (!/[.!?]$/.test(clean)) {
+      // Check if the sentence feels complete enough for a period
+      const words = clean.split(/\s+/).filter(Boolean);
+      const hasSubjectVerb = words.length >= 4; // Minimum for a complete thought
+      
+      if (hasSubjectVerb) {
+        clean += '.';
+      }
+    }
+    
     return clean;
   }
 
@@ -5356,18 +5381,18 @@
         motif: 'halo'
       },
       fear: {
-        bg: ['#170d18', '#5f1832', '#f06f51'],
-        orbA: 'rgba(240, 111, 81, 0.48)',
-        orbB: 'rgba(255, 215, 205, 0.18)',
-        accent: '#ffb29a',
-        accentSoft: 'rgba(255,178,154,0.24)',
-        text: '#fff0ea',
-        textSoft: 'rgba(255,240,234,0.77)',
-        panelEdge: 'rgba(255,214,203,0.28)',
-        frameGlow: 'rgba(255,178,154,0.16)',
-        card: 'rgba(255,247,244,0.965)',
-        cardText: '#33231f',
-        kicker: 'A reflection shaped by what fear is trying to protect',
+        bg: ['#1c0d14', '#6f1a38', '#d65a5a'],
+        orbA: 'rgba(214, 90, 90, 0.42)',
+        orbB: 'rgba(250, 205, 205, 0.16)',
+        accent: '#f5a8a8',
+        accentSoft: 'rgba(245,168,168,0.22)',
+        text: '#ffeef0',
+        textSoft: 'rgba(255,238,240,0.75)',
+        panelEdge: 'rgba(248,195,195,0.26)',
+        frameGlow: 'rgba(245,168,168,0.14)',
+        card: 'rgba(255,246,247,0.965)',
+        cardText: '#341e22',
+        kicker: 'A reflection for what fear guards and what it costs',
         motif: 'ember'
       },
       healing: {
@@ -5386,18 +5411,18 @@
         motif: 'tide'
       },
       grief: {
-        bg: ['#171423', '#48306f', '#8d7bf4'],
-        orbA: 'rgba(141, 123, 244, 0.42)',
-        orbB: 'rgba(232, 226, 255, 0.16)',
-        accent: '#d7ccff',
-        accentSoft: 'rgba(215,204,255,0.24)',
-        text: '#f4f1ff',
-        textSoft: 'rgba(244,241,255,0.78)',
-        panelEdge: 'rgba(225,218,255,0.30)',
-        frameGlow: 'rgba(215,204,255,0.18)',
-        card: 'rgba(250,248,255,0.965)',
-        cardText: '#282434',
-        kicker: 'A reflection that stays tender without turning away',
+        bg: ['#1a1520', '#3d2c52', '#7a6b9e'],
+        orbA: 'rgba(122, 107, 158, 0.38)',
+        orbB: 'rgba(215, 210, 230, 0.14)',
+        accent: '#c4b8e0',
+        accentSoft: 'rgba(196,184,224,0.20)',
+        text: '#f0ecf8',
+        textSoft: 'rgba(240,236,248,0.76)',
+        panelEdge: 'rgba(210,203,228,0.26)',
+        frameGlow: 'rgba(196,184,224,0.15)',
+        card: 'rgba(248,246,252,0.965)',
+        cardText: '#2a2535',
+        kicker: 'A reflection that holds space for what cannot be rushed',
         motif: 'veil'
       },
       relationships: {
@@ -5416,33 +5441,33 @@
         motif: 'threads'
       },
       'self-worth': {
-        bg: ['#1f1612', '#87522c', '#f0b763'],
-        orbA: 'rgba(240, 183, 99, 0.46)',
-        orbB: 'rgba(255, 235, 205, 0.18)',
-        accent: '#ffd8a6',
-        accentSoft: 'rgba(255,216,166,0.24)',
-        text: '#fff6ec',
-        textSoft: 'rgba(255,246,236,0.77)',
-        panelEdge: 'rgba(255,227,188,0.28)',
-        frameGlow: 'rgba(255,216,166,0.17)',
-        card: 'rgba(255,249,242,0.97)',
-        cardText: '#37281e',
-        kicker: 'A reflection that returns you to your own center',
+        bg: ['#1d1510', '#6b4520', '#c8924d'],
+        orbA: 'rgba(200, 146, 77, 0.40)',
+        orbB: 'rgba(240, 220, 188, 0.16)',
+        accent: '#e8c895',
+        accentSoft: 'rgba(232,200,149,0.22)',
+        text: '#fff3e6',
+        textSoft: 'rgba(255,243,230,0.75)',
+        panelEdge: 'rgba(235,210,175,0.25)',
+        frameGlow: 'rgba(232,200,149,0.15)',
+        card: 'rgba(254,249,242,0.97)',
+        cardText: '#342618',
+        kicker: 'A reflection that brings you home to your own ground',
         motif: 'orbit'
       },
       leadership: {
-        bg: ['#101925', '#244567', '#7fb9d9'],
-        orbA: 'rgba(127, 185, 217, 0.42)',
-        orbB: 'rgba(224, 243, 255, 0.16)',
-        accent: '#d4ecff',
-        accentSoft: 'rgba(212,236,255,0.20)',
-        text: '#f4fbff',
-        textSoft: 'rgba(244,251,255,0.78)',
-        panelEdge: 'rgba(214,235,248,0.24)',
-        frameGlow: 'rgba(179,224,255,0.14)',
-        card: 'rgba(248,252,255,0.97)',
-        cardText: '#1f2d36',
-        kicker: 'A reflection shaped by courage, clarity, and stewardship',
+        bg: ['#0f1a28', '#1e3a5f', '#4a7ba7'],
+        orbA: 'rgba(74, 123, 167, 0.36)',
+        orbB: 'rgba(200, 225, 245, 0.14)',
+        accent: '#a8d1f0',
+        accentSoft: 'rgba(168,209,240,0.18)',
+        text: '#f0f7fc',
+        textSoft: 'rgba(240,247,252,0.76)',
+        panelEdge: 'rgba(185,220,242,0.22)',
+        frameGlow: 'rgba(148,199,235,0.12)',
+        card: 'rgba(246,251,255,0.97)',
+        cardText: '#1d2d3a',
+        kicker: 'A reflection for those who carry others forward with integrity',
         motif: 'beacon'
       },
       boundaries: {
@@ -5680,8 +5705,64 @@
       split.tail.length >= 12 && split.tail.length <= 72);
   }
 
+  function validateCompleteHeadline(text) {
+    // Ensure the headline is a complete, meaningful sentence
+    const clean = String(text || '').trim();
+    if (!clean) return false;
+    
+    // Check minimum length
+    if (clean.length < 30) return false;
+    
+    // Check for proper ending
+    if (!/[.!?]$/.test(clean) && clean.length < 50) return false;
+    
+    // Check it's not ending mid-thought
+    if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) return false;
+    
+    // Must have verb for complete thought
+    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|means|begins|requires|invites|calls|creates|grows|becomes|allows|asks|teaches|reveals|holds|carries|stay|trust|return|release|choose|protect|honor)\b/i.test(clean);
+    
+    // Must have minimum word count
+    const words = clean.split(/\s+/).filter(Boolean);
+    
+    return hasVerb && words.length >= 6;
+  }
+
   function getInsightShareFamily(insight) {
     if (TEST_FORCE_FAMILY) return TEST_FORCE_FAMILY;
+    
+    const headline = extractShareHeadline(insight);
+    const words = headline.split(/\s+/).filter(Boolean);
+    const theme = String(insight.theme || '').toLowerCase();
+    
+    // Prefer premium cards for strong, quotable insights
+    // Gradient Immersive: Bold, emotional themes with strong sentences
+    if ((theme === 'courage' || theme === 'fear' || theme === 'healing' || theme === 'faith') 
+        && words.length >= 8 && words.length <= 22 
+        && headline.length >= 60 && headline.length <= 180) {
+      return 'gradient_immersive';
+    }
+    
+    // Neon Contemplative: Leadership, boundaries, purpose - futuristic feel
+    if ((theme === 'leadership' || theme === 'boundaries' || theme === 'purpose') 
+        && words.length >= 10 && words.length <= 24
+        && headline.length >= 70) {
+      return 'neon_contemplative';
+    }
+    
+    // Prismatic Quote: Universal, powerful statements
+    if (words.length >= 9 && words.length <= 20 
+        && headline.length >= 65 && headline.length <= 160
+        && /\b(always|never|most|deepest|truest|only|every)\b/i.test(headline)) {
+      return 'prismatic_quote';
+    }
+    
+    // Poster mode for concise, punchy statements
+    if (canUsePosterFamily(insight, headline)) {
+      return 'poster';
+    }
+    
+    // Default to editorial for longer, contextual reflections
     return 'editorial';
   }
 
@@ -5814,7 +5895,14 @@
   }
 
   function buildPosterInsightShareCard(ctx, normalized, style, W, H, variant) {
-    const headline = extractShareHeadline(normalized);
+    let headline = extractShareHeadline(normalized);
+    
+    // Validate completeness
+    if (!validateCompleteHeadline(headline)) {
+      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
+    }
+    headline = ensureReflectionSentence(headline);
+    
     drawShareCardShell(ctx, style, W, H, variant);
 
     ctx.textAlign = 'left';
@@ -5899,7 +5987,15 @@
   }
 
   function buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant) {
-    const headline = splitHeadlineForSpotlight(extractShareHeadline(normalized));
+    let headline = extractShareHeadline(normalized);
+    
+    // Validate completeness
+    if (!validateCompleteHeadline(headline)) {
+      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
+    }
+    headline = ensureReflectionSentence(headline);
+    const splitHeadline = splitHeadlineForSpotlight(headline);
+    
     drawShareCardShell(ctx, style, W, H, variant);
 
     ctx.textAlign = 'center';
@@ -5909,10 +6005,10 @@
 
     const splitY = 268;
     let runningY = splitY;
-    if (headline.lead) {
+    if (splitHeadline.lead) {
       ctx.fillStyle = style.text;
       const leadMetrics = drawFittedCanvasText(ctx, {
-        text: headline.lead,
+        text: splitHeadline.lead,
         x: W / 2,
         y: runningY,
         maxWidth: W - 180,
@@ -5927,7 +6023,7 @@
       runningY += leadMetrics.height + 28;
     }
 
-    if (headline.highlight) {
+    if (splitHeadline.highlight) {
       const highlightY = runningY;
       ctx.fillStyle = style.accentSoft;
       _roundRect(ctx, 118, highlightY - 54, W - 236, 104, 18);
@@ -5938,7 +6034,7 @@
       ctx.stroke();
       ctx.fillStyle = '#fffdf8';
       const highlightMetrics = drawFittedCanvasText(ctx, {
-        text: headline.highlight,
+        text: splitHeadline.highlight,
         x: W / 2,
         y: highlightY,
         maxWidth: W - 220,
@@ -5952,10 +6048,10 @@
       });
       runningY += Math.max(110, highlightMetrics.height + 36);
 
-      if (headline.tail) {
+      if (splitHeadline.tail) {
         ctx.fillStyle = style.text;
         const tailMetrics = drawFittedCanvasText(ctx, {
-          text: headline.tail,
+          text: splitHeadline.tail,
           x: W / 2,
           y: runningY,
           maxWidth: W - 180,
@@ -6480,6 +6576,283 @@
     }
   }
 
+  function buildGradientImmersiveShareCard(ctx, normalized, style, W, H, variant) {
+    // Vibrant, full-bleed gradient with bold centered quote
+    let headline = extractShareHeadline(normalized);
+    
+    // Validate and ensure complete sentence
+    if (!validateCompleteHeadline(headline)) {
+      // Fall back to excerpt or theme-based fallback
+      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
+    }
+    headline = ensureReflectionSentence(headline);
+    
+    // Dynamic gradient based on theme - more vibrant and saturated
+    const vibrantGrad = ctx.createLinearGradient(0, 0, W, H);
+    const theme = String(normalized.theme || '').toLowerCase();
+    
+    // Enhanced color palettes for each theme - more saturated
+    if (theme === 'courage' || theme === 'fear') {
+      vibrantGrad.addColorStop(0, '#ff3366');
+      vibrantGrad.addColorStop(0.5, '#ff6b4a');
+      vibrantGrad.addColorStop(1, '#ffaa00');
+    } else if (theme === 'healing') {
+      vibrantGrad.addColorStop(0, '#00d4aa');
+      vibrantGrad.addColorStop(0.5, '#00b8e6');
+      vibrantGrad.addColorStop(1, '#0088ff');
+    } else if (theme === 'faith' || theme === 'forgiveness') {
+      vibrantGrad.addColorStop(0, '#9b59b6');
+      vibrantGrad.addColorStop(0.5, '#8e44ad');
+      vibrantGrad.addColorStop(1, '#c471ed');
+    } else if (theme === 'leadership') {
+      vibrantGrad.addColorStop(0, '#2c3e50');
+      vibrantGrad.addColorStop(0.5, '#3498db');
+      vibrantGrad.addColorStop(1, '#00d9ff');
+    } else if (theme === 'grief' || theme === 'inner peace') {
+      vibrantGrad.addColorStop(0, '#667eea');
+      vibrantGrad.addColorStop(0.5, '#764ba2');
+      vibrantGrad.addColorStop(1, '#f093fb');
+    } else {
+      vibrantGrad.addColorStop(0, style.bg[0]);
+      vibrantGrad.addColorStop(0.5, style.bg[1]);
+      vibrantGrad.addColorStop(1, style.bg[2]);
+    }
+    
+    ctx.fillStyle = vibrantGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Subtle overlay for depth
+    const overlay = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.8);
+    overlay.addColorStop(0, 'rgba(0,0,0,0)');
+    overlay.addColorStop(1, 'rgba(0,0,0,0.25)');
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Decorative elements - light geometric shapes
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.arc(W * 0.15, H * 0.20, 120, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(W * 0.88, H * 0.75, 160, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Main quote - large, bold, centered
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 8;
+    
+    const quoteMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: H / 2 - 60,
+      maxWidth: W - 160,
+      maxHeight: 520,
+      maxLines: 4,
+      align: 'center',
+      fontTemplate: '700 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      maxSize: 88,
+      minSize: 52,
+      lineHeightRatio: 1.18
+    });
+    
+    ctx.shadowColor = 'transparent';
+    
+    // Theme label - minimal, top
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.font = '600 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, 84);
+    
+    // Branding - bottom
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.font = '500 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('ASK MIRROR TALK', W / 2, H - 96);
+  }
+
+  function buildNeonContemplativeShareCard(ctx, normalized, style, W, H, variant) {
+    // Futuristic glass-morphism with neon accents
+    let headline = extractShareHeadline(normalized);
+    
+    // Validate and ensure complete sentence
+    if (!validateCompleteHeadline(headline)) {
+      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
+    }
+    headline = ensureReflectionSentence(headline);
+    
+    // Dark gradient base
+    const darkGrad = ctx.createLinearGradient(0, 0, W, H);
+    darkGrad.addColorStop(0, '#0a0a0f');
+    darkGrad.addColorStop(0.5, '#1a1a2e');
+    darkGrad.addColorStop(1, '#16213e');
+    ctx.fillStyle = darkGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Neon glow orbs in background
+    const neonColor = style.accent.includes('#') ? style.accent : '#00d9ff';
+    
+    const glow1 = ctx.createRadialGradient(W * 0.25, H * 0.35, 0, W * 0.25, H * 0.35, 280);
+    glow1.addColorStop(0, neonColor + '40');
+    glow1.addColorStop(0.5, neonColor + '20');
+    glow1.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow1;
+    ctx.fillRect(0, 0, W, H);
+    
+    const glow2 = ctx.createRadialGradient(W * 0.78, H * 0.68, 0, W * 0.78, H * 0.68, 320);
+    glow2.addColorStop(0, neonColor + '35');
+    glow2.addColorStop(0.5, neonColor + '18');
+    glow2.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow2;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Glass-morphism panel
+    const panelY = 240;
+    const panelH = 780;
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.filter = 'blur(1px)';
+    _roundRect(ctx, 80, panelY, W - 160, panelH, 36);
+    ctx.fill();
+    ctx.filter = 'none';
+    
+    // Panel border with neon glow
+    ctx.strokeStyle = neonColor + 'cc';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = neonColor;
+    ctx.shadowBlur = 18;
+    _roundRect(ctx, 80, panelY, W - 160, panelH, 36);
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    
+    // Secondary inner glow
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    _roundRect(ctx, 82, panelY + 2, W - 164, panelH - 4, 35);
+    ctx.stroke();
+    
+    // Theme indicator - neon accent
+    ctx.fillStyle = neonColor;
+    ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, panelY + 68);
+    
+    // Main quote
+    ctx.fillStyle = '#ffffff';
+    const quoteMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: panelY + 240,
+      maxWidth: W - 280,
+      maxHeight: 460,
+      maxLines: 4,
+      align: 'center',
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: 72,
+      minSize: 46,
+      lineHeightRatio: 1.22
+    });
+    
+    // Accent line - neon
+    ctx.strokeStyle = neonColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 80, panelY + panelH - 86);
+    ctx.lineTo(W / 2 + 80, panelY + panelH - 86);
+    ctx.stroke();
+    
+    // Bottom branding
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.font = '500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('ASK MIRROR TALK', W / 2, H - 82);
+  }
+
+  function buildPrismaticQuoteShareCard(ctx, normalized, style, W, H, variant) {
+    // Iridescent gradient with bold centered statement
+    const headline = extractShareHeadline(normalized);
+    
+    // Multi-color prismatic gradient
+    const prismatic = ctx.createLinearGradient(0, 0, W, H);
+    prismatic.addColorStop(0, '#ff0080');
+    prismatic.addColorStop(0.2, '#ff8c00');
+    prismatic.addColorStop(0.4, '#40e0d0');
+    prismatic.addColorStop(0.6, '#7b68ee');
+    prismatic.addColorStop(0.8, '#ff1493');
+    prismatic.addColorStop(1, '#ff6347');
+    ctx.fillStyle = prismatic;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Soften with overlay
+    const softener = ctx.createLinearGradient(0, 0, 0, H);
+    softener.addColorStop(0, 'rgba(0,0,0,0.15)');
+    softener.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+    softener.addColorStop(1, 'rgba(0,0,0,0.20)');
+    ctx.fillStyle = softener;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Radial light source for depth
+    const spotlight = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, W * 0.65);
+    spotlight.addColorStop(0, 'rgba(255,255,255,0.18)');
+    spotlight.addColorStop(0.6, 'rgba(255,255,255,0.05)');
+    spotlight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = spotlight;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Main quote container - floating white panel
+    const containerY = 320;
+    const containerH = 680;
+    
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 48;
+    ctx.shadowOffsetY = 16;
+    ctx.fillStyle = '#ffffff';
+    _roundRect(ctx, 110, containerY, W - 220, containerH, 32);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    
+    // Colorful accent bar at top
+    const accentBar = ctx.createLinearGradient(130, containerY + 30, W - 130, containerY + 30);
+    accentBar.addColorStop(0, '#ff0080');
+    accentBar.addColorStop(0.33, '#40e0d0');
+    accentBar.addColorStop(0.66, '#7b68ee');
+    accentBar.addColorStop(1, '#ff6347');
+    ctx.fillStyle = accentBar;
+    _roundRect(ctx, 156, containerY + 44, W - 312, 6, 3);
+    ctx.fill();
+    
+    // Theme label
+    ctx.fillStyle = '#1a1a2e';
+    ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, containerY + 110);
+    
+    // Main quote - dark text on white
+    ctx.fillStyle = '#1a1a2e';
+    const quoteMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: containerY + 260,
+      maxWidth: W - 360,
+      maxHeight: 420,
+      maxLines: 4,
+      align: 'center',
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSize: 76,
+      minSize: 48,
+      lineHeightRatio: 1.20
+    });
+    
+    // Bottom accent
+    ctx.fillStyle = accentBar;
+    _roundRect(ctx, 156, containerY + containerH - 50, W - 312, 6, 3);
+    ctx.fill();
+    
+    // Branding
+    ctx.fillStyle = 'rgba(26,26,46,0.75)';
+    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('ASK MIRROR TALK', W / 2, containerY + containerH - 24);
+  }
+
   function buildInsightShareCard(insight) {
     const normalized = normalizeInsightRecord(insight);
     const style = getInsightShareThemeStyle(normalized.theme);
@@ -6496,6 +6869,12 @@
     }
     if (family === 'poster') {
       buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'gradient_immersive') {
+      buildGradientImmersiveShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'neon_contemplative') {
+      buildNeonContemplativeShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'prismatic_quote') {
+      buildPrismaticQuoteShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'spotlight') {
       buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'minimal') {

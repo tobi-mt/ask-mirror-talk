@@ -280,36 +280,36 @@ def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tupl
     theme_phrase = (recent_theme or "").strip().lower()
 
     title_options = [
-        "Before the day ends",
-        "One quiet return tonight",
-        "Sit with what stayed",
-        "A gentler close to the day",
-        "Come back before rest",
+        "Before rest comes",
+        "One quiet pause tonight",
+        "What stayed with you",
+        "Let the day settle",
+        "Return before sleep",
     ]
 
     if is_returning and recent_theme:
         body_options = [
-            f"Return to what stayed with you today, especially in {theme_phrase}.",
-            f"If {theme_phrase} is still with you tonight, follow it gently a little further.",
-            f"Before rest, sit with what still feels unfinished in {theme_phrase}.",
-            f"Let tonight hold one more honest moment in {theme_phrase}.",
-            f"Come back to the part of {theme_phrase} that still feels alive tonight.",
+            f"What part of {theme_phrase} still asks for your attention before rest?",
+            f"Before sleep, sit with what stayed in {theme_phrase}.",
+            f"Let tonight hold what remains unsettled in {theme_phrase}.",
+            f"One gentle return to {theme_phrase} before the day closes.",
+            f"There may be more to hear in {theme_phrase} before tomorrow arrives.",
         ]
     elif is_returning:
         body_options = [
-            "Return to what stayed with you today.",
-            "Before rest, come back to what still feels unfinished from today.",
-            "Let one honest question help you close the day a little more gently.",
-            "There may still be something from today asking for your quiet attention.",
-            "Follow what stayed with you a little further before the day closes.",
+            "What stayed with you today that still needs your quiet attention?",
+            "Before rest, give the day one more honest moment.",
+            "Let one calm question help you settle what remains.",
+            "There may be something still waiting for your attention tonight.",
+            "One quiet pause before sleep can soften how tomorrow begins.",
         ]
     else:
         body_options = [
-            "Return to what stayed with you today.",
-            "One quiet question tonight can help you close the day with more peace.",
-            "Before sleep, give the day one honest moment of reflection.",
-            "Come back to what still feels present before today slips away.",
-            "A calm return tonight can soften how tomorrow begins.",
+            "What from today still deserves your attention before rest?",
+            "One honest question before sleep can bring more peace.",
+            "Before the day closes, sit with what stayed.",
+            "Let tonight hold what still feels unfinished.",
+            "A gentle pause now can help tomorrow begin more calmly.",
         ]
 
     title = title_options[variant]

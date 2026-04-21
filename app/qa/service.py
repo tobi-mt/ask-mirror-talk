@@ -413,9 +413,6 @@ def answer_question_stream(
             log_interaction=log_interaction,
             context="qa_stream_exact_cache_logging",
         )
-        cached_episode_count = len({c["episode_id"] for c in _exact_citations if c.get("episode_id")})
-        if cached_episode_count:
-            yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {cached_episode_count} episodes…'})}\n\n"
         yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
@@ -442,9 +439,6 @@ def answer_question_stream(
             context="qa_stream_similarity_cache_logging",
         )
         # Stream the full cached answer as a single chunk for instant display
-        cached_episode_count = len({c["episode_id"] for c in cached_response.get("citations", []) if c.get("episode_id")})
-        if cached_episode_count:
-            yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {cached_episode_count} episodes…'})}\n\n"
         yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
@@ -499,10 +493,6 @@ def answer_question_stream(
     safe_close_session(db, context="qa_stream_retrieval_phase")
 
     # ── Phase 2: OpenAI streaming — no DB needed ──
-    # Tell the user how deep we're searching — builds trust and feels thorough
-    unique_episodes = len({cp["episode"]["id"] for cp in chunk_payloads})
-    yield f"data: {json.dumps({'type': 'status', 'message': f'Drawing from {unique_episodes} episodes…'})}\n\n"
-
     from app.qa.answer import generate_intelligent_answer_stream, _generate_basic_answer
     from app.core.config import settings
 

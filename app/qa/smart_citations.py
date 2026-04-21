@@ -1381,6 +1381,16 @@ def select_citation_segments(
         ) >= 0.18
     ]
 
+    # Prefer single outstanding citation when one clearly dominates
+    if len(best_per_episode) >= 1:
+        top_score = float(best_per_episode[0].get("citation_precision_score", 0.0) or 0.0)
+        second_score = float(best_per_episode[1].get("citation_precision_score", 0.0) or 0.0) if len(best_per_episode) > 1 else 0.0
+        
+        # If top citation is significantly stronger (20%+ better), prefer it alone for clarity
+        if top_score >= 0.50 and (second_score == 0.0 or top_score >= second_score * 1.20):
+            logger.info("Preferring single outstanding citation (score=%.3f vs next=%.3f)", top_score, second_score)
+            return finalize_citation_confidence(best_per_episode[:1])
+
     if is_meta_question:
         if len(very_strong) >= 2:
             return finalize_citation_confidence(very_strong[:max_citations])

@@ -410,7 +410,7 @@ Return only the JSON array, no other text."""
     client = OpenAI(api_key=api_key)
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.9,
             max_tokens=2000,
@@ -759,7 +759,7 @@ Return only the JSON array, no other text."""
     client = OpenAI(api_key=api_key)
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.9,
             max_tokens=3000,
@@ -832,7 +832,7 @@ Return only the JSON object, no other text."""
     client = OpenAI(api_key=api_key)
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.85,
             max_tokens=300,

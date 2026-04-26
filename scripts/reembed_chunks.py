@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Re-embed all chunks using OpenAI text-embedding-3-small.
+Re-embed all chunks using the configured OpenAI embedding model.
 
 This script updates the embedding vectors for ALL existing chunks in the database
 WITHOUT re-downloading audio, re-transcribing, or re-chunking. It only touches
@@ -13,6 +13,7 @@ about "addiction" will find episodes about recovery, substance abuse, compulsion
 Usage:
     # Set environment variables first
     export EMBEDDING_PROVIDER=openai
+    export EMBEDDING_MODEL=text-embedding-3-large  # premium migration target
     export OPENAI_API_KEY=sk-...
     export DATABASE_URL=postgresql+psycopg://...
 
@@ -24,8 +25,7 @@ Usage:
 
 Cost estimate:
     - 44,885 chunks × ~100 tokens avg = ~4.5M tokens
-    - text-embedding-3-small: $0.02/1M tokens
-    - Total cost: ~$0.09 (less than 10 cents!)
+    - Cost depends on EMBEDDING_MODEL and current OpenAI pricing
 """
 
 import argparse
@@ -63,6 +63,7 @@ def reembed_all_chunks(batch_size: int = 500, dry_run: bool = False):
     logger.info("RE-EMBEDDING ALL CHUNKS")
     logger.info("=" * 60)
     logger.info(f"Embedding provider: {settings.embedding_provider}")
+    logger.info(f"Embedding model: {settings.embedding_model}")
     logger.info(f"Embedding dimensions: {settings.embedding_dim}")
     logger.info(f"Batch size: {batch_size}")
     logger.info(f"Dry run: {dry_run}")
@@ -165,9 +166,10 @@ def reembed_all_chunks(batch_size: int = 500, dry_run: bool = False):
             logger.info("")
             logger.info("NEXT STEPS:")
             logger.info("1. Set EMBEDDING_PROVIDER=openai on Railway (Variables tab)")
-            logger.info("2. Redeploy the API service")
-            logger.info("3. Test: curl -X POST .../ask -d '{\"question\": \"addiction\"}'")
-            logger.info("4. Verify addiction-related episodes now appear!")
+            logger.info(f"2. Set EMBEDDING_MODEL={settings.embedding_model} on Railway")
+            logger.info("3. Redeploy the API service")
+            logger.info("4. Test: curl -X POST .../ask -d '{\"question\": \"addiction\"}'")
+            logger.info("5. Verify addiction-related episodes now appear!")
         
     finally:
         db.close()

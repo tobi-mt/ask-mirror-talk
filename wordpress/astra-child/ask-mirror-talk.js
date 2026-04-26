@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.1 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.6 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -38,6 +38,8 @@
   // ─── API URL ────────────────────────────────────────────────
   const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
+  const REFLECTION_CARD_QR_URL = `${BASE_PAGE_URL}?ref=card_qr`;
+  const REFLECTION_CARD_URL_LABEL = 'mirrortalkpodcast.com/ask-mirror-talk';
   const DEBUG_NO_CACHE = new URLSearchParams(window.location.search).get('amt_nocache') === '1';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
   const RECENT_EXPLORE_THEMES_KEY = 'amt_recent_explore_themes';
@@ -1696,6 +1698,18 @@
       .replace(/^\s+|\s+$/g, '');
   }
 
+  function joinReflectionTextParts(parts) {
+    return (parts || [])
+      .map(part => normalizeReflectionText(part))
+      .filter(Boolean)
+      .map(part => /[.!?]$/.test(part) ? part : `${part}.`)
+      .join(' ');
+  }
+
+  function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function splitReflectionSentences(text) {
     const clean = normalizeReflectionText(text);
     if (!clean) return [];
@@ -1711,42 +1725,57 @@
     
     // Must end with proper punctuation
     if (!/[.!?]$/.test(clean)) return false;
+    if (/…|\.\.\./.test(clean)) return false;
     
     // Can't be a question
     if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
+    if (isWeakShareHeadlineCandidate(clean)) return false;
     
     // Can't end mid-thought with conjunctions
     if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) return false;
+    if (/\b(and|or|but|because|which|that|about|around|into|with|for|of|on|to|from|can|could|would|should|may|might|enhance|transform|deep|honest)[.!?]$/i.test(clean)) return false;
+    if (/,\s*(deep|honest|gentle|steady|quiet|open|real|true)[.!?]$/i.test(clean)) return false;
     
     // Must have reasonable word count for a complete thought
     const words = clean.split(/\s+/).filter(Boolean);
     if (words.length < 5) return false;
     
     // Should have action or being verb for completeness
-    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|requires|invites|calls|creates|grows|becomes|allows|asks|teaches|reveals|holds|carries|stay|trust|return|release|choose|protect|honor)\b/i.test(clean);
+    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|starts|looks|feels|helps|lets|gives|make|makes|remember|remembers|remind|reminds|notice|notices|open|opens|repair|repairs|rebuild|rebuilds|restore|restores|reconnect|reconnects|transform|transforms|strengthen|strengthens|ground|grounds|anchor|anchors|soften|softens|require|requires|invite|invites|call|calls|create|creates|grow|grows|become|becomes|allow|allows|ask|asks|teach|teaches|reveal|reveals|hold|holds|carry|carries|stay|trust|return|release|choose|protect|honor|pause|listen|lead|follow|speak|learn|face|faced|succeed|succeeded)\b/i.test(clean);
     
     return hasVerb;
   }
 
   function ensureReflectionSentence(text) {
-    let clean = trimDanglingHeadlineTail(text);
+    let clean = cleanReflectionSentenceCandidate(text);
+    if (clean) return clean;
+
+    clean = trimDanglingHeadlineTail(text);
     if (!clean) return '';
     
     // Remove trailing commas and semicolons
     clean = clean.replace(/[,:;]+$/g, '').trim();
-    
-    // Only add period if sentence doesn't already end with punctuation
-    if (!/[.!?]$/.test(clean)) {
-      // Check if the sentence feels complete enough for a period
-      const words = clean.split(/\s+/).filter(Boolean);
-      const hasSubjectVerb = words.length >= 4; // Minimum for a complete thought
-      
-      if (hasSubjectVerb) {
-        clean += '.';
-      }
-    }
-    
-    return clean;
+
+    return isCompleteReflectionSentence(clean) ? clean : '';
+  }
+
+  function capitalizeReflectionSentence(text) {
+    const clean = normalizeReflectionText(text);
+    if (!clean) return '';
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+  }
+
+  function cleanReflectionSentenceCandidate(text) {
+    let clean = normalizeReflectionText(stripSpeakerAttribution(text) || text);
+    if (!clean) return '';
+    clean = clean
+      .replace(/^[-–—•\s]+/, '')
+      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .trim();
+    clean = trimDanglingHeadlineTail(clean);
+    clean = clean.replace(/[,:;]+$/g, '').trim();
+    clean = capitalizeReflectionSentence(clean);
+    return isCompleteReflectionSentence(clean) ? clean : '';
   }
 
   function stripSpeakerAttribution(text) {
@@ -1774,7 +1803,7 @@
       forgiveness: ['forgiveness', 'forgive', 'release', 'trust', 'reconcile'],
       boundaries: ['boundaries', 'boundary', 'needs', 'self-respect', 'guilt', 'protect'],
       leadership: ['leadership', 'leader', 'leaders', 'leading', 'influence', 'stewardship'],
-      courage: ['courage', 'fear', 'brave', 'bravery', 'risk', 'bold'],
+      courage: ['courage', 'fear', 'brave', 'bravery', 'risk', 'bold', 'challenge', 'challenges', 'strength', 'succeeded', 'resilience'],
       faith: ['faith', 'trust', 'hope', 'prayer', 'god', 'belief'],
       selfworth: ['worth', 'worthy', 'value', 'identity', 'comparison', 'confidence'],
       'self-worth': ['worth', 'worthy', 'value', 'identity', 'comparison', 'confidence'],
@@ -1796,8 +1825,7 @@
   }
 
   function scoreReflectionSentence(sentence, options) {
-    const stripped = stripSpeakerAttribution(sentence);
-    const text = trimDanglingHeadlineTail(stripped || sentence);
+    const text = cleanReflectionSentenceCandidate(sentence);
     const lower = text.toLowerCase();
     const words = text.split(/\s+/).filter(Boolean);
     if (!text || words.length < 5) return -100;
@@ -1864,6 +1892,7 @@
 
     sentences.forEach(sentence => {
       const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
+      if (!cleaned) return;
       const score = scoreReflectionSentence(cleaned, options);
       if (score > bestScore || (score === bestScore && cleaned.length > best.length)) {
         best = cleaned;
@@ -1871,33 +1900,106 @@
       }
     });
 
-    return ensureReflectionSentence(best || sentences[0]);
+    return ensureReflectionSentence(best);
+  }
+
+  function listSupportingReflectionCandidates(text, theme, headline) {
+    const clean = normalizeReflectionText(text);
+    if (!clean) return [];
+
+    const themeKeywords = getThemeReflectionKeywords(theme);
+    const headlineLower = trimDanglingHeadlineTail(headline || '').toLowerCase();
+    const sentences = splitReflectionSentences(clean);
+    const ranked = sentences
+      .map(sentence => {
+        const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
+        return {
+          text: cleaned,
+          score: scoreReflectionSentence(cleaned || sentence, {
+            themeKeywords,
+            preferUniversal: true,
+            excludeText: headline || ''
+          })
+        };
+      })
+      .filter(item => {
+        if (!item.text || !isCompleteReflectionSentence(item.text)) return false;
+        return trimDanglingHeadlineTail(item.text).toLowerCase() !== headlineLower;
+      })
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.text);
+
+    const unique = [];
+    ranked.forEach(candidate => {
+      if (!candidate) return;
+      if (!unique.some(existing => areReflectionLinesTooSimilar(existing, candidate))) {
+        unique.push(candidate);
+      }
+    });
+    return unique;
   }
 
   function selectSupportingReflectionLine(text, theme, headline) {
-    const clean = normalizeReflectionText(text);
-    if (!clean) return '';
+    return listSupportingReflectionCandidates(text, theme, headline)[0] || '';
+  }
 
-    const candidate = selectReflectionLine(clean, {
-      themeKeywords: getThemeReflectionKeywords(theme),
-      preferUniversal: true,
-      excludeText: headline || ''
+  function selectFittingReflectionLine(ctx, candidates, fitOptions) {
+    const unique = [];
+    (candidates || []).forEach(candidate => {
+      const clean = ensureReflectionSentence(candidate);
+      if (!clean) return;
+      if (!unique.some(existing => areReflectionLinesTooSimilar(existing, clean))) unique.push(clean);
     });
 
-    if (candidate && trimDanglingHeadlineTail(candidate).toLowerCase() !== trimDanglingHeadlineTail(headline || '').toLowerCase()) {
-      return candidate;
-    }
+    return unique.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        fitOptions.maxWidth,
+        fitOptions.maxHeight,
+        fitOptions.maxLines,
+        fitOptions.fontTemplate,
+        fitOptions.maxSize,
+        fitOptions.minSize,
+        fitOptions.lineHeightRatio
+      )
+    ) || '';
+  }
 
-    const sentences = splitReflectionSentences(clean);
-    const alt = sentences.find(sentence => {
-      const scored = scoreReflectionSentence(sentence, {
-        themeKeywords: getThemeReflectionKeywords(theme),
-        preferUniversal: true,
-        excludeText: headline || ''
+  function inferReflectionArtifactTheme(questionText, bodyText, providedTheme) {
+    const provided = String(providedTheme || '').trim();
+    if (provided && provided.toLowerCase() !== 'reflection') return provided;
+
+    const primary = normalizeReflectionText(bodyText).toLowerCase();
+    const secondary = normalizeReflectionText(questionText).toLowerCase();
+    const includesKeyword = (haystack, keyword) => {
+      const needle = String(keyword || '').toLowerCase().trim();
+      if (!needle) return false;
+      if (/[^a-z0-9]/i.test(needle)) return haystack.includes(needle);
+      return new RegExp(`(^|[^a-z0-9])${escapeRegExp(needle)}(?=$|[^a-z0-9])`, 'i').test(haystack);
+    };
+    let bestTheme = '';
+    let bestScore = 0;
+
+    const cardThemes = Array.from(new Set(AMT_THEMES.concat(['Courage'])));
+    cardThemes.forEach(theme => {
+      const themeKey = theme.toLowerCase();
+      const keywords = Array.from(new Set([themeKey].concat(getThemeReflectionKeywords(theme))));
+      let score = 0;
+
+      keywords.forEach(keyword => {
+        if (!keyword) return;
+        if (includesKeyword(primary, keyword)) score += keyword === themeKey ? 7 : 3;
+        if (includesKeyword(secondary, keyword)) score += keyword === themeKey ? 3 : 1;
       });
-      return scored >= 4 && trimDanglingHeadlineTail(sentence).toLowerCase() !== trimDanglingHeadlineTail(headline || '').toLowerCase();
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTheme = theme;
+      }
     });
-    return ensureReflectionSentence(alt || candidate || clean);
+
+    return bestTheme || inferTheme(questionText, bodyText) || provided || 'Reflection';
   }
 
   function buildThemeReflectionFallback(theme) {
@@ -1912,9 +2014,19 @@
       boundaries: 'Make room for honesty, self-respect, and a steadier no.',
       'self-worth': 'Come back to the truth that your worth does not need proving.',
       leadership: 'Lead from clarity, steadiness, and the courage to stay human.',
-      purpose: 'Follow the thread that keeps calling you forward.'
+      purpose: 'Follow the thread that keeps calling you forward.',
+      gratitude: 'Let gratitude return your attention to what is still giving life.',
+      forgiveness: 'Release what keeps your heart closed while protecting what wisdom has taught you.',
+      'inner peace': 'Let stillness make room for the truth beneath the noise.',
+      growth: 'Let this season teach you without requiring you to become perfect.',
+      communication: 'Speak with enough honesty to be clear and enough care to stay connected.',
+      community: 'Let yourself be supported by the people who can hold the truth with you.',
+      identity: 'Return to the name and worth that do not depend on performance.',
+      transition: 'Trust that a new season can begin before every answer is clear.',
+      empowerment: 'Let your voice return with steadiness, truth, and self-respect.'
     };
-    return ensureReflectionSentence(fallbacks[key] || 'Pause with what feels most true and worth carrying forward.');
+    const fallback = fallbacks[key] || 'Pause with one honest thought that still feels worth carrying forward.';
+    return ensureReflectionSentence(fallback) || 'Pause with one honest thought that still feels worth carrying forward.';
   }
 
   function extractReflectionBody(answerText, theme, headline) {
@@ -1932,7 +2044,7 @@
           excludeText: headline || ''
         })
       }))
-      .filter(item => item.text && item.text.toLowerCase() !== headlineLower)
+      .filter(item => item.text && item.text.toLowerCase() !== headlineLower && isCompleteReflectionSentence(item.text))
       .sort((a, b) => b.score - a.score);
 
     const primary = ranked.find(item => item.score >= 4) || ranked[0];
@@ -1945,7 +2057,7 @@
     );
 
     const combined = secondary ? `${primary.text} ${secondary.text}` : primary.text;
-    return truncateText(combined.trim(), 220);
+    return combined.length <= 220 ? combined.trim() : primary.text;
   }
 
   function extractCardHeadline(text, theme) {
@@ -1967,9 +2079,10 @@
         return {
           text: cleaned,
           score: score - lengthPenalty - wordPenalty,
-          fitsHero: cleaned.length >= 38 && cleaned.length <= 126 && words.length >= 6 && words.length <= 18
+          fitsHero: cleaned.length >= 38 && cleaned.length <= 170 && words.length >= 6 && words.length <= 26
         };
       })
+      .filter(item => item.text && isCompleteReflectionSentence(item.text))
       .sort((a, b) => b.score - a.score);
 
     const bestHero = ranked.find(item => item.fitsHero && item.score >= 3);
@@ -1993,20 +2106,71 @@
         return {
           text: cleaned,
           score: score - lengthPenalty - wordPenalty,
-          fitsHero: cleaned.length >= 38 && cleaned.length <= 126 && words.length >= 6 && words.length <= 18
+          fitsHero: cleaned.length >= 38 && cleaned.length <= 170 && words.length >= 6 && words.length <= 26
         };
       })
-      .filter(item => item.text && item.score >= 0)
+      .filter(item => item.text && item.score >= 0 && item.fitsHero && isCompleteReflectionSentence(item.text))
       .sort((a, b) => b.score - a.score)
       .map(item => item.text);
 
+    const compact = listCompactSourceReflectionCandidates(text);
     const fallback = buildThemeReflectionFallback(theme);
     const unique = [];
-    [...ranked, fallback].forEach(item => {
+    [...ranked, ...compact, fallback].forEach(item => {
       if (!item) return;
       if (!unique.includes(item)) unique.push(item);
     });
     return unique;
+  }
+
+  function listCompactSourceReflectionCandidates(text) {
+    const candidates = [];
+    const add = (value) => {
+      const clean = ensureReflectionSentence(value);
+      if (!clean) return;
+      const words = clean.split(/\s+/).filter(Boolean);
+      if (clean.length > 150 || words.length > 22) return;
+      if (!candidates.some(existing => areReflectionLinesTooSimilar(existing, clean))) {
+        candidates.push(clean);
+      }
+    };
+
+    splitReflectionSentences(text).forEach(sentence => {
+      const raw = normalizeReflectionText(stripSpeakerAttribution(sentence) || sentence);
+      if (!raw) return;
+      const withoutAside = normalizeReflectionText(
+        raw
+          .replace(/\s*[—–]\s*[^—–]{3,140}\s*[—–]\s*/g, ' ')
+          .replace(/\([^)]{3,140}\)/g, ' ')
+      );
+      const variants = Array.from(new Set([raw, withoutAside]));
+
+      variants.forEach(variant => {
+        add(variant);
+
+        const whenYou = variant.match(/\bwhen\s+you\s+(remember|trust|choose|honor|protect|release|return|pause|listen|lead|speak|carry|stay|create|remind|reconnect|notice|allow)\b([^.!?]*[.!?])/i);
+        if (whenYou) {
+          add(`${whenYou[1]}${whenYou[2]}`);
+        }
+
+        const youClause = variant.match(/\b(you\s+(?:can|could|will|would|are|have|need|return|remember|remind|trust|choose|honor|create|carry|stay|let|begin|start|become|reconnect|notice|allow)\b[^.!?]*[.!?])/i);
+        if (youClause) {
+          add(youClause[1]);
+        }
+
+        const yourClause = variant.match(/\b(your\s+[^.!?]*(?:is|are|becomes|can|will|does|need|needs|returns|grows|deepens|strengthens)\b[^.!?]*[.!?])/i);
+        if (yourClause) {
+          add(yourClause[1]);
+        }
+
+        const imperative = variant.match(/\b((?:remember|trust|choose|honor|protect|release|return|pause|listen|lead|speak|let|make|create|notice|allow)\b[^.!?]*[.!?])/i);
+        if (imperative) {
+          add(imperative[1]);
+        }
+      });
+    });
+
+    return candidates;
   }
 
   function areReflectionLinesTooSimilar(a, b) {
@@ -2142,12 +2306,13 @@
       ['Purpose', ['purpose', 'calling', 'direction']],
       ['Identity', ['identity', 'who am i', 'self image', 'self-image']],
       ['Forgiveness', ['forgive', 'forgiveness', 'resentment']],
-      ['Inner peace', ['peace', 'calm', 'stillness']],
+      ['Inner peace', ['peace', 'calm', 'stillness', 'inner weather']],
       ['Communication', ['conversation', 'communicate', 'conflict', 'hard talk']],
       ['Empowerment', ['voice', 'speak up', 'confidence', 'empower']],
       ['Transition', ['transition', 'change', 'new season', 'move on']],
       ['Self-worth', ['worthy', 'worth', 'comparison', 'confidence']],
       ['Faith', ['faith', 'god', 'spiritual']],
+      ['Courage', ['courage', 'brave', 'challenge', 'challenges', 'strength', 'shy']],
       ['Community', ['community', 'belonging', 'support system']]
     ];
 
@@ -2166,27 +2331,27 @@
       themeKeywords: getThemeReflectionKeywords(theme),
       preferUniversal: true,
       preferShort: true
-    }) || clean;
+    }) || buildThemeReflectionFallback(theme);
     return extractReflectionBody(clean, theme, headlineCandidate);
   }
 
   function extractShareHeadline(insight) {
-    const excerpt = String(insight.excerpt || '').trim();
-    const themeKeywords = getThemeReflectionKeywords(insight.theme || '');
-    const answerHeadline = extractCardHeadline(insight.answer || '', insight.theme || '');
-    const answerExcerpt = extractInsightExcerpt(insight.answer || '', insight.theme || '');
+    const excerpt = ensureReflectionSentence(insight.excerpt || '');
+    const fallback = buildThemeReflectionFallback(insight.theme || '');
+    const answerHeadline = ensureReflectionSentence(extractCardHeadline(insight.answer || '', insight.theme || ''));
+    const answerExcerpt = ensureReflectionSentence(extractInsightExcerpt(insight.answer || '', insight.theme || ''));
     if (!excerpt) {
-      return trimDanglingHeadlineTail(answerHeadline || answerExcerpt || buildThemeReflectionFallback(insight.theme || ''));
+      return answerHeadline || answerExcerpt || fallback;
     }
 
     let candidate = extractCardHeadline(excerpt, insight.theme || '');
 
-    candidate = trimDanglingHeadlineTail(candidate || excerpt);
+    candidate = ensureReflectionSentence(candidate || excerpt);
     if (isWeakShareHeadlineCandidate(candidate) && answerExcerpt) {
-      candidate = trimDanglingHeadlineTail(answerHeadline || answerExcerpt);
+      candidate = answerHeadline || answerExcerpt;
     }
 
-    return candidate || trimDanglingHeadlineTail(buildThemeReflectionFallback(insight.theme || ''));
+    return ensureReflectionSentence(candidate) || answerHeadline || answerExcerpt || fallback;
   }
 
   function trimDanglingHeadlineTail(text) {
@@ -2211,11 +2376,16 @@
     if (!cleaned) return true;
     if (cleaned.length < 32) return true;
     if (
+      lower.startsWith('what likely stayed with you') ||
       lower.startsWith('what stayed with me') ||
+      lower.startsWith('what stayed with you') ||
       lower.startsWith('what from today') ||
       lower.startsWith('what keeps returning for me') ||
       lower.startsWith("what is today's question") ||
-      lower.startsWith('what needs my attention most')
+      lower.startsWith('what needs my attention most') ||
+      lower.startsWith('one thing that stood out') ||
+      lower.startsWith('in this reflection') ||
+      lower.startsWith('this reflection')
     ) {
       return true;
     }
@@ -5088,12 +5258,17 @@
   function buildJournalReflectionInsight(entry) {
     const note = String((entry && entry.note) || '').trim();
     const prompt = String((entry && entry.prompt) || '').trim();
-    const theme = String((entry && entry.theme) || inferTheme(prompt, note) || 'Reflection').trim();
+    const sourceQuestion = String((entry && entry.sourceQuestion) || '').trim();
     const sourceExcerpt = String((entry && entry.sourceExcerpt) || '').trim();
-    const answerBody = [note, sourceExcerpt].filter(Boolean).join(' ');
+    const answerBody = joinReflectionTextParts([note, sourceExcerpt]);
+    const theme = inferReflectionArtifactTheme(
+      `${sourceQuestion} ${prompt}`,
+      answerBody || note || sourceExcerpt,
+      (entry && entry.theme) || ''
+    );
 
     return normalizeInsightRecord({
-      question: String((entry && entry.sourceQuestion) || prompt || 'What stayed with me from this reflection?').trim(),
+      question: sourceQuestion || prompt || 'What stayed with me from this reflection?',
       answer: answerBody || note || prompt,
       excerpt: note || sourceExcerpt || prompt,
       theme,
@@ -5281,8 +5456,15 @@
   function normalizeInsightRecord(insight) {
     const question = String((insight && insight.question) || '').trim();
     const answer = String((insight && insight.answer) || '').trim();
-    const theme = String((insight && insight.theme) || inferTheme(question, answer) || 'Reflection').trim();
-    const excerpt = String((insight && insight.excerpt) || extractInsightExcerpt(answer, theme) || buildThemeReflectionFallback(theme)).trim();
+    const rawExcerpt = String((insight && insight.excerpt) || '').trim();
+    const theme = inferReflectionArtifactTheme(
+      question,
+      `${answer} ${rawExcerpt}`,
+      (insight && insight.theme) || ''
+    );
+    const excerpt = ensureReflectionSentence(rawExcerpt) ||
+      extractInsightExcerpt(answer, theme) ||
+      buildThemeReflectionFallback(theme);
 
     return {
       question,
@@ -5736,64 +5918,35 @@
   }
 
   function validateCompleteHeadline(text) {
-    // Ensure the headline is a complete, meaningful sentence
-    const clean = String(text || '').trim();
-    if (!clean) return false;
-    
-    // Check minimum length
-    if (clean.length < 30) return false;
-    
-    // Check for proper ending
-    if (!/[.!?]$/.test(clean) && clean.length < 50) return false;
-    
-    // Check it's not ending mid-thought
-    if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) return false;
-    
-    // Must have verb for complete thought
-    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|means|begins|requires|invites|calls|creates|grows|becomes|allows|asks|teaches|reveals|holds|carries|stay|trust|return|release|choose|protect|honor)\b/i.test(clean);
-    
-    // Must have minimum word count
-    const words = clean.split(/\s+/).filter(Boolean);
-    
-    return hasVerb && words.length >= 6;
+    return isCompleteReflectionSentence(text);
+  }
+
+  function selectFittingShareHeadline(ctx, normalized, fitOptions) {
+    const opts = fitOptions || {};
+    const candidates = listCardHeadlineCandidates(
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
+      normalized.theme || ''
+    );
+    return candidates.find(candidate =>
+      canRenderCanvasTextFully(
+        ctx,
+        candidate,
+        opts.maxWidth,
+        opts.maxHeight,
+        opts.maxLines,
+        opts.fontTemplate,
+        opts.maxSize,
+        opts.minSize,
+        opts.lineHeightRatio
+      )
+    ) || buildThemeReflectionFallback(normalized.theme || '');
   }
 
   function getInsightShareFamily(insight) {
     if (TEST_FORCE_FAMILY) return TEST_FORCE_FAMILY;
-    
-    const headline = extractShareHeadline(insight);
-    const words = headline.split(/\s+/).filter(Boolean);
-    const theme = String(insight.theme || '').toLowerCase();
-    
-    // Prefer premium cards for strong, quotable insights
-    // Gradient Immersive: Bold, emotional themes with strong sentences
-    if ((theme === 'courage' || theme === 'fear' || theme === 'healing' || theme === 'faith') 
-        && words.length >= 8 && words.length <= 22 
-        && headline.length >= 60 && headline.length <= 180) {
-      return 'gradient_immersive';
-    }
-    
-    // Neon Contemplative: Leadership, boundaries, purpose - futuristic feel
-    if ((theme === 'leadership' || theme === 'boundaries' || theme === 'purpose') 
-        && words.length >= 10 && words.length <= 24
-        && headline.length >= 70) {
-      return 'neon_contemplative';
-    }
-    
-    // Prismatic Quote: Universal, powerful statements
-    if (words.length >= 9 && words.length <= 20 
-        && headline.length >= 65 && headline.length <= 160
-        && /\b(always|never|most|deepest|truest|only|every)\b/i.test(headline)) {
-      return 'prismatic_quote';
-    }
-    
-    // Poster mode for concise, punchy statements
-    if (canUsePosterFamily(insight, headline)) {
-      return 'poster';
-    }
-    
-    // Default to editorial for longer, contextual reflections
-    return 'editorial';
+
+    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
+    return seed % 3 === 0 ? 'editorial_serene' : 'editorial';
   }
 
   function drawShareCardShell(ctx, style, W, H, variant) {
@@ -5893,44 +6046,426 @@
     ctx.stroke();
   }
 
-  function drawShareFooter(ctx, style, W, y, align) {
+  let reflectionCardQrMatrix = null;
+
+  function getReflectionCardQrPayload() {
+    return REFLECTION_CARD_QR_URL.length <= 64 ? REFLECTION_CARD_QR_URL : BASE_PAGE_URL;
+  }
+
+  function createReflectionCardQrMatrix() {
+    const version = 4;
+    const size = 17 + version * 4;
+    const dataCodewordCount = 64;
+    const eccCodewordCount = 18;
+    const blocks = 2;
+    const modules = Array.from({ length: size }, () => Array(size).fill(false));
+    const reserved = Array.from({ length: size }, () => Array(size).fill(false));
+    const payload = getReflectionCardQrPayload();
+
+    function setModule(x, y, dark) {
+      modules[y][x] = !!dark;
+    }
+
+    function setFunctionModule(x, y, dark) {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      modules[y][x] = !!dark;
+      reserved[y][x] = true;
+    }
+
+    function drawFinder(centerX, centerY) {
+      for (let dy = -4; dy <= 4; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          const x = centerX + dx;
+          const y = centerY + dy;
+          if (x < 0 || y < 0 || x >= size || y >= size) continue;
+          const dist = Math.max(Math.abs(dx), Math.abs(dy));
+          setFunctionModule(x, y, dist !== 2 && dist !== 4);
+        }
+      }
+    }
+
+    function drawAlignment(centerX, centerY) {
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const dist = Math.max(Math.abs(dx), Math.abs(dy));
+          setFunctionModule(centerX + dx, centerY + dy, dist !== 1);
+        }
+      }
+    }
+
+    function appendBits(bits, value, length) {
+      for (let i = length - 1; i >= 0; i--) {
+        bits.push(((value >>> i) & 1) !== 0);
+      }
+    }
+
+    function makeDataCodewords(text) {
+      const bytes = [];
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        if (code > 255) throw new Error('QR payload must be ISO-8859-1 compatible');
+        bytes.push(code);
+      }
+
+      const bits = [];
+      appendBits(bits, 0x4, 4); // Byte mode
+      appendBits(bits, bytes.length, 8);
+      bytes.forEach(byte => appendBits(bits, byte, 8));
+
+      const maxBits = dataCodewordCount * 8;
+      if (bits.length > maxBits) throw new Error('QR payload is too long');
+      appendBits(bits, 0, Math.min(4, maxBits - bits.length));
+      while (bits.length % 8 !== 0) bits.push(false);
+
+      const codewords = [];
+      for (let i = 0; i < bits.length; i += 8) {
+        let value = 0;
+        for (let j = 0; j < 8; j++) value = (value << 1) | (bits[i + j] ? 1 : 0);
+        codewords.push(value);
+      }
+      for (let pad = 0xec; codewords.length < dataCodewordCount; pad ^= 0xfd) {
+        codewords.push(pad);
+      }
+      return codewords;
+    }
+
+    const gfExp = new Array(512);
+    const gfLog = new Array(256);
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+      gfExp[i] = x;
+      gfLog[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    for (let i = 255; i < gfExp.length; i++) gfExp[i] = gfExp[i - 255];
+
+    function gfMultiply(a, b) {
+      return a === 0 || b === 0 ? 0 : gfExp[gfLog[a] + gfLog[b]];
+    }
+
+    function reedSolomonGenerator(degree) {
+      let result = [1];
+      for (let i = 0; i < degree; i++) {
+        const next = Array(result.length + 1).fill(0);
+        for (let j = 0; j < result.length; j++) {
+          next[j] ^= result[j];
+          next[j + 1] ^= gfMultiply(result[j], gfExp[i]);
+        }
+        result = next;
+      }
+      return result.slice(1);
+    }
+
+    function reedSolomonRemainder(data, degree) {
+      const generator = reedSolomonGenerator(degree);
+      const remainder = Array(degree).fill(0);
+      data.forEach(byte => {
+        const factor = byte ^ remainder.shift();
+        remainder.push(0);
+        for (let i = 0; i < degree; i++) {
+          remainder[i] ^= gfMultiply(generator[i], factor);
+        }
+      });
+      return remainder;
+    }
+
+    function makeCodewords() {
+      const data = makeDataCodewords(payload);
+      const blockLength = dataCodewordCount / blocks;
+      const dataBlocks = [];
+      const eccBlocks = [];
+      for (let i = 0; i < blocks; i++) {
+        const block = data.slice(i * blockLength, (i + 1) * blockLength);
+        dataBlocks.push(block);
+        eccBlocks.push(reedSolomonRemainder(block, eccCodewordCount));
+      }
+
+      const result = [];
+      for (let i = 0; i < blockLength; i++) {
+        for (let b = 0; b < blocks; b++) result.push(dataBlocks[b][i]);
+      }
+      for (let i = 0; i < eccCodewordCount; i++) {
+        for (let b = 0; b < blocks; b++) result.push(eccBlocks[b][i]);
+      }
+      return result;
+    }
+
+    function getFormatBits(mask) {
+      const errorCorrectionBits = 0; // M
+      const data = (errorCorrectionBits << 3) | mask;
+      let remainder = data;
+      for (let i = 0; i < 10; i++) {
+        remainder = (remainder << 1) ^ (((remainder >>> 9) & 1) ? 0x537 : 0);
+      }
+      return ((data << 10) | remainder) ^ 0x5412;
+    }
+
+    function drawFormatBits(mask) {
+      const bits = getFormatBits(mask);
+      for (let i = 0; i <= 5; i++) setFunctionModule(8, i, ((bits >>> i) & 1) !== 0);
+      setFunctionModule(8, 7, ((bits >>> 6) & 1) !== 0);
+      setFunctionModule(8, 8, ((bits >>> 7) & 1) !== 0);
+      setFunctionModule(7, 8, ((bits >>> 8) & 1) !== 0);
+      for (let i = 9; i < 15; i++) setFunctionModule(14 - i, 8, ((bits >>> i) & 1) !== 0);
+      for (let i = 0; i < 8; i++) setFunctionModule(8, size - 1 - i, ((bits >>> i) & 1) !== 0);
+      for (let i = 8; i < 15; i++) setFunctionModule(size - 15 + i, 8, ((bits >>> i) & 1) !== 0);
+      setFunctionModule(8, size - 8, true);
+    }
+
+    function maskBit(mask, mx, my) {
+      switch (mask) {
+        case 0: return (mx + my) % 2 === 0;
+        case 1: return my % 2 === 0;
+        case 2: return mx % 3 === 0;
+        case 3: return (mx + my) % 3 === 0;
+        case 4: return (Math.floor(mx / 3) + Math.floor(my / 2)) % 2 === 0;
+        case 5: return ((mx * my) % 2) + ((mx * my) % 3) === 0;
+        case 6: return (((mx * my) % 2) + ((mx * my) % 3)) % 2 === 0;
+        case 7: return (((mx + my) % 2) + ((mx * my) % 3)) % 2 === 0;
+        default: return false;
+      }
+    }
+
+    function drawFunctionPatterns() {
+      drawFinder(3, 3);
+      drawFinder(size - 4, 3);
+      drawFinder(3, size - 4);
+      for (let i = 8; i < size - 8; i++) {
+        setFunctionModule(6, i, i % 2 === 0);
+        setFunctionModule(i, 6, i % 2 === 0);
+      }
+      drawAlignment(26, 26);
+      drawFormatBits(0);
+    }
+
+    function drawCodewords(codewords, mask) {
+      let bitIndex = 0;
+      let upward = true;
+      for (let right = size - 1; right >= 1; right -= 2) {
+        if (right === 6) right = 5;
+        for (let vert = 0; vert < size; vert++) {
+          const y = upward ? size - 1 - vert : vert;
+          for (let dx = 0; dx < 2; dx++) {
+            const xx = right - dx;
+            if (reserved[y][xx]) continue;
+            const bit = bitIndex < codewords.length * 8
+              ? (((codewords[bitIndex >>> 3] >>> (7 - (bitIndex & 7))) & 1) !== 0)
+              : false;
+            setModule(xx, y, bit !== maskBit(mask, xx, y));
+            bitIndex++;
+          }
+        }
+        upward = !upward;
+      }
+    }
+
+    function cloneModules() {
+      return modules.map(row => row.slice());
+    }
+
+    function restoreModules(snapshot) {
+      for (let y = 0; y < size; y++) modules[y] = snapshot[y].slice();
+    }
+
+    function penaltyScore() {
+      let result = 0;
+      for (let y = 0; y < size; y++) {
+        let runColor = modules[y][0];
+        let runLength = 1;
+        for (let xx = 1; xx < size; xx++) {
+          if (modules[y][xx] === runColor) {
+            runLength++;
+          } else {
+            if (runLength >= 5) result += 3 + runLength - 5;
+            runColor = modules[y][xx];
+            runLength = 1;
+          }
+        }
+        if (runLength >= 5) result += 3 + runLength - 5;
+      }
+      for (let xx = 0; xx < size; xx++) {
+        let runColor = modules[0][xx];
+        let runLength = 1;
+        for (let y = 1; y < size; y++) {
+          if (modules[y][xx] === runColor) {
+            runLength++;
+          } else {
+            if (runLength >= 5) result += 3 + runLength - 5;
+            runColor = modules[y][xx];
+            runLength = 1;
+          }
+        }
+        if (runLength >= 5) result += 3 + runLength - 5;
+      }
+      for (let y = 0; y < size - 1; y++) {
+        for (let xx = 0; xx < size - 1; xx++) {
+          const color = modules[y][xx];
+          if (color === modules[y][xx + 1] && color === modules[y + 1][xx] && color === modules[y + 1][xx + 1]) {
+            result += 3;
+          }
+        }
+      }
+      const finderPattern = [true, false, true, true, true, false, true, false, false, false, false];
+      const inverseFinderPattern = finderPattern.map(value => !value);
+      function matchesPattern(values, pattern) {
+        return values.every((value, index) => value === pattern[index]);
+      }
+      for (let y = 0; y < size; y++) {
+        for (let xx = 0; xx <= size - 11; xx++) {
+          const values = modules[y].slice(xx, xx + 11);
+          if (matchesPattern(values, finderPattern) || matchesPattern(values, inverseFinderPattern)) result += 40;
+        }
+      }
+      for (let xx = 0; xx < size; xx++) {
+        for (let y = 0; y <= size - 11; y++) {
+          const values = [];
+          for (let k = 0; k < 11; k++) values.push(modules[y + k][xx]);
+          if (matchesPattern(values, finderPattern) || matchesPattern(values, inverseFinderPattern)) result += 40;
+        }
+      }
+      let dark = 0;
+      modules.forEach(row => row.forEach(value => { if (value) dark++; }));
+      result += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+      return result;
+    }
+
+    drawFunctionPatterns();
+    const base = cloneModules();
+    const codewords = makeCodewords();
+    let bestMask = 0;
+    let bestPenalty = Infinity;
+    let bestModules = null;
+    for (let mask = 0; mask < 8; mask++) {
+      restoreModules(base);
+      drawCodewords(codewords, mask);
+      drawFormatBits(mask);
+      const penalty = penaltyScore();
+      if (penalty < bestPenalty) {
+        bestPenalty = penalty;
+        bestMask = mask;
+        bestModules = cloneModules();
+      }
+    }
+    restoreModules(bestModules);
+    return { size, modules: cloneModules(), payload, mask: bestMask };
+  }
+
+  function getReflectionCardQrMatrix() {
+    if (!reflectionCardQrMatrix) {
+      reflectionCardQrMatrix = createReflectionCardQrMatrix();
+    }
+    return reflectionCardQrMatrix;
+  }
+
+  function drawReflectionQrCode(ctx, x, y, moduleSize, options) {
+    const opts = options || {};
+    const qr = getReflectionCardQrMatrix();
+    const quiet = Number(opts.quiet || 4);
+    const boxSize = (qr.size + quiet * 2) * moduleSize;
+    ctx.fillStyle = opts.bg || '#fffaf2';
+    ctx.fillRect(x, y, boxSize, boxSize);
+    ctx.fillStyle = opts.fg || '#211b16';
+    qr.modules.forEach((row, rowIndex) => {
+      row.forEach((dark, colIndex) => {
+        if (!dark) return;
+        ctx.fillRect(
+          x + (quiet + colIndex) * moduleSize,
+          y + (quiet + rowIndex) * moduleSize,
+          moduleSize,
+          moduleSize
+        );
+      });
+    });
+    return boxSize;
+  }
+
+  function drawShareFooter(ctx, style, W, y, align, options) {
+    const opts = options || {};
+    const chipW = opts.chipWidth || (align === 'left' ? 560 : 580);
+    const chipH = opts.chipHeight || 136;
+    const chipX = align === 'left' ? 96 : Math.round((W - chipW) / 2);
+    const chipY = Math.min(y + 24, 1178);
+    const labelY = chipY - 28;
     const footerX = align === 'left' ? 96 : W / 2;
     const lineLeft = align === 'left' ? 96 : W / 2 - 168;
     const lineRight = align === 'left' ? 442 : W / 2 + 168;
     ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = 1.1;
     ctx.beginPath();
-    ctx.moveTo(lineLeft, y - 26);
-    ctx.lineTo(lineRight, y - 26);
+    ctx.moveTo(lineLeft, labelY - 26);
+    ctx.lineTo(lineRight, labelY - 26);
     ctx.stroke();
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = align;
-    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, y);
+    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, labelY);
 
     ctx.shadowColor = 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 4;
-    ctx.fillStyle = style.text;
-    ctx.font = '700 36px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', footerX, y + 76);
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = 'rgba(255,250,244,0.88)';
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
+    ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.26)';
+    ctx.lineWidth = 1.2;
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
+    ctx.stroke();
 
-    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.74)';
-    ctx.font = '500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', footerX, y + 112);
+    const qrOuter = 123;
+    const qrX = chipX + 18;
+    const qrY = chipY + Math.round((chipH - qrOuter) / 2);
+    ctx.fillStyle = '#fffaf2';
+    _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 18);
+    ctx.fill();
+    drawReflectionQrCode(ctx, qrX, qrY, 3, { quiet: 4, bg: '#fffaf2', fg: '#201914' });
+
+    const textX = qrX + qrOuter + 24;
+    const textTop = chipY + 36;
+    const chipText = style.cardText || '#2f261e';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = chipText;
+    ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Scan to reflect', textX, textTop);
+
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(47,38,30,0.76)';
+    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 32);
+
+    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(47,38,30,0.62)';
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 61);
+
+    ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(47,38,30,0.54)';
+    ctx.textAlign = 'left';
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 88);
+
+    if (ENABLE_TEST_EXPORTS) {
+      const qr = getReflectionCardQrMatrix();
+      window.__AMT_LAST_FOOTER_DEBUG__ = {
+        label: 'Scan to reflect',
+        qrPayload: getReflectionCardQrPayload(),
+        qrMatrixSize: qr.size,
+        urlLabel: REFLECTION_CARD_URL_LABEL
+      };
+    }
   }
 
   function buildPosterInsightShareCard(ctx, normalized, style, W, H, variant) {
-    let headline = extractShareHeadline(normalized);
-    
-    // Validate completeness
-    if (!validateCompleteHeadline(headline)) {
-      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
-    }
+    let headline = selectFittingShareHeadline(ctx, normalized, {
+      maxWidth: W - 192,
+      maxHeight: 470,
+      maxLines: 5,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 76,
+      minSize: 42,
+      lineHeightRatio: 1.14
+    });
     headline = ensureReflectionSentence(headline);
     
     drawShareCardShell(ctx, style, W, H, variant);
@@ -6014,15 +6549,21 @@
     ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText(style.kicker, 96, H - 196);
     drawShareFooter(ctx, style, W, H - 160, 'left');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'poster', headline };
+    }
   }
 
   function buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant) {
-    let headline = extractShareHeadline(normalized);
-    
-    // Validate completeness
-    if (!validateCompleteHeadline(headline)) {
-      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
-    }
+    let headline = selectFittingShareHeadline(ctx, normalized, {
+      maxWidth: W - 180,
+      maxHeight: 490,
+      maxLines: 6,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 66,
+      minSize: 36,
+      lineHeightRatio: 1.12
+    });
     headline = ensureReflectionSentence(headline);
     const splitHeadline = splitHeadlineForSpotlight(headline);
     
@@ -6098,12 +6639,39 @@
     }
 
     drawShareFooter(ctx, style, W, H - 154, 'center');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'spotlight', headline };
+    }
   }
 
   function buildMinimalInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
-    const headline = extractShareHeadline(normalized);
-    const showExcerpt = !areReflectionLinesTooSimilar(headline, normalized.excerpt);
+    const headlineOptions = {
+      maxWidth: W - 184,
+      maxHeight: 430,
+      maxLines: 4,
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: 74,
+      minSize: 34,
+      lineHeightRatio: 1.12
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
+    const supportingCandidates = listSupportingReflectionCandidates(
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
+      normalized.theme || '',
+      headline
+    );
+    const excerptFitOptions = {
+      maxWidth: W - 276,
+      maxHeight: 216,
+      maxLines: 4,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 40,
+      minSize: 28,
+      lineHeightRatio: 1.35
+    };
+    const supportingExcerpt = selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions);
+    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.fillRect(82, 86, W - 164, 2);
@@ -6124,18 +6692,21 @@
       text: headline,
       x: 92,
       y: 388,
-      maxWidth: W - 184,
+      maxWidth: headlineOptions.maxWidth,
       maxHeight: showExcerpt ? 260 : 430,
-      maxLines: 4,
+      maxLines: headlineOptions.maxLines,
       align: 'left',
-      fontTemplate: '600 __SIZE__px Georgia, serif',
+      fontTemplate: headlineOptions.fontTemplate,
       maxSize: showExcerpt ? 68 : 74,
-      minSize: 34,
-      lineHeightRatio: 1.12
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
 
     if (!showExcerpt) {
       drawShareFooter(ctx, style, W, H - 154, 'left');
+      if (ENABLE_TEST_EXPORTS) {
+        window.__AMT_LAST_RENDER_DEBUG__ = { family: 'minimal', headline, showExcerpt: false };
+      }
       return;
     }
 
@@ -6154,16 +6725,47 @@
     ctx.fillText('“', 116, excerptBoxY + 92);
 
     ctx.fillStyle = style.cardText || style.text;
-    ctx.font = '500 40px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, 146, excerptBoxY + 132, W - 276, 54, 4, 'left');
+    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      ...excerptFitOptions
+    });
+    ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
+    wrapCanvasText(ctx, supportingExcerpt, 146, excerptBoxY + 132, W - 276, excerptMetrics.lineHeight, excerptFitOptions.maxLines, 'left');
 
     drawShareFooter(ctx, style, W, H - 154, 'left');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'minimal', headline, supportingExcerpt, showExcerpt: true };
+    }
   }
 
   function buildAtmosphericInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
-    const headline = extractShareHeadline(normalized);
-    const showExcerpt = !areReflectionLinesTooSimilar(headline, normalized.excerpt);
+    const headlineOptions = {
+      maxWidth: W - 220,
+      maxHeight: 410,
+      maxLines: 4,
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: 74,
+      minSize: 34,
+      lineHeightRatio: 1.12
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
+    const supportingCandidates = listSupportingReflectionCandidates(
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
+      normalized.theme || '',
+      headline
+    );
+    const excerptFitOptions = {
+      maxWidth: W - 300,
+      maxHeight: 138,
+      maxLines: 3,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 34,
+      minSize: 24,
+      lineHeightRatio: 1.35
+    };
+    const supportingExcerpt = selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions);
+    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
 
     const veil = ctx.createLinearGradient(0, H * 0.18, 0, H);
     veil.addColorStop(0, 'rgba(8,8,8,0.00)');
@@ -6193,18 +6795,21 @@
       text: headline,
       x: 96,
       y: 664,
-      maxWidth: W - 220,
+      maxWidth: headlineOptions.maxWidth,
       maxHeight: showExcerpt ? 280 : 410,
-      maxLines: 4,
+      maxLines: headlineOptions.maxLines,
       align: 'left',
-      fontTemplate: '600 __SIZE__px Georgia, serif',
+      fontTemplate: headlineOptions.fontTemplate,
       maxSize: showExcerpt ? 68 : 74,
-      minSize: 34,
-      lineHeightRatio: 1.12
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
 
     if (!showExcerpt) {
       drawShareFooter(ctx, style, W, H - 154, 'left');
+      if (ENABLE_TEST_EXPORTS) {
+        window.__AMT_LAST_RENDER_DEBUG__ = { family: 'atmospheric', headline, showExcerpt: false };
+      }
       return;
     }
 
@@ -6224,27 +6829,47 @@
     ctx.fillText('“', 124, excerptBoxY + 86);
 
     ctx.fillStyle = style.cardText || style.text;
-    ctx.font = '500 34px Georgia, serif';
-    wrapCanvasText(ctx, normalized.excerpt, 154, excerptBoxY + 118, W - 300, 46, 3, 'left');
+    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      ...excerptFitOptions
+    });
+    ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
+    wrapCanvasText(ctx, supportingExcerpt, 154, excerptBoxY + 118, W - 300, excerptMetrics.lineHeight, excerptFitOptions.maxLines, 'left');
 
     drawShareFooter(ctx, style, W, H - 154, 'left');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'atmospheric', headline, supportingExcerpt, showExcerpt: true };
+    }
+  }
+
+  function calculateBalancedShareBaseline(metrics, options) {
+    const opts = options || {};
+    const contentTop = Number(opts.contentTop || 0);
+    const contentBottom = Number(opts.contentBottom || contentTop);
+    const groupHeight = Math.max(1, Number(opts.groupHeight || (metrics && metrics.height) || 1));
+    const size = Math.max(1, Number((metrics && metrics.size) || 1));
+    const available = Math.max(0, contentBottom - contentTop);
+    const groupTop = contentTop + Math.max(0, available - groupHeight) / 2;
+    const minBaseline = Number(opts.minBaseline || contentTop);
+    const maxBaseline = Number(opts.maxBaseline || contentBottom);
+    return Math.round(Math.max(minBaseline, Math.min(maxBaseline, groupTop + size)));
   }
 
   function buildEditorialInsightShareCard(ctx, normalized, style, W, H, variant) {
     drawShareCardShell(ctx, style, W, H, variant);
     const headlineOptions = {
       maxWidth: variant.questionWidth,
-      maxHeightWithExcerpt: 360,
-      maxHeightWithoutExcerpt: 520,
-      maxLines: 4,
+      maxHeightWithExcerpt: 390,
+      maxHeightWithoutExcerpt: 560,
+      maxLines: 5,
       fontTemplate: '700 __SIZE__px Georgia, serif',
       maxSizeWithExcerpt: 76,
       maxSizeWithoutExcerpt: 82,
-      minSize: 40,
+      minSize: 34,
       lineHeightRatio: 1.1
     };
     const headlineCandidates = listCardHeadlineCandidates(
-      `${normalized.answer || ''} ${normalized.excerpt || ''}`,
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || ''
     );
 
@@ -6274,15 +6899,12 @@
       )
     ) || buildThemeReflectionFallback(normalized.theme || '');
 
-    const supportingExcerpt = selectSupportingReflectionLine(
-      normalized.answer || normalized.excerpt || '',
+    const supportingCandidates = listSupportingReflectionCandidates(
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || '',
       headline
-    ) || normalized.excerpt || '';
-    const hasDistinctSupportingExcerpt = !!supportingExcerpt &&
-      !areReflectionLinesTooSimilar(headline, supportingExcerpt);
-    const showExcerpt = hasDistinctSupportingExcerpt &&
-      canRenderCanvasTextFully(
+    );
+    const headlineCanShareSpace = canRenderCanvasTextFully(
         ctx,
         headline,
         headlineOptions.maxWidth,
@@ -6293,7 +6915,56 @@
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
       );
-    const headlineStartY = showExcerpt ? 250 : 308;
+    const panelInset = variant.panelInset;
+    const panelWidth = W - (panelInset * 2);
+    const excerptTextWidth = panelWidth - ((variant.excerptX - panelInset) * 2);
+    const excerptFitOptions = {
+      maxWidth: excerptTextWidth,
+      maxHeight: 238,
+      maxLines: 5,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 43,
+      minSize: 26,
+      lineHeightRatio: 1.16
+    };
+    const supportingExcerpt = headlineCanShareSpace
+      ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
+      : '';
+    const showExcerpt = !!supportingExcerpt;
+    const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: headline,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: showExcerpt ? headlineOptions.maxHeightWithExcerpt : headlineOptions.maxHeightWithoutExcerpt,
+      maxLines: headlineOptions.maxLines,
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: showExcerpt ? headlineOptions.maxSizeWithExcerpt : headlineOptions.maxSizeWithoutExcerpt,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
+    });
+    const excerptMetrics = showExcerpt ? getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      maxWidth: excerptTextWidth,
+      maxHeight: excerptFitOptions.maxHeight,
+      maxLines: excerptFitOptions.maxLines,
+      fontTemplate: excerptFitOptions.fontTemplate,
+      maxSize: excerptFitOptions.maxSize,
+      minSize: excerptFitOptions.minSize,
+      lineHeightRatio: excerptFitOptions.lineHeightRatio
+    }) : null;
+    const excerptBoxH = showExcerpt
+      ? Math.max(224, Math.min(380, 128 + excerptMetrics.height + 70))
+      : 0;
+    const footerY = H - 188;
+    const themeGap = showExcerpt ? 38 : 44;
+    const panelGap = 106;
+    const groupHeight = headlineMetrics.height + themeGap + (showExcerpt ? panelGap + excerptBoxH : 54);
+    const headlineStartY = calculateBalancedShareBaseline(headlineMetrics, {
+      contentTop: showExcerpt ? 218 : 270,
+      contentBottom: footerY - 112,
+      groupHeight,
+      minBaseline: showExcerpt ? 238 : 340,
+      maxBaseline: showExcerpt ? 344 : 540
+    });
 
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
@@ -6305,7 +6976,7 @@
     ctx.fillText(style.kicker, variant.questionAlign === 'left' ? 98 : W / 2, 150);
 
     ctx.fillStyle = style.text;
-    const headlineMetrics = drawFittedCanvasText(ctx, {
+    drawFittedCanvasText(ctx, {
       text: headline,
       x: variant.questionX,
       y: headlineStartY,
@@ -6318,13 +6989,13 @@
       minSize: headlineOptions.minSize,
       lineHeightRatio: headlineOptions.lineHeightRatio
     });
-    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - 76, 0);
+    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - headlineMetrics.size, 0);
 
     const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const themeWidth = Math.max(228, Math.ceil(ctx.measureText(themeLabel).width + 92));
     const themeX = variant.themeAlign === 'left' ? 94 : Math.round((W - themeWidth) / 2);
-    const themeY = questionBottom + 44;
+    const themeY = questionBottom + themeGap;
 
     const pillGrad = ctx.createLinearGradient(themeX, themeY, themeX + themeWidth, themeY);
     pillGrad.addColorStop(0, 'rgba(255,255,255,0.30)');
@@ -6342,38 +7013,24 @@
     ctx.fillText(themeLabel, variant.themeAlign === 'left' ? themeX + 46 : themeX + (themeWidth / 2), themeY + 27);
     ctx.textBaseline = 'alphabetic';
 
+    const excerptBoxY = themeY + panelGap;
+
     if (!showExcerpt) {
-      drawShareFooter(ctx, style, W, H - 188, variant.footerAlign);
+      drawShareFooter(ctx, style, W, footerY, variant.footerAlign);
       if (ENABLE_TEST_EXPORTS) {
         window.__AMT_LAST_RENDER_DEBUG__ = {
           family: 'editorial',
           headline,
-          supportingExcerpt,
+          supportingExcerpt: supportingCandidates[0] || '',
           showExcerpt: false,
-          panelMode: 'none'
+          panelMode: 'none',
+          excerptRejected: supportingCandidates.length ? 'does_not_fit' : 'none_available',
+          layout: { headlineStartY, footerY, groupHeight }
         };
       }
       return;
     }
 
-    const excerptBoxY = themeY + 106;
-    const panelInset = variant.panelInset;
-    const panelWidth = W - (panelInset * 2);
-    const excerptTextWidth = panelWidth - ((variant.excerptX - panelInset) * 2);
-    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
-      text: supportingExcerpt,
-      maxWidth: excerptTextWidth,
-      maxHeight: 280,
-      maxLines: 5,
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 43,
-      minSize: 30,
-      lineHeightRatio: 1.16
-    });
-    const excerptBoxH = Math.max(
-      244,
-      Math.min(446, 128 + excerptMetrics.height + 70)
-    );
     const panelMode = excerptMetrics.lineCount <= 2 ? 'compact' : excerptMetrics.lineCount === 3 ? 'balanced' : 'full';
 
     ctx.shadowColor = 'rgba(0,0,0,0.18)';
@@ -6402,9 +7059,9 @@
 
     ctx.fillStyle = style.cardText;
     ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
-    wrapCanvasText(ctx, supportingExcerpt, variant.excerptX, excerptBoxY + 158, excerptTextWidth, excerptMetrics.lineHeight, 5, 'left');
+    wrapCanvasText(ctx, supportingExcerpt, variant.excerptX, excerptBoxY + 158, excerptTextWidth, excerptMetrics.lineHeight, excerptFitOptions.maxLines, 'left');
 
-    drawShareFooter(ctx, style, W, excerptBoxY + excerptBoxH + 88, variant.footerAlign);
+    drawShareFooter(ctx, style, W, footerY, variant.footerAlign);
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = {
         family: 'editorial',
@@ -6413,7 +7070,8 @@
         showExcerpt: true,
         panelMode,
         excerptLineCount: excerptMetrics.lineCount,
-        excerptPanelHeight: excerptBoxH
+        excerptPanelHeight: excerptBoxH,
+        layout: { headlineStartY, footerY, groupHeight }
       };
     }
   }
@@ -6422,17 +7080,17 @@
     drawShareCardShell(ctx, style, W, H, variant);
     const headlineOptions = {
       maxWidth: 848,
-      maxHeightWithExcerpt: 310,
-      maxHeightWithoutExcerpt: 430,
-      maxLines: 4,
+      maxHeightWithExcerpt: 360,
+      maxHeightWithoutExcerpt: 500,
+      maxLines: 5,
       fontTemplate: '700 __SIZE__px Georgia, serif',
       maxSizeWithExcerpt: 72,
       maxSizeWithoutExcerpt: 78,
-      minSize: 38,
+      minSize: 34,
       lineHeightRatio: 1.1
     };
     const headlineCandidates = listCardHeadlineCandidates(
-      `${normalized.answer || ''} ${normalized.excerpt || ''}`,
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || ''
     );
 
@@ -6462,15 +7120,12 @@
       )
     ) || buildThemeReflectionFallback(normalized.theme || '');
 
-    const supportingExcerpt = selectSupportingReflectionLine(
-      normalized.answer || normalized.excerpt || '',
+    const supportingCandidates = listSupportingReflectionCandidates(
+      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || '',
       headline
-    ) || normalized.excerpt || '';
-    const hasDistinctSupportingExcerpt = !!supportingExcerpt &&
-      !areReflectionLinesTooSimilar(headline, supportingExcerpt);
-    const showExcerpt = hasDistinctSupportingExcerpt &&
-      canRenderCanvasTextFully(
+    );
+    const headlineCanShareSpace = canRenderCanvasTextFully(
         ctx,
         headline,
         headlineOptions.maxWidth,
@@ -6481,7 +7136,56 @@
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
       );
-    const headlineStartY = showExcerpt ? 284 : 344;
+    const panelInset = 110;
+    const panelWidth = W - (panelInset * 2);
+    const excerptX = 154;
+    const excerptTextWidth = panelWidth - ((excerptX - panelInset) * 2);
+    const excerptFitOptions = {
+      maxWidth: excerptTextWidth,
+      maxHeight: 210,
+      maxLines: 5,
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 40,
+      minSize: 25,
+      lineHeightRatio: 1.16
+    };
+    const supportingExcerpt = headlineCanShareSpace
+      ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
+      : '';
+    const showExcerpt = !!supportingExcerpt;
+    const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
+      text: headline,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: showExcerpt ? headlineOptions.maxHeightWithExcerpt : headlineOptions.maxHeightWithoutExcerpt,
+      maxLines: headlineOptions.maxLines,
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: showExcerpt ? headlineOptions.maxSizeWithExcerpt : headlineOptions.maxSizeWithoutExcerpt,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
+    });
+    const excerptMetrics = showExcerpt ? getFittedCanvasTextMetrics(ctx, {
+      text: supportingExcerpt,
+      maxWidth: excerptTextWidth,
+      maxHeight: excerptFitOptions.maxHeight,
+      maxLines: excerptFitOptions.maxLines,
+      fontTemplate: excerptFitOptions.fontTemplate,
+      maxSize: excerptFitOptions.maxSize,
+      minSize: excerptFitOptions.minSize,
+      lineHeightRatio: excerptFitOptions.lineHeightRatio
+    }) : null;
+    const excerptBoxH = showExcerpt
+      ? Math.max(210, Math.min(340, 120 + excerptMetrics.height + 56))
+      : 0;
+    const footerY = H - 188;
+    const panelGap = 96;
+    const groupHeight = headlineMetrics.height + (showExcerpt ? panelGap + excerptBoxH : 0);
+    const headlineStartY = calculateBalancedShareBaseline(headlineMetrics, {
+      contentTop: showExcerpt ? 238 : 330,
+      contentBottom: footerY - 118,
+      groupHeight,
+      minBaseline: showExcerpt ? 278 : 390,
+      maxBaseline: showExcerpt ? 390 : 610
+    });
 
     ctx.textAlign = 'left';
     ctx.fillStyle = style.accent;
@@ -6514,7 +7218,7 @@
     ctx.textBaseline = 'alphabetic';
 
     ctx.fillStyle = style.text;
-    const headlineMetrics = drawFittedCanvasText(ctx, {
+    drawFittedCanvasText(ctx, {
       text: headline,
       x: 110,
       y: headlineStartY,
@@ -6527,41 +7231,26 @@
       minSize: headlineOptions.minSize,
       lineHeightRatio: headlineOptions.lineHeightRatio
     });
-    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - 72, 0);
+    const questionBottom = headlineStartY + Math.max(headlineMetrics.height - headlineMetrics.size, 0);
+
+    const excerptBoxY = questionBottom + panelGap;
 
     if (!showExcerpt) {
-      drawShareFooter(ctx, style, W, H - 188, 'center');
+      drawShareFooter(ctx, style, W, footerY, 'center');
       if (ENABLE_TEST_EXPORTS) {
         window.__AMT_LAST_RENDER_DEBUG__ = {
           family: 'editorial_serene',
           headline,
-          supportingExcerpt,
+          supportingExcerpt: supportingCandidates[0] || '',
           showExcerpt: false,
-          panelMode: 'none'
+          panelMode: 'none',
+          excerptRejected: supportingCandidates.length ? 'does_not_fit' : 'none_available',
+          layout: { headlineStartY, footerY, groupHeight }
         };
       }
       return;
     }
 
-    const excerptBoxY = questionBottom + 96;
-    const panelInset = 110;
-    const panelWidth = W - (panelInset * 2);
-    const excerptX = 154;
-    const excerptTextWidth = panelWidth - ((excerptX - panelInset) * 2);
-    const excerptMetrics = getFittedCanvasTextMetrics(ctx, {
-      text: supportingExcerpt,
-      maxWidth: excerptTextWidth,
-      maxHeight: 236,
-      maxLines: 4,
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 40,
-      minSize: 29,
-      lineHeightRatio: 1.16
-    });
-    const excerptBoxH = Math.max(
-      218,
-      Math.min(348, 120 + excerptMetrics.height + 56)
-    );
     const panelMode = excerptMetrics.lineCount <= 2 ? 'compact' : excerptMetrics.lineCount === 3 ? 'balanced' : 'full';
 
     ctx.shadowColor = 'rgba(0,0,0,0.15)';
@@ -6590,9 +7279,9 @@
 
     ctx.fillStyle = style.cardText;
     ctx.font = `500 ${excerptMetrics.size}px Georgia, serif`;
-    wrapCanvasText(ctx, supportingExcerpt, excerptX, excerptBoxY + 148, excerptTextWidth, excerptMetrics.lineHeight, 4, 'left');
+    wrapCanvasText(ctx, supportingExcerpt, excerptX, excerptBoxY + 148, excerptTextWidth, excerptMetrics.lineHeight, excerptFitOptions.maxLines, 'left');
 
-    drawShareFooter(ctx, style, W, excerptBoxY + excerptBoxH + 92, 'center');
+    drawShareFooter(ctx, style, W, footerY, 'center');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = {
         family: 'editorial_serene',
@@ -6601,21 +7290,24 @@
         showExcerpt: true,
         panelMode,
         excerptLineCount: excerptMetrics.lineCount,
-        excerptPanelHeight: excerptBoxH
+        excerptPanelHeight: excerptBoxH,
+        layout: { headlineStartY, footerY, groupHeight }
       };
     }
   }
 
   function buildGradientImmersiveShareCard(ctx, normalized, style, W, H, variant) {
     // Vibrant, full-bleed gradient with bold centered quote
-    let headline = extractShareHeadline(normalized);
-    
-    // Validate and ensure complete sentence
-    if (!validateCompleteHeadline(headline)) {
-      // Fall back to excerpt or theme-based fallback
-      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
-    }
-    headline = ensureReflectionSentence(headline);
+    const headlineOptions = {
+      maxWidth: W - 160,
+      maxHeight: 420,
+      maxLines: 4,
+      fontTemplate: '700 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      maxSize: 88,
+      minSize: 46,
+      lineHeightRatio: 1.18
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
     
     // Dynamic gradient based on theme - more vibrant and saturated
     const vibrantGrad = ctx.createLinearGradient(0, 0, W, H);
@@ -6677,14 +7369,14 @@
       text: headline,
       x: W / 2,
       y: H / 2 - 60,
-      maxWidth: W - 160,
-      maxHeight: 520,
-      maxLines: 4,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: headlineOptions.maxHeight,
+      maxLines: headlineOptions.maxLines,
       align: 'center',
-      fontTemplate: '700 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      maxSize: 88,
-      minSize: 52,
-      lineHeightRatio: 1.18
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: headlineOptions.maxSize,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
     
     ctx.shadowColor = 'transparent';
@@ -6695,21 +7387,24 @@
     ctx.textAlign = 'center';
     ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, 84);
     
-    // Branding - bottom
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    ctx.font = '500 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('ASK MIRROR TALK', W / 2, H - 96);
+    drawShareFooter(ctx, style, W, H - 206, 'center');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'gradient_immersive', headline };
+    }
   }
 
   function buildNeonContemplativeShareCard(ctx, normalized, style, W, H, variant) {
     // Futuristic glass-morphism with neon accents
-    let headline = extractShareHeadline(normalized);
-    
-    // Validate and ensure complete sentence
-    if (!validateCompleteHeadline(headline)) {
-      headline = normalized.excerpt || buildThemeReflectionFallback(normalized.theme || '');
-    }
-    headline = ensureReflectionSentence(headline);
+    const headlineOptions = {
+      maxWidth: W - 280,
+      maxHeight: 460,
+      maxLines: 4,
+      fontTemplate: '600 __SIZE__px Georgia, serif',
+      maxSize: 72,
+      minSize: 42,
+      lineHeightRatio: 1.22
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
     
     // Dark gradient base
     const darkGrad = ctx.createLinearGradient(0, 0, W, H);
@@ -6773,14 +7468,14 @@
       text: headline,
       x: W / 2,
       y: panelY + 240,
-      maxWidth: W - 280,
-      maxHeight: 460,
-      maxLines: 4,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: headlineOptions.maxHeight,
+      maxLines: headlineOptions.maxLines,
       align: 'center',
-      fontTemplate: '600 __SIZE__px Georgia, serif',
-      maxSize: 72,
-      minSize: 46,
-      lineHeightRatio: 1.22
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: headlineOptions.maxSize,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
     
     // Accent line - neon
@@ -6791,15 +7486,24 @@
     ctx.lineTo(W / 2 + 80, panelY + panelH - 86);
     ctx.stroke();
     
-    // Bottom branding
-    ctx.fillStyle = 'rgba(255,255,255,0.70)';
-    ctx.font = '500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('ASK MIRROR TALK', W / 2, H - 82);
+    drawShareFooter(ctx, style, W, H - 206, 'center');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'neon_contemplative', headline };
+    }
   }
 
   function buildPrismaticQuoteShareCard(ctx, normalized, style, W, H, variant) {
     // Iridescent gradient with bold centered statement
-    const headline = extractShareHeadline(normalized);
+    const headlineOptions = {
+      maxWidth: W - 360,
+      maxHeight: 420,
+      maxLines: 4,
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSize: 76,
+      minSize: 44,
+      lineHeightRatio: 1.20
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
     
     // Multi-color prismatic gradient
     const prismatic = ctx.createLinearGradient(0, 0, W, H);
@@ -6862,14 +7566,14 @@
       text: headline,
       x: W / 2,
       y: containerY + 260,
-      maxWidth: W - 360,
-      maxHeight: 420,
-      maxLines: 4,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: headlineOptions.maxHeight,
+      maxLines: headlineOptions.maxLines,
       align: 'center',
-      fontTemplate: '700 __SIZE__px Georgia, serif',
-      maxSize: 76,
-      minSize: 48,
-      lineHeightRatio: 1.20
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: headlineOptions.maxSize,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
     });
     
     // Bottom accent
@@ -6877,10 +7581,14 @@
     _roundRect(ctx, 156, containerY + containerH - 50, W - 312, 6, 3);
     ctx.fill();
     
-    // Branding
     ctx.fillStyle = 'rgba(26,26,46,0.75)';
     ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText('ASK MIRROR TALK', W / 2, containerY + containerH - 24);
+
+    drawShareFooter(ctx, style, W, H - 206, 'center');
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'prismatic_quote', headline };
+    }
   }
 
   function buildInsightShareCard(insight) {
@@ -6896,6 +7604,7 @@
     const ctx = canvas.getContext('2d');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = null;
+      window.__AMT_LAST_FOOTER_DEBUG__ = null;
     }
     if (family === 'poster') {
       buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
@@ -7108,7 +7817,7 @@
   function shareInsightArtifact(insight) {
     const normalized = {
       ...normalizeInsightRecord(insight),
-      shareSource: 'saved_insight'
+      shareSource: (insight && insight.shareSource) || 'saved_insight'
     };
     const dataUrl = buildInsightShareCard(normalized);
     const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
@@ -8016,10 +8725,17 @@
       extractInsightExcerpt,
       extractCardHeadline,
       listCardHeadlineCandidates,
+      isCompleteReflectionSentence,
+      ensureReflectionSentence,
+      joinReflectionTextParts,
       buildThemeReflectionFallback,
+      buildJournalReflectionInsight,
       buildInsightShareCard,
+      getReflectionCardQrMatrix,
+      getReflectionCardQrPayload,
       getInsightShareThemeStyle,
-      getInsightShareVariant
+      getInsightShareVariant,
+      getInsightShareFamily
     };
   }
 

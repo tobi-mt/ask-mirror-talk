@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask Mirror Talk Reflection Card Fixtures</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #101317;
+      color: #f5f2ec;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .fixture-shell {
+      display: grid;
+      grid-template-columns: minmax(320px, 480px) minmax(360px, 1fr);
+      gap: 28px;
+      padding: 28px;
+      align-items: start;
+    }
+
+    .preview {
+      background: #050608;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .preview img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+    }
+
+    .meta {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: 18px;
+      padding: 20px;
+      line-height: 1.45;
+    }
+
+    .meta h1 {
+      margin: 0 0 14px;
+      font-size: 22px;
+    }
+
+    .meta p {
+      margin: 0 0 12px;
+    }
+
+    .meta pre {
+      overflow: auto;
+      white-space: pre-wrap;
+      background: rgba(0,0,0,.28);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13px;
+    }
+
+    .amt-fixture-hidden {
+      display: none;
+    }
+
+    #amt-notif-optin {
+      display: none !important;
+    }
+  </style>
+  <script>
+    window.__AMT_ENABLE_TEST_EXPORTS__ = true;
+    window.__AMT_TEST_FORCE_FAMILY__ = new URLSearchParams(window.location.search).get('family') || '';
+    window.AskMirrorTalk = {
+      apiUrl: 'https://example.test',
+      nonce: 'fixture',
+      restUrl: 'https://example.test/wp-json/'
+    };
+  </script>
+</head>
+<body>
+  <div class="amt-fixture-hidden">
+    <form id="ask-mirror-talk-form">
+      <textarea id="ask-mirror-talk-input"></textarea>
+      <button id="ask-mirror-talk-submit" type="submit">Ask</button>
+    </form>
+    <div class="ask-mirror-talk-response">
+      <div id="ask-mirror-talk-output"></div>
+    </div>
+    <div class="ask-mirror-talk-citations">
+      <div id="ask-mirror-talk-citations"></div>
+    </div>
+    <div id="ask-mirror-talk-suggestions"><div class="amt-suggestions-list"></div></div>
+    <div id="ask-mirror-talk-followups"><div class="amt-followups-list"></div></div>
+    <div id="ask-mirror-talk-topics"><div class="amt-topics-list"></div></div>
+    <div id="ask-mirror-talk-qotd"></div>
+  </div>
+
+  <main class="fixture-shell">
+    <section class="preview">
+      <img id="card-preview" alt="Rendered reflection card fixture">
+    </section>
+    <section class="meta">
+      <h1 id="fixture-title">Reflection Card Fixture</h1>
+      <p id="fixture-summary"></p>
+      <pre id="fixture-debug"></pre>
+    </section>
+  </main>
+
+  <script src="../wordpress/astra-child/ask-mirror-talk.js"></script>
+  <script>
+    const fixtures = {
+      faith_fragment: {
+        question: 'How do I reconnect with my faith after doubt?',
+        theme: 'Healing',
+        answer: 'Reconnecting with your faith after doubt often starts with a deep, honest',
+        excerpt: 'Reconnecting with your faith after doubt often starts with a deep, honest'
+      },
+      faith_complete: {
+        question: 'How do I reconnect with my faith after doubt?',
+        theme: 'Healing',
+        answer: 'Reconnecting with your faith after doubt often starts with a deep, honest exploration of what you truly believe. Let the questions become a doorway back to trust, not proof that faith has disappeared.',
+        excerpt: 'Reconnecting with your faith after doubt often starts with a deep, honest exploration of what you truly believe.'
+      },
+      gratitude_prompt_fragment: {
+        question: 'What stayed with me most from today’s reflection on Gratitude?',
+        theme: 'Gratitude',
+        answer: "What likely stayed with you from today's reflection on that gratitude can transform your perspective and enhance",
+        excerpt: "What likely stayed with you from today's reflection on that gratitude can transform your perspective and enhance"
+      },
+      gratitude_complete: {
+        question: 'What role does gratitude play in overcoming hardship?',
+        theme: 'Gratitude',
+        answer: 'Gratitude can transform hardship by returning your attention to what is still alive, steady, and worth protecting. It does not deny pain; it gives the heart another place to breathe.',
+        excerpt: 'Gratitude can transform hardship by returning your attention to what is still alive, steady, and worth protecting.'
+      },
+      healing_commitments_fragment: {
+        question: "How can I rebuild trust after it's been broken?",
+        theme: 'Healing',
+        answer: "By honoring commitments, you're slowly reconstructing that fragile bridge of",
+        excerpt: "By honoring commitments, you're slowly reconstructing that fragile bridge of"
+      },
+      healing_commitments_complete: {
+        question: "How can I rebuild trust after it's been broken?",
+        theme: 'Healing',
+        answer: "By honoring commitments, you're slowly reconstructing that fragile bridge of trust. Repair becomes believable when care is repeated long enough to feel safe again.",
+        excerpt: "By honoring commitments, you're slowly reconstructing that fragile bridge of trust."
+      },
+      relationships_medium: {
+        question: "What's the key to building healthy relationships?",
+        theme: 'Relationships',
+        answer: 'Healthy relationships grow where respect, honesty, and repair are practiced consistently. Connection becomes stronger when both people feel safe enough to tell the truth.',
+        excerpt: 'Healthy relationships grow where respect, honesty, and repair are practiced consistently.'
+      },
+      leadership_long: {
+        question: 'What does it look like to lead with vulnerability?',
+        theme: 'Leadership',
+        answer: 'Leading with vulnerability means telling the truth without handing your steadiness away. It asks a leader to stay human, name what matters, and create enough safety for others to be honest too.',
+        excerpt: 'Leading with vulnerability means telling the truth without handing your steadiness away.'
+      },
+      selfworth_medium: {
+        question: 'How do I stop comparing myself to others?',
+        theme: 'Self-worth',
+        answer: 'Your worth becomes steadier when you stop measuring your life against someone else’s timing. Come back to the path that is actually yours.',
+        excerpt: 'Your worth becomes steadier when you stop measuring your life against someone else’s timing.'
+      },
+      courage_short: {
+        question: 'What does courage look like in everyday life?',
+        theme: 'Courage',
+        answer: 'Courage often looks like one honest step taken before confidence arrives.',
+        excerpt: 'Courage often looks like one honest step taken before confidence arrives.'
+      },
+      inner_peace_empty: {
+        question: '',
+        theme: 'Inner peace',
+        answer: '',
+        excerpt: ''
+      },
+      saved_reflection_long_note: {
+        question: 'What helped me remember my strength?',
+        theme: 'Reflection',
+        answer: "By reflecting on times when you've faced challenges before and succeeded—perhaps when dancing despite feeling shy—you can remind yourself of your inherent strength.",
+        excerpt: "By reflecting on times when you've faced challenges before and succeeded—perhaps when dancing despite feeling shy—you can remind yourself of your inherent strength."
+      },
+      journal_reflection_long_note: {
+        type: 'journal',
+        prompt: 'What part of this resonated most with you today?',
+        note: "By reflecting on times when you've faced challenges before and succeeded—perhaps when dancing despite feeling shy—you can remind yourself of your inherent strength.",
+        theme: 'Reflection',
+        sourceQuestion: 'How can I overcome fear and self-doubt?',
+        sourceExcerpt: 'Courage often grows when you remember the strength you have already practiced.'
+      }
+    };
+
+    function renderFixture() {
+      const params = new URLSearchParams(window.location.search);
+      const fixtureName = params.get('fixture') || 'faith_fragment';
+      const fixture = fixtures[fixtureName] || fixtures.faith_fragment;
+      const exports = window.__AMT_TEST_EXPORTS__;
+
+      if (!exports) {
+        document.getElementById('fixture-debug').textContent = 'AMT test exports were not available.';
+        return;
+      }
+
+      const normalized = fixture.type === 'journal'
+        ? exports.buildJournalReflectionInsight(fixture)
+        : exports.normalizeInsightRecord(fixture);
+      const dataUrl = exports.buildInsightShareCard(normalized);
+      const debug = window.__AMT_LAST_RENDER_DEBUG__ || {};
+      document.getElementById('card-preview').src = dataUrl;
+      document.getElementById('fixture-title').textContent = fixtureName;
+      document.getElementById('fixture-summary').textContent =
+        `theme=${normalized.theme} forcedFamily=${window.__AMT_TEST_FORCE_FAMILY__ || '(auto)'} actualFamily=${debug.family || exports.getInsightShareFamily(normalized)}`;
+      document.getElementById('fixture-debug').textContent = JSON.stringify({
+        rendered: debug,
+        footer: window.__AMT_LAST_FOOTER_DEBUG__ || null,
+        normalized,
+        qrPayload: exports.getReflectionCardQrPayload ? exports.getReflectionCardQrPayload() : null,
+        qrMatrix: exports.getReflectionCardQrMatrix ? {
+          size: exports.getReflectionCardQrMatrix().size,
+          mask: exports.getReflectionCardQrMatrix().mask
+        } : null,
+        shareHeadline: exports.extractShareHeadline(normalized),
+        headlineCandidates: exports.listCardHeadlineCandidates(exports.joinReflectionTextParts([normalized.answer, normalized.excerpt]), normalized.theme),
+        fallback: exports.buildThemeReflectionFallback(normalized.theme)
+      }, null, 2);
+    }
+
+    window.addEventListener('load', renderFixture);
+  </script>
+</body>
+</html>

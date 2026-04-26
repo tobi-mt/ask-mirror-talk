@@ -69,12 +69,14 @@ def embed_text_batch(texts: list[str]) -> list[list[float]]:
 
 def _openai_embed(texts: list[str], dim: int) -> list[list[float]]:
     """
-    Embed texts using OpenAI text-embedding-3-small.
+    Embed texts using the configured OpenAI embedding model.
     
     Supports the `dimensions` parameter so we can request exactly 384 dims
-    to match our existing DB column — no migration needed.
+    to match our existing DB column. The model must match the stored corpus
+    vectors, so change EMBEDDING_MODEL only during a full re-embedding migration.
     """
     client = _get_openai_client()
+    model = settings.embedding_model
     
     # OpenAI has a limit of ~8191 tokens per text and 2048 texts per batch
     # Process in batches of 500 to be safe
@@ -87,7 +89,7 @@ def _openai_embed(texts: list[str], dim: int) -> list[list[float]]:
         batch = [t if t.strip() else "empty" for t in batch]
         
         response = client.embeddings.create(
-            model="text-embedding-3-small",
+            model=model,
             input=batch,
             dimensions=dim  # Request exactly 384 dims to match DB
         )
@@ -96,7 +98,7 @@ def _openai_embed(texts: list[str], dim: int) -> list[list[float]]:
         all_embeddings.extend(batch_embeddings)
         
         if len(texts) > BATCH_SIZE:
-            logger.info(f"OpenAI embeddings: batch {i // BATCH_SIZE + 1}/{(len(texts) + BATCH_SIZE - 1) // BATCH_SIZE} done")
+            logger.info(f"OpenAI embeddings ({model}): batch {i // BATCH_SIZE + 1}/{(len(texts) + BATCH_SIZE - 1) // BATCH_SIZE} done")
     
     return all_embeddings
 

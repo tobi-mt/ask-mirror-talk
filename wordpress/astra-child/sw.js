@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.5.1';
+const CACHE_VERSION = 'amt-v5.5.6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 

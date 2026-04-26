@@ -2384,6 +2384,10 @@
       lower.startsWith("what is today's question") ||
       lower.startsWith('what needs my attention most') ||
       lower.startsWith('one thing that stood out') ||
+      lower.startsWith('here are grounded reflections') ||
+      lower.startsWith('i found a few mirror talk moments') ||
+      lower.startsWith('the clearest thread is this') ||
+      lower.startsWith('one source moment says') ||
       lower.startsWith('in this reflection') ||
       lower.startsWith('this reflection')
     ) {

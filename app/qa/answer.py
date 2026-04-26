@@ -323,6 +323,7 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
                 raise ValueError("No API key")
 
             from openai import OpenAI
+            from app.core.openai_compat import create_chat_completion
             client = OpenAI(api_key=api_key)
 
             # Build brief context from episode titles
@@ -331,7 +332,8 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             ))[:4]
             episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
 
-            response = client.chat.completions.create(
+            response = create_chat_completion(
+                client,
                 model=settings.answer_followup_model,
                 messages=[
                     {
@@ -405,6 +407,7 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
     Use OpenAI GPT to generate a well-structured, intelligent answer.
     """
     from openai import OpenAI
+    from app.core.openai_compat import create_chat_completion
     from app.core.config import settings
     
     api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
@@ -428,7 +431,8 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
     user_prompt = _build_user_prompt(question, context)
 
     # Call OpenAI API with settings optimized for natural, human responses
-    response = client.chat.completions.create(
+    response = create_chat_completion(
+        client,
         model=settings.answer_generation_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -452,6 +456,7 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict], contex
     Yields chunks of text as they arrive from the API.
     """
     from openai import OpenAI
+    from app.core.openai_compat import create_chat_completion
     from app.core.config import settings
 
     api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
@@ -482,7 +487,8 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict], contex
                 messages.append({"role": role, "content": str(content)[:600]})
     messages.append({"role": "user", "content": user_prompt})
 
-    stream = client.chat.completions.create(
+    stream = create_chat_completion(
+        client,
         model=settings.answer_generation_model,
         messages=messages,
         temperature=settings.answer_temperature,
@@ -533,14 +539,17 @@ def _generate_basic_answer(question: str, chunks: list[dict]) -> str:
     if not response_points:
         return "I found relevant sections, but couldn't extract a clean response. Try rephrasing your question or adding more detail."
 
-    intro = "Here are grounded reflections from Mirror Talk that speak to your question:"
-    answer_lines = [intro, ""]
-    for idx, point in enumerate(response_points, start=1):
-        answer_lines.append(f"{idx}. {point}")
+    answer_lines = [
+        "I found a few Mirror Talk moments connected to your question, but the match is not strong enough for a fully polished answer yet.",
+        "",
+        "The clearest thread is this: " + response_points[0],
+    ]
+    if len(response_points) > 1:
+        answer_lines.extend(["", "A second angle worth considering is: " + response_points[1]])
 
     # Optional short quote from the top chunk
     quote_text = _make_quote(chunks[0]["text"].strip())
     if quote_text:
-        answer_lines.extend(["", f"In their words: \"{quote_text}\""])
+        answer_lines.extend(["", f"One source moment says: \"{quote_text}\""])
 
     return "\n".join(answer_lines)

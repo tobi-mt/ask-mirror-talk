@@ -57,6 +57,7 @@ FIXTURES = [
     "inner_peace_empty",
     "saved_reflection_long_note",
     "journal_reflection_long_note",
+    "basic_fallback_meta_answer",
 ]
 
 META_PROMPT_PATTERNS = [
@@ -65,6 +66,10 @@ META_PROMPT_PATTERNS = [
     "what stayed with me most from today\u2019s reflection",
     "today's reflection on",
     "today\u2019s reflection on",
+    "here are grounded reflections",
+    "i found a few mirror talk moments",
+    "the clearest thread is this",
+    "one source moment says",
 ]
 
 DANGLING_ENDINGS = {

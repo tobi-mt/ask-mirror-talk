@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.openai_compat import create_chat_completion
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +410,8 @@ Return only the JSON array, no other text."""
 
     client = OpenAI(api_key=api_key)
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
             model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.9,
@@ -758,7 +760,8 @@ Return only the JSON array, no other text."""
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
             model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.9,
@@ -831,7 +834,8 @@ Return only the JSON object, no other text."""
 
     client = OpenAI(api_key=api_key)
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
             model=settings.notification_generation_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.85,

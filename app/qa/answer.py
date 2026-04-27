@@ -22,7 +22,7 @@ _SYSTEM_PROMPT = """You are a warm, emotionally intelligent, and highly specific
 2. **Stay human**: Keep warmth and emotional intelligence, but avoid generic comfort-language unless it truly fits.
 3. **Weave in wisdom**: Integrate relevant podcast insights naturally into your narrative, using concrete ideas from the source material.
 4. **Connect dots**: Link ideas across episodes when you notice a real pattern or useful tension.
-5. **Name the key thing**: Include one sentence that clearly states the central insight in plain, memorable language.
+5. **Name the key thing**: Include one sentence that clearly states the central insight in plain, memorable language, but do not force a catchphrase.
 6. **Be useful**: Include one practical next step, reflection, or reframe the user can actually use today.
 6. **Honor emotion**: If the question touches something personal, acknowledge the emotional dimension without becoming vague.
 7. **Be yourself**: Use "I" and "you" naturally - this is a conversation, not a lecture.
@@ -66,10 +66,12 @@ Drawing deeply from these episode excerpts, write a thoughtful, conversational r
 
 Requirements:
 - Answer the user's question directly in the very first sentence.
-- Include one strong sentence that sounds like: "The key thing is..." or an equally sharp plainspoken framing.
+- Include one strong, plainspoken sentence that names the central insight without sounding scripted.
 - Be specific: mention concrete ideas, phrases, tensions, or examples from the excerpts above.
 - Make the Mirror Talk grounding clear without sounding mechanical.
 - Do not just summarize what each source said; synthesize them into one coherent answer.
+- Avoid exposing retrieval artifacts such as numbered source fragments, partial transcript openings, or meta phrases like "here are grounded reflections."
+- Prefer human language over report language: write as if you are sitting with the user, not filing a summary.
 - If the question asks for a step, practice, or takeaway, give one concrete and realistic one.
 - Even if the question is broad, give one concrete takeaway before the answer ends.
 - Avoid generic encouragement that could fit any question.
@@ -271,6 +273,8 @@ def compose_answer(
         return {
             "answer": "I could not find anything in the Mirror Talk episodes that directly addresses that. Try rephrasing your question or sharing more context.",
             "citations": [],
+            "answer_source": "no_match",
+            "answer_status": "needs_refinement",
         }
 
     # Sort by similarity if present
@@ -282,6 +286,10 @@ def compose_answer(
     # Try OpenAI-powered answer generation first if enabled
     logger.info(f"Answer generation provider: {settings.answer_generation_provider}")
     
+    answer_source = "openai"
+    answer_status = "generated"
+    fallback_reason = None
+
     if settings.answer_generation_provider == "openai":
         try:
             logger.info("Attempting intelligent answer generation with OpenAI...")
@@ -291,16 +299,29 @@ def compose_answer(
             logger.error(f"OpenAI answer generation failed: {e}", exc_info=True)
             logger.warning("Falling back to basic extraction")
             answer_text = _generate_basic_answer(question, ranked[:5])
+            answer_source = "basic_fallback"
+            answer_status = "source_moments_only"
+            fallback_reason = type(e).__name__
     else:
         # Use basic extraction if OpenAI is not configured
         logger.info("Using basic extraction (OpenAI not enabled)")
         answer_text = _generate_basic_answer(question, ranked[:5])
+        answer_source = "basic_fallback"
+        answer_status = "source_moments_only"
+        fallback_reason = "provider_disabled"
 
     # Build citations with proper timestamps for audio playback
     # Use citation_chunks (which may be overridden for smart episode selection)
     citations = _build_citations(citation_chunks)
 
-    result = {"answer": answer_text, "citations": citations}
+    result = {
+        "answer": answer_text,
+        "citations": citations,
+        "answer_source": answer_source,
+        "answer_status": answer_status,
+    }
+    if fallback_reason:
+        result["fallback_reason"] = fallback_reason
     if include_followups:
         result["follow_up_questions"] = generate_follow_up_questions(question, answer_text, citation_chunks)
     else:

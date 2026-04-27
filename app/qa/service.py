@@ -17,6 +17,29 @@ from app.storage.repository import log_qa
 logger = logging.getLogger(__name__)
 
 
+def _looks_like_basic_fallback_answer(answer: str) -> bool:
+    text = (answer or "").strip().lower()
+    return text.startswith((
+        "i found a few mirror talk moments",
+        "here are grounded reflections",
+        "the clearest thread is this:",
+    ))
+
+
+def _ensure_answer_status_fields(response: dict) -> dict:
+    if not isinstance(response, dict):
+        return response
+    if "answer_source" not in response or "answer_status" not in response:
+        if _looks_like_basic_fallback_answer(response.get("answer", "")):
+            response["answer_source"] = "basic_fallback"
+            response["answer_status"] = "source_moments_only"
+            response.setdefault("fallback_reason", "cached_basic_fallback")
+        else:
+            response.setdefault("answer_source", "openai")
+            response.setdefault("answer_status", "generated")
+    return response
+
+
 def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], extra: dict | None = None):
     payload = {
         "flow": flow,
@@ -151,6 +174,7 @@ def answer_question(
     if not bypass_cache:
         exact_cached_response = cache.get_exact(norm_q)
         if exact_cached_response:
+            exact_cached_response = _ensure_answer_status_fields(exact_cached_response)
             latency_ms = int((time.time() - start_time) * 1000)
             exact_citations = exact_cached_response.get("citations", [])
             qa_log_id = _log_qa_with_fresh_session(
@@ -177,6 +201,7 @@ def answer_question(
         # Check cache for near-identical questions (normalize for better matching)
         cached_response = cache.get(norm_q, query_embedding)
         if cached_response:
+            cached_response = _ensure_answer_status_fields(cached_response)
             latency_ms = int((time.time() - start_time) * 1000)
             # Log the cached response too
             cached_citations = cached_response.get("citations", [])
@@ -354,7 +379,11 @@ def answer_question(
         "follow_up_questions": response.get("follow_up_questions", []),
         "latency_ms": latency_ms,
         "qa_log_id": qa_log_id,
+        "answer_source": response.get("answer_source", "openai"),
+        "answer_status": response.get("answer_status", "generated"),
     }
+    if response.get("fallback_reason"):
+        result["fallback_reason"] = response["fallback_reason"]
     
     cache.put(norm_q, query_embedding, result)
 
@@ -400,6 +429,7 @@ def answer_question_stream(
     norm_q = normalize_question(question)
     exact_cached_response = cache.get_exact(norm_q) if not bypass_cache else None
     if exact_cached_response:
+        exact_cached_response = _ensure_answer_status_fields(exact_cached_response)
         latency_ms = int((time.time() - start_time) * 1000)
         _exact_citations = exact_cached_response.get("citations", [])
         qa_log_id = _log_qa_with_fresh_session(
@@ -416,7 +446,7 @@ def answer_question_stream(
         yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': exact_cached_response.get('answer_source', 'openai'), 'answer_status': exact_cached_response.get('answer_status', 'generated'), 'fallback_reason': exact_cached_response.get('fallback_reason')})}\n\n"
         return
 
     embed_started_at = time.perf_counter()
@@ -425,6 +455,7 @@ def answer_question_stream(
 
     cached_response = cache.get(norm_q, query_embedding) if not bypass_cache else None
     if cached_response:
+        cached_response = _ensure_answer_status_fields(cached_response)
         latency_ms = int((time.time() - start_time) * 1000)
         _cached_citations = cached_response.get("citations", [])
         qa_log_id = _log_qa_with_fresh_session(
@@ -442,7 +473,7 @@ def answer_question_stream(
         yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
         yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
         yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': cached_response.get('answer_source', 'openai'), 'answer_status': cached_response.get('answer_status', 'generated'), 'fallback_reason': cached_response.get('fallback_reason')})}\n\n"
         return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
@@ -497,6 +528,9 @@ def answer_question_stream(
     from app.core.config import settings
 
     full_answer = ""
+    answer_source = "openai"
+    answer_status = "generated"
+    fallback_reason = None
     ranked = sorted(chunk_payloads, key=lambda c: c.get("similarity", 0), reverse=True)
     stream_answer_started_at = time.perf_counter()
     if settings.answer_generation_provider == "openai":
@@ -507,9 +541,15 @@ def answer_question_stream(
         except Exception as e:
             logger.error("Streaming answer generation failed: %s", e, exc_info=True)
             full_answer = _generate_basic_answer(question, ranked[:5])
+            answer_source = "basic_fallback"
+            answer_status = "source_moments_only"
+            fallback_reason = type(e).__name__
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:
         full_answer = _generate_basic_answer(question, ranked[:5])
+        answer_source = "basic_fallback"
+        answer_status = "source_moments_only"
+        fallback_reason = "provider_disabled"
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     answer_ms = int((time.perf_counter() - stream_answer_started_at) * 1000)
 
@@ -576,7 +616,16 @@ def answer_question_stream(
     # ── Mark the answer complete before optional follow-ups finish ──
     # This lowers perceived latency and keeps analytics focused on answer
     # readiness rather than the slower follow-up generation call.
-    yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms})}\n\n"
+    done_payload = {
+        "type": "done",
+        "qa_log_id": qa_log_id,
+        "latency_ms": latency_ms,
+        "answer_source": answer_source,
+        "answer_status": answer_status,
+    }
+    if fallback_reason:
+        done_payload["fallback_reason"] = fallback_reason
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
     # ── Collect follow-ups (background thread should be done by now) ──
     try:
@@ -590,13 +639,18 @@ def answer_question_stream(
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
 
     # Cache for next time (normalized question for better hit rate)
-    cache.put(norm_q, query_embedding, {
+    cache_payload = {
         "question": question,
         "answer": full_answer,
         "citations": citations,
         "follow_up_questions": follow_ups,
         "latency_ms": latency_ms,
         "qa_log_id": qa_log_id,
-    })
+        "answer_source": answer_source,
+        "answer_status": answer_status,
+    }
+    if fallback_reason:
+        cache_payload["fallback_reason"] = fallback_reason
+    cache.put(norm_q, query_embedding, cache_payload)
 
     gc.collect()

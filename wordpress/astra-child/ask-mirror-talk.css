@@ -1063,6 +1063,16 @@ body {
   margin: 0 auto 12px;
 }
 
+.amt-scm-preview-line {
+  margin: 2px auto 12px;
+  max-width: 38ch;
+  color: rgba(245,230,200,0.82);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  font-family: Georgia, serif;
+}
+
 .amt-scm-hint {
   color: rgba(245,230,200,0.5);
   font-size: 12px;
@@ -4875,10 +4885,24 @@ body.amt-light-mode .amt-suggestions-label {
   line-height: 1.25;
 }
 
+.amt-share-btn[disabled],
+.amt-share-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.68;
+  filter: grayscale(0.25);
+}
+
 .amt-share-btn-primary {
   background: linear-gradient(135deg, #2e2a24, #3d3731);
   color: #fff;
   border: 1px solid #2e2a24;
+}
+
+.amt-share-line {
+  color: #5b5147;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .amt-share-btn-secondary {

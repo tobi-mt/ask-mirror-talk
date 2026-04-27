@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.6 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.7 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1538,17 +1538,25 @@
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
 
+            const answerMeta = {
+              answerSource: event.answer_source || event.answerSource || '',
+              answerStatus: event.answer_status || event.answerStatus || '',
+              fallbackReason: event.fallback_reason || event.fallbackReason || ''
+            };
+            window._amtLastAnswerMeta = answerMeta;
+
             console.log('✅ Stream complete', {
               qa_log_id: event.qa_log_id,
               latency_ms: event.latency_ms,
-              cached: event.cached || false
+              cached: event.cached || false,
+              answer_status: answerMeta.answerStatus || 'generated'
             });
             // Add share button, related questions, and SEO schema after answer is complete
-            addShareButton(question, answerText, window._amtLastTheme || null);
+            addShareButton(question, answerText, window._amtLastTheme || null, answerMeta);
             addSaveToEmailButton(question, answerText);
             showRelatedQuestions(event.qa_log_id);
             injectFAQSchema(question, answerText);
-            finalizeAnswerPresentation(question, answerText, lastShownCitations, window._amtLastTheme || null);
+            finalizeAnswerPresentation(question, answerText, lastShownCitations, window._amtLastTheme || null, answerMeta);
             restoreExploreContent();
             showReflectPrompt();
             initCopyAnswerButton(answerText);
@@ -1578,7 +1586,7 @@
   }
 
   // Show answer (used for non-streaming fallback)
-  function showAnswer(answer, citationsList, followUpQuestions) {
+  function showAnswer(answer, citationsList, followUpQuestions, answerMeta) {
     responseContainer.classList.remove('error', 'amt-streaming');
     
     let formattedAnswer = formatMarkdownToHtml(answer);
@@ -1599,10 +1607,12 @@
 
     // Add share button and SEO schema
     const questionText = input.value.trim();
-    addShareButton(questionText, answer, window._amtLastTheme || null);
+    const meta = answerMeta || {};
+    window._amtLastAnswerMeta = meta;
+    addShareButton(questionText, answer, window._amtLastTheme || null, meta);
     addSaveToEmailButton(questionText, answer);
     injectFAQSchema(questionText, answer);
-    finalizeAnswerPresentation(questionText, answer, citationsList);
+    finalizeAnswerPresentation(questionText, answer, citationsList, null, meta);
     restoreExploreContent();
     showReflectPrompt();
     initCopyAnswerButton(answer);
@@ -2396,6 +2406,24 @@
     return false;
   }
 
+  function isFallbackAnswerMeta(meta) {
+    const source = String((meta && (meta.answerSource || meta.answer_source)) || '').toLowerCase();
+    const status = String((meta && (meta.answerStatus || meta.answer_status)) || '').toLowerCase();
+    return source === 'basic_fallback' ||
+      source === 'no_match' ||
+      status === 'source_moments_only' ||
+      status === 'needs_refinement';
+  }
+
+  function isShareableReflectionText(text) {
+    const clean = ensureReflectionSentence(text);
+    if (!clean) return false;
+    if (isWeakShareHeadlineCandidate(clean)) return false;
+    if (/^\d+[.)]\s/.test(clean)) return false;
+    if (/\b(here are|i found|source moment|grounded reflections|speak to your question|partial grounding)\b/i.test(clean)) return false;
+    return true;
+  }
+
   function formatRelativeTime(timestamp) {
     if (!timestamp) return 'Recently';
 
@@ -2443,23 +2471,31 @@
     citationTrustNote.style.display = '';
   }
 
-  function renderAnswerContext(question, answerText, citationsList) {
+  function renderAnswerContext(question, answerText, citationsList, answerMeta) {
     if (!answerContext) return;
 
     const theme = inferTheme(question, answerText);
     const meta = getCitationSupportMeta(citationsList);
-    const lowMatch = !meta.hasReferences;
-    const contextDetail = meta.contextDetail;
+    const fallbackAnswer = isFallbackAnswerMeta(answerMeta);
+    const lowMatch = !meta.hasReferences || fallbackAnswer;
+    const contextKicker = fallbackAnswer ? 'Source moments only' : meta.contextKicker;
+    const contextSummary = fallbackAnswer
+      ? 'The app found related Mirror Talk material, but it did not complete the premium reflection answer.'
+      : meta.contextSummary;
+    const contextDetail = fallbackAnswer
+      ? 'Use these source moments for listening or refining the question. Reflection cards are held back until the answer is complete enough to share.'
+      : meta.contextDetail;
+    const supportPill = fallbackAnswer ? 'Refine before sharing' : meta.supportPill;
 
     answerContext.innerHTML = `
       <div class="amt-answer-context-copy${lowMatch ? ' amt-answer-context-copy-soft' : ''}">
-        <span class="amt-answer-context-kicker">${escapeHtml(meta.contextKicker)}</span>
-        <p class="amt-answer-context-summary">${escapeHtml(meta.contextSummary)}</p>
+        <span class="amt-answer-context-kicker">${escapeHtml(contextKicker)}</span>
+        <p class="amt-answer-context-summary">${escapeHtml(contextSummary)}</p>
         <p class="amt-answer-context-detail">${escapeHtml(contextDetail)}</p>
       </div>
       <div class="amt-answer-context-pills">
         ${theme ? `<span class="amt-answer-pill">${escapeHtml(theme)}</span>` : ''}
-        <span class="amt-answer-pill">${escapeHtml(meta.supportPill)}</span>
+        <span class="amt-answer-pill">${escapeHtml(supportPill)}</span>
       </div>
     `;
     answerContext.style.display = '';
@@ -2477,14 +2513,14 @@
     });
   }
 
-  function finalizeAnswerPresentation(question, answerText, citationsList, themeHint) {
+  function finalizeAnswerPresentation(question, answerText, citationsList, themeHint, answerMeta) {
     const theme = themeHint || inferTheme(question, answerText);
     saveLastSession(question, answerText, theme);
-    renderAnswerContext(question, answerText, citationsList);
-    if (!hasStrongSupport(citationsList)) {
+    renderAnswerContext(question, answerText, citationsList, answerMeta);
+    if (!hasStrongSupport(citationsList) || isFallbackAnswerMeta(answerMeta)) {
       ensureLowMatchFollowUps(question, theme);
     }
-    renderContinuationStrip(question, answerText, citationsList, theme);
+    renderContinuationStrip(question, answerText, citationsList, theme, answerMeta);
     renderJourneyCard();
   }
 
@@ -2607,7 +2643,7 @@
     }
   }
 
-  function renderContinuationStrip(question, answerText, citationsList, themeHint) {
+  function renderContinuationStrip(question, answerText, citationsList, themeHint, answerMeta) {
     if (!continuationStrip) return;
 
     const activeTheme = themeHint || inferTheme(question, answerText) || 'Growth';
@@ -2623,13 +2659,17 @@
     const deeperQuestion = `Go deeper on ${activeTheme.toLowerCase()}: ${getThemeStarter(activeTheme)}`;
     const tomorrowQuestion = getThemeStarter(nextTheme);
     const meta = getCitationSupportMeta(citationsList);
-    const hasReferences = meta.hasReferences;
+    const fallbackAnswer = isFallbackAnswerMeta(answerMeta);
+    const hasReferences = meta.hasReferences && !fallbackAnswer;
+    const stripText = fallbackAnswer
+      ? 'The source material is present, but the answer needs one more pass before it should become a saved or shared reflection.'
+      : (hasReferences ? 'Go deeper, verify the strongest moment, or carry a fresh question into tomorrow.' : 'Refine the question, recover a stronger match, or carry a clearer theme into tomorrow.');
 
     continuationStrip.innerHTML = `
       <div class="amt-continuation-strip-inner">
         <div class="amt-continuation-strip-copy">
           <span class="amt-continuation-kicker">Keep the reflection moving</span>
-          <p class="amt-continuation-text">${hasReferences ? 'Go deeper, verify the strongest moment, or carry a fresh question into tomorrow.' : 'Refine the question, recover a stronger match, or carry a clearer theme into tomorrow.'}</p>
+          <p class="amt-continuation-text">${escapeHtml(stripText)}</p>
         </div>
         <div class="amt-continuation-actions">
           <button type="button" class="amt-continuation-btn amt-continuation-btn-primary" data-action="deeper">${hasReferences ? 'Go deeper on this' : 'Refine this question'}</button>
@@ -2668,8 +2708,8 @@
   // Share Button
   // ========================================
 
-  function addShareButton(question, answer, themeHint) {
-    addShareButtonV2(question, answer, themeHint);
+  function addShareButton(question, answer, themeHint, answerMeta) {
+    addShareButtonV2(question, answer, themeHint, answerMeta);
   }
 
   // ========================================
@@ -2743,7 +2783,11 @@
         }
         const data = result.data;
         if (!data.answer) throw new Error("No answer received from the service.");
-        showAnswer(data.answer, data.citations || [], data.follow_up_questions || []);
+        showAnswer(data.answer, data.citations || [], data.follow_up_questions || [], {
+          answerSource: data.answer_source || data.answerSource || '',
+          answerStatus: data.answer_status || data.answerStatus || '',
+          fallbackReason: data.fallback_reason || data.fallbackReason || ''
+        });
       } catch (fallbackError) {
         console.error("Ask Mirror Talk Error:", fallbackError);
         if (fallbackError.name === 'AbortError') {
@@ -6386,10 +6430,14 @@
 
   function drawShareFooter(ctx, style, W, y, align, options) {
     const opts = options || {};
-    const chipW = opts.chipWidth || (align === 'left' ? 560 : 580);
-    const chipH = opts.chipHeight || 136;
+    const qrModuleSize = Number(opts.qrModuleSize || 5);
+    const qrQuiet = Number(opts.qrQuiet || 4);
+    const qr = getReflectionCardQrMatrix();
+    const qrOuter = (qr.size + qrQuiet * 2) * qrModuleSize;
+    const chipW = opts.chipWidth || (align === 'left' ? 760 : 760);
+    const chipH = opts.chipHeight || Math.max(232, qrOuter + 28);
     const chipX = align === 'left' ? 96 : Math.round((W - chipW) / 2);
-    const chipY = Math.min(y + 24, 1178);
+    const chipY = Math.min(y + 14, 1350 - chipH - 42);
     const labelY = chipY - 28;
     const footerX = align === 'left' ? 96 : W / 2;
     const lineLeft = align === 'left' ? 96 : W / 2 - 168;
@@ -6409,7 +6457,7 @@
     ctx.shadowColor = 'rgba(0,0,0,0.18)';
     ctx.shadowBlur = 18;
     ctx.shadowOffsetY = 8;
-    ctx.fillStyle = 'rgba(255,250,244,0.88)';
+    ctx.fillStyle = 'rgba(255,250,244,0.96)';
     _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
     ctx.fill();
     ctx.shadowColor = 'transparent';
@@ -6420,16 +6468,15 @@
     _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
     ctx.stroke();
 
-    const qrOuter = 123;
     const qrX = chipX + 18;
     const qrY = chipY + Math.round((chipH - qrOuter) / 2);
-    ctx.fillStyle = '#fffaf2';
-    _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 18);
+    ctx.fillStyle = '#ffffff';
+    _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 12);
     ctx.fill();
-    drawReflectionQrCode(ctx, qrX, qrY, 3, { quiet: 4, bg: '#fffaf2', fg: '#201914' });
+    drawReflectionQrCode(ctx, qrX, qrY, qrModuleSize, { quiet: qrQuiet, bg: '#ffffff', fg: '#000000' });
 
     const textX = qrX + qrOuter + 24;
-    const textTop = chipY + 36;
+    const textTop = chipY + 56;
     const chipText = style.cardText || '#2f261e';
     ctx.textAlign = 'left';
     ctx.fillStyle = chipText;
@@ -6438,23 +6485,25 @@
 
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.76)';
-    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 32);
+    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 36);
 
     ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.62)';
-    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 61);
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 70);
 
     ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.54)';
     ctx.textAlign = 'left';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 88);
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 104);
 
     if (ENABLE_TEST_EXPORTS) {
-      const qr = getReflectionCardQrMatrix();
       window.__AMT_LAST_FOOTER_DEBUG__ = {
         label: 'Scan to reflect',
         qrPayload: getReflectionCardQrPayload(),
         qrMatrixSize: qr.size,
+        qrModuleSize,
+        qrQuiet,
+        qrRenderedSize: qrOuter,
         urlLabel: REFLECTION_CARD_URL_LABEL
       };
     }
@@ -7818,20 +7867,51 @@
     };
   }
 
+  function showShareHoldbackToast(message) {
+    const toast = document.getElementById('amt-milestone-toast');
+    if (!toast) return;
+    toast.innerHTML = `
+      <span class="amt-toast-emoji">✦</span>
+      <div>
+        <strong>Reflection card held back</strong>
+        <span>${escapeHtml(message || 'This answer needs one more pass before it becomes a shareable card.')}</span>
+      </div>
+    `;
+    toast.style.display = '';
+    toast.classList.add('amt-toast-in');
+    setTimeout(() => {
+      toast.classList.remove('amt-toast-in');
+      toast.classList.add('amt-toast-out');
+      setTimeout(() => {
+        toast.style.display = 'none';
+        toast.classList.remove('amt-toast-out');
+      }, 500);
+    }, 4200);
+  }
+
   function shareInsightArtifact(insight) {
     const normalized = {
       ...normalizeInsightRecord(insight),
       shareSource: (insight && insight.shareSource) || 'saved_insight'
     };
+    const headline = extractShareHeadline(normalized);
+    if (isFallbackAnswerMeta(insight && insight.answerMeta)) {
+      showShareHoldbackToast('The answer is currently source moments only. Refine the question first, then share the complete reflection.');
+      return;
+    }
+    if (!isShareableReflectionText(headline) || !isShareableReflectionText(normalized.excerpt)) {
+      showShareHoldbackToast('The selected text is not complete or reflective enough for a polished card yet.');
+      return;
+    }
     const dataUrl = buildInsightShareCard(normalized);
     const caption = `A reflection I saved on Ask Mirror Talk: "${normalized.excerpt}"\n\nhttps://mirrortalkpodcast.com/ask-mirror-talk`;
     showShareModal(dataUrl, caption, {
-      title: 'Share this reflection card',
-      hint: 'Share a polished reflection card that invites someone to pause, breathe, and reflect for a moment.',
+      title: 'Share this reflection',
+      hint: 'This card is polished and ready. Send it, save it, or pass the pause to someone who may need it.',
       filename: 'mirror-talk-reflection.png',
       contextLabel: normalized.theme || 'Saved reflection',
-      invitePrompt: 'Lead with the reflection itself first. If it resonates, pass on the Mirror Talk link too.',
-      previewText: extractShareHeadline(normalized),
+      invitePrompt: 'Lead with the reflection itself. The link is there only if they want to enter the experience too.',
+      previewText: headline,
       nativeShareLabel: 'Open share sheet',
       copyTextLabel: 'Copy share caption',
       copyLinkLabel: 'Copy reflection link'
@@ -7855,7 +7935,7 @@
     try { _cookieSet(INSIGHTS_COOKIE_KEY, JSON.stringify(backup), 365); } catch (e) {}
   }
 
-  function addSaveInsightButton(question, answerText) {
+  function addSaveInsightButton(question, answerText, answerMeta) {
     const existing = document.getElementById('amt-save-insight-section');
     if (existing) existing.remove();
     if (!question || !answerText) return;
@@ -7863,6 +7943,14 @@
     const section = document.createElement('div');
     section.id = 'amt-save-insight-section';
     section.className = 'amt-save-insight-section';
+
+    if (isFallbackAnswerMeta(answerMeta)) {
+      section.innerHTML = `<button type="button" class="amt-save-insight-btn" disabled title="Refine this answer before saving it as an insight">
+        🔖 Refine before saving insight
+      </button>`;
+      getAnswerUtilitiesRoot().appendChild(section);
+      return;
+    }
 
     const normalizedInsight = normalizeInsightRecord({
       question,
@@ -8169,13 +8257,14 @@
   // Keep the reflection share and invite flows separate so users don't need
   // to understand a mode switch before they act.
 
-  function addShareButtonV2(question, answerText, themeHint) {
+  function addShareButtonV2(question, answerText, themeHint, answerMeta) {
     const existing = document.getElementById('amt-share-section');
     if (existing) existing.remove();
 
     const shareSection = document.createElement('div');
     shareSection.id = 'amt-share-section';
     shareSection.className = 'amt-share-section amt-share-section-v2';
+    const fallbackAnswer = isFallbackAnswerMeta(answerMeta);
 
     const reflectionInsight = normalizeInsightRecord({
       question,
@@ -8183,6 +8272,7 @@
       theme: themeHint || inferTheme(question, answerText),
       savedAt: Date.now()
     });
+    reflectionInsight.answerMeta = answerMeta || {};
     const pageUrl = buildTrackedPageUrl({
       source: 'invite_friend',
       medium: 'share',
@@ -8196,15 +8286,18 @@
     });
     const referralShare = `I just used Ask Mirror Talk for this question: "${question.substring(0, 80)}". You can start with the same reflection path or ask your own question here:\n${pageUrl}`;
     const reflectionLine = extractShareHeadline(reflectionInsight);
+    const canShareReflection = !fallbackAnswer &&
+      isShareableReflectionText(reflectionLine) &&
+      isShareableReflectionText(reflectionInsight.excerpt);
 
     shareSection.innerHTML = `
       <div class="amt-share-intro">
-        <span class="amt-share-kicker">Keep or pass on what mattered</span>
-        <p class="amt-share-caption">Turn this answer into a polished reflection card, or send someone a direct path into the Mirror Talk experience.</p>
-        <p class="amt-share-caption">${escapeHtml(reflectionLine)}</p>
+        <span class="amt-share-kicker">${fallbackAnswer ? 'Refine before sharing' : 'Keep or pass on what mattered'}</span>
+        <p class="amt-share-caption">${fallbackAnswer ? 'The app found source moments, but the full reflective answer did not complete. Refine this before creating a public card.' : 'Share a polished reflection card, or send someone a direct path into the Mirror Talk experience.'}</p>
+        ${canShareReflection ? `<p class="amt-share-caption amt-share-line">${escapeHtml(reflectionLine)}</p>` : ''}
       </div>
       <div class="amt-share-actions-row">
-        <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection">Share this reflection</button>
+        <button type="button" class="amt-share-btn amt-share-btn-primary" data-action="reflection"${canShareReflection ? '' : ' disabled aria-disabled="true"'}>${canShareReflection ? 'Share this reflection' : 'Card paused until answer is complete'}</button>
         <button type="button" class="amt-share-btn amt-share-btn-secondary" data-action="invite">Invite a friend</button>
       </div>
     `;
@@ -8216,6 +8309,10 @@
       btn.addEventListener('click', async function() {
         const action = this.dataset.action;
         if (action === 'reflection') {
+          if (!canShareReflection) {
+            showShareHoldbackToast('This answer needs a complete reflective line before it becomes a shareable card.');
+            return;
+          }
           emitProductEvent('share_cta_used', { action: 'reflection_card' });
           shareInsightArtifact(reflectionInsight);
           return;
@@ -8247,7 +8344,7 @@
     });
 
     // Also add the save insight button here
-    addSaveInsightButton(question, answerText);
+    addSaveInsightButton(question, answerText, answerMeta);
   }
 
   // ========================================

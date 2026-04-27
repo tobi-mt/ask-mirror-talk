@@ -30,6 +30,8 @@ RUNNER = ROOT / "scripts" / "reflection_card_fixture_runner.html"
 DEFAULT_OUT_DIR = Path("/tmp/amt-reflection-card-validation")
 QR_PAYLOAD = "https://mirrortalkpodcast.com/ask-mirror-talk?ref=card_qr"
 PNG_SIZE = (1080, 1350)
+MIN_QR_RENDERED_SIZE = 205
+MIN_QR_MODULE_SIZE = 5
 
 FAMILIES = [
     "editorial",
@@ -422,6 +424,10 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
             failures.append(CaseFailure(case.fixture, case.family, f"QR payload mismatch: {footer.get('qrPayload')!r}"))
         if footer.get("qrMatrixSize") != 33:
             failures.append(CaseFailure(case.fixture, case.family, f"QR matrix size mismatch: {footer.get('qrMatrixSize')!r}"))
+        if int(footer.get("qrModuleSize") or 0) < MIN_QR_MODULE_SIZE:
+            failures.append(CaseFailure(case.fixture, case.family, f"QR module size too small: {footer.get('qrModuleSize')!r}"))
+        if int(footer.get("qrRenderedSize") or 0) < MIN_QR_RENDERED_SIZE:
+            failures.append(CaseFailure(case.fixture, case.family, f"QR rendered size too small: {footer.get('qrRenderedSize')!r}"))
 
     qr_payload = debug.get("qrPayload")
     qr_matrix = debug.get("qrMatrix") or {}

@@ -29,14 +29,18 @@ def _looks_like_basic_fallback_answer(answer: str) -> bool:
 def _ensure_answer_status_fields(response: dict) -> dict:
     if not isinstance(response, dict):
         return response
+    if _looks_like_basic_fallback_answer(response.get("answer", "")):
+        from app.qa.answer import _generate_degraded_answer
+
+        question = response.get("question") or "this question"
+        response["answer"] = _generate_degraded_answer(str(question))
+        response["answer_source"] = "basic_fallback"
+        response["answer_status"] = "generation_failed"
+        response.setdefault("fallback_reason", "cached_basic_fallback")
+        return response
     if "answer_source" not in response or "answer_status" not in response:
-        if _looks_like_basic_fallback_answer(response.get("answer", "")):
-            response["answer_source"] = "basic_fallback"
-            response["answer_status"] = "source_moments_only"
-            response.setdefault("fallback_reason", "cached_basic_fallback")
-        else:
-            response.setdefault("answer_source", "openai")
-            response.setdefault("answer_status", "generated")
+        response.setdefault("answer_source", "openai")
+        response.setdefault("answer_status", "generated")
     return response
 
 
@@ -524,7 +528,7 @@ def answer_question_stream(
     safe_close_session(db, context="qa_stream_retrieval_phase")
 
     # ── Phase 2: OpenAI streaming — no DB needed ──
-    from app.qa.answer import generate_intelligent_answer_stream, _generate_basic_answer
+    from app.qa.answer import generate_intelligent_answer_stream, _generate_degraded_answer
     from app.core.config import settings
 
     full_answer = ""
@@ -540,15 +544,15 @@ def answer_question_stream(
                 yield f"data: {json.dumps({'type': 'chunk', 'text': text_chunk})}\n\n"
         except Exception as e:
             logger.error("Streaming answer generation failed: %s", e, exc_info=True)
-            full_answer = _generate_basic_answer(question, ranked[:5])
+            full_answer = _generate_degraded_answer(question)
             answer_source = "basic_fallback"
-            answer_status = "source_moments_only"
+            answer_status = "generation_failed"
             fallback_reason = type(e).__name__
             yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     else:
-        full_answer = _generate_basic_answer(question, ranked[:5])
+        full_answer = _generate_degraded_answer(question)
         answer_source = "basic_fallback"
-        answer_status = "source_moments_only"
+        answer_status = "generation_failed"
         fallback_reason = "provider_disabled"
         yield f"data: {json.dumps({'type': 'chunk', 'text': full_answer})}\n\n"
     answer_ms = int((time.perf_counter() - stream_answer_started_at) * 1000)

@@ -1,4 +1,5 @@
 from app.core.openai_compat import create_chat_completion
+from app.qa.answer import _answer_model_candidates
 
 
 class _Completions:
@@ -60,3 +61,8 @@ def test_legacy_chat_completion_keeps_legacy_sampling_params():
     assert payload["temperature"] == 0.7
     assert payload["presence_penalty"] == 0.4
     assert payload["frequency_penalty"] == 0.3
+
+
+def test_answer_model_candidates_alias_invalid_recommendations_and_keep_stable_fallbacks():
+    assert _answer_model_candidates("gpt-5.5") == ["gpt-5.2", "gpt-4.1", "gpt-4.1-mini"]
+    assert _answer_model_candidates("gpt-5.4-mini") == ["gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"]

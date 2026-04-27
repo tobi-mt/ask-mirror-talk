@@ -5,6 +5,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_ANSWER_MODEL_FALLBACKS = ("gpt-4.1", "gpt-4.1-mini")
+_MODEL_ALIASES = {
+    "gpt-5.5": "gpt-5.2",
+    "gpt-5.4": "gpt-5.2",
+    "gpt-5.4-mini": "gpt-5-mini",
+}
+
+
+def _answer_model_candidates(primary_model: str) -> list[str]:
+    """Return a de-duplicated premium-to-stable model fallback chain."""
+    primary = (primary_model or "").strip()
+    aliased = _MODEL_ALIASES.get(primary.lower(), primary)
+    candidates = [aliased, *_ANSWER_MODEL_FALLBACKS]
+    unique: list[str] = []
+    for model in candidates:
+        if model and model not in unique:
+            unique.append(model)
+    return unique
+
+
+def _generate_degraded_answer(question: str) -> str:
+    """Last-resort user-facing response when all model generation fails."""
+    return (
+        "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now. "
+        "Please try the question again in a moment, or rephrase it with one extra detail about what you are facing. "
+        f"A stronger version of the question could be: \"What is one wise first step I can take with {question.strip().rstrip('?')}?\""
+    )
+
 # ── Shared prompt used by both streaming and non-streaming answer generation ──
 
 _SYSTEM_PROMPT = """You are a warm, emotionally intelligent, and highly specific AI companion helping people explore the Mirror Talk podcast's wisdom on personal growth, relationships, faith, healing, and emotional resilience.
@@ -297,17 +325,17 @@ def compose_answer(
             logger.info("Successfully generated intelligent answer")
         except Exception as e:
             logger.error(f"OpenAI answer generation failed: {e}", exc_info=True)
-            logger.warning("Falling back to basic extraction")
-            answer_text = _generate_basic_answer(question, ranked[:5])
+            logger.warning("Falling back to degraded answer notice")
+            answer_text = _generate_degraded_answer(question)
             answer_source = "basic_fallback"
-            answer_status = "source_moments_only"
+            answer_status = "generation_failed"
             fallback_reason = type(e).__name__
     else:
         # Use basic extraction if OpenAI is not configured
-        logger.info("Using basic extraction (OpenAI not enabled)")
-        answer_text = _generate_basic_answer(question, ranked[:5])
+        logger.info("Using degraded answer notice (OpenAI not enabled)")
+        answer_text = _generate_degraded_answer(question)
         answer_source = "basic_fallback"
-        answer_status = "source_moments_only"
+        answer_status = "generation_failed"
         fallback_reason = "provider_disabled"
 
     # Build citations with proper timestamps for audio playback
@@ -451,22 +479,37 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
 
     user_prompt = _build_user_prompt(question, context)
 
-    # Call OpenAI API with settings optimized for natural, human responses
-    response = create_chat_completion(
-        client,
-        model=settings.answer_generation_model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=settings.answer_temperature,
-        max_tokens=settings.answer_max_tokens,
-        presence_penalty=0.4,   # Reduce repetition
-        frequency_penalty=0.3,  # Encourage varied vocabulary
-    )
+    # Call OpenAI API with settings optimized for natural, human responses.
+    # If the configured premium model is unavailable in an environment, retry
+    # with stable quality models instead of exposing transcript fragments.
+    response = None
+    last_error: Exception | None = None
+    for model in _answer_model_candidates(settings.answer_generation_model):
+        try:
+            response = create_chat_completion(
+                client,
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=settings.answer_temperature,
+                max_tokens=settings.answer_max_tokens,
+                presence_penalty=0.4,   # Reduce repetition
+                frequency_penalty=0.3,  # Encourage varied vocabulary
+            )
+            if model != settings.answer_generation_model:
+                logger.warning("Answer generation used fallback model %s after primary model issue", model)
+            break
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Answer generation model %s failed: %s", model, exc)
+
+    if response is None:
+        raise last_error or RuntimeError("Answer generation failed for all configured models")
     
     answer = response.choices[0].message.content.strip()
-    logger.info(f"Generated intelligent answer using {settings.answer_generation_model} (length: {len(answer)} chars)")
+    logger.info("Generated intelligent answer (length: %d chars)", len(answer))
     
     return answer
 
@@ -508,16 +551,29 @@ def generate_intelligent_answer_stream(question: str, chunks: list[dict], contex
                 messages.append({"role": role, "content": str(content)[:600]})
     messages.append({"role": "user", "content": user_prompt})
 
-    stream = create_chat_completion(
-        client,
-        model=settings.answer_generation_model,
-        messages=messages,
-        temperature=settings.answer_temperature,
-        max_tokens=settings.answer_max_tokens,
-        presence_penalty=0.4,
-        frequency_penalty=0.3,
-        stream=True,
-    )
+    stream = None
+    last_error: Exception | None = None
+    for model in _answer_model_candidates(settings.answer_generation_model):
+        try:
+            stream = create_chat_completion(
+                client,
+                model=model,
+                messages=messages,
+                temperature=settings.answer_temperature,
+                max_tokens=settings.answer_max_tokens,
+                presence_penalty=0.4,
+                frequency_penalty=0.3,
+                stream=True,
+            )
+            if model != settings.answer_generation_model:
+                logger.warning("Streaming answer generation used fallback model %s after primary model issue", model)
+            break
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Streaming answer generation model %s failed: %s", model, exc)
+
+    if stream is None:
+        raise last_error or RuntimeError("Streaming answer generation failed for all configured models")
 
     # Buffer tokens into small phrases (3-6 words) for smoother perceived streaming.
     # Single-token SSE events feel jittery; short phrases feel more natural and

@@ -433,7 +433,7 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
     qr_matrix = debug.get("qrMatrix") or {}
     if qr_payload != QR_PAYLOAD:
         failures.append(CaseFailure(case.fixture, case.family, f"fixture QR payload mismatch: {qr_payload!r}"))
-    if qr_matrix.get("size") != 33 or qr_matrix.get("mask") not in range(8):
+    if qr_matrix.get("size") != 33 or qr_matrix.get("mask") not in set(range(8)) | {"qrcode-8.2-m"}:
         failures.append(CaseFailure(case.fixture, case.family, f"fixture QR matrix invalid: {qr_matrix!r}"))
 
     return failures

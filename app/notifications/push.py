@@ -48,6 +48,77 @@ _QOTD_TITLES: dict[str, str] = {
     "Faith": "Sit with this",
 }
 
+_THEME_REFLECTION_OPENERS: dict[str, tuple[str, ...]] = {
+    "Boundaries": (
+        "For the part of you learning where love ends and self-abandonment begins:",
+        "A question for the places where yes has cost too much:",
+    ),
+    "Courage": (
+        "For the moment that needs honesty before confidence:",
+        "A question for the brave step you keep circling:",
+    ),
+    "Faith": (
+        "For the part of you still reaching for trust:",
+        "A question for the quiet place where doubt and hope meet:",
+    ),
+    "Grief": (
+        "For what you are still carrying gently:",
+        "A question for the love that has changed shape:",
+    ),
+    "Healing": (
+        "For the wound that is asking for wiser attention:",
+        "A question for the part of you ready to repair:",
+    ),
+    "Inner peace": (
+        "For the place in you that wants to stop bracing:",
+        "A question for a steadier inner weather:",
+    ),
+    "Purpose": (
+        "For the calling that keeps tapping your shoulder:",
+        "A question for the life trying to get your attention:",
+    ),
+    "Relationships": (
+        "For the connection you want to handle with more care:",
+        "A question for the love that needs honesty and tenderness:",
+    ),
+    "Self-worth": (
+        "For the part of you tired of proving your value:",
+        "A question for returning to your own center:",
+    ),
+}
+
+_MIDDAY_FALLBACKS: tuple[tuple[str, str], ...] = (
+    ("Pause with this", "You do not have to force the whole day into clarity; one honest pause can return you to what matters."),
+    ("Come back inward", "Before the afternoon pulls you further outward, listen for the one thing in you asking to be handled with care."),
+    ("Hold steady", "Progress can be quiet and still be real; choose the next faithful step instead of measuring the whole mountain."),
+    ("Make room", "A little space around what you feel can change how you carry the rest of today."),
+    ("Start again gently", "You are allowed to begin the day again from this moment, with more honesty and less pressure."),
+)
+
+_NIGHT_TITLES: tuple[str, ...] = (
+    "Let the day exhale",
+    "Before you rest",
+    "A quieter return",
+    "What stayed with you",
+    "Close the day gently",
+)
+
+_NIGHT_BODY_RETURNING: tuple[str, ...] = (
+    "Let one honest question gather what the day left scattered.",
+    "Before sleep, return to the insight that still feels alive.",
+    "Give the unfinished part of today a softer place to land.",
+    "You do not need to solve the whole day; just notice what still wants care.",
+    "A quiet reflection tonight can help tomorrow begin with less noise.",
+)
+
+_NIGHT_BODY_NEW: tuple[str, ...] = (
+    "Before sleep, ask one question that helps the day become wisdom.",
+    "Let the day settle by naming what mattered, what hurt, and what still hopes.",
+    "A quiet question tonight can turn a crowded day into a clearer one.",
+    "Pause before rest and listen for the one truth the day is still offering.",
+    "Give yourself one unhurried moment to meet the day honestly.",
+)
+
 
 def _get_vapid_private_key_b64() -> str:
     """
@@ -185,12 +256,30 @@ def _strip_midday_cta(body: str) -> str:
     return clean or (body or '').strip()
 
 
-def _clip_sentence(text_value: str, max_len: int = 118) -> str:
+def _stable_variant(*parts: object, modulo: int) -> int:
+    seed = sha256("|".join(str(part or "") for part in parts).encode("utf-8")).hexdigest()
+    return int(seed[:8], 16) % max(1, modulo)
+
+
+def _clip_sentence(text_value: str, max_len: int = 118, *, allow_ellipsis: bool = False) -> str:
     text_value = re.sub(r"\s+", " ", (text_value or "").strip())
     if len(text_value) <= max_len:
         return text_value
+    if allow_ellipsis:
+        clipped = text_value[: max_len - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        return f"{clipped}…"
+    sentence_matches = list(re.finditer(r"[^.!?]+[.!?]", text_value))
+    best = ""
+    for match in sentence_matches:
+        candidate = text_value[: match.end()].strip()
+        if len(candidate) <= max_len:
+            best = candidate
+        else:
+            break
+    if best:
+        return best
     clipped = text_value[: max_len - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
-    return f"{clipped}…"
+    return f"{clipped}."
 
 
 def _remove_brand_mentions(text_value: str) -> str:
@@ -205,26 +294,42 @@ def _question_text_only(question: str) -> str:
     return clean.rstrip(" .")
 
 
+def _clean_push_title(title: str, fallback: str = "Pause here") -> str:
+    clean = _remove_brand_mentions(title)
+    clean = re.sub(r"^[^\wA-Za-z]+", "", clean).strip()
+    return _clip_sentence(clean or fallback, 42)
+
+
+def _premium_push_body(body: str, max_len: int = 118) -> str:
+    clean = _remove_brand_mentions(body)
+    clean = re.sub(r"\s+", " ", clean).strip(" ,;:-")
+    if not clean:
+        return ""
+    if clean[-1] not in ".!?":
+        clean = f"{clean}."
+    return _clip_sentence(clean, max_len)
+
+
 def _qotd_copy(question: str, theme: str, hook: str | None, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
     title = _QOTD_TITLES.get(theme or "", "Today's question")
     base_question = _question_text_only(question)
+    openers = _THEME_REFLECTION_OPENERS.get(theme or "", ())
+    opener = openers[_stable_variant(base_question, theme, modulo=len(openers))] if openers else "A question worth carrying today:"
     if is_returning and recent_theme and recent_theme.lower() != (theme or "").lower():
-        body = f"{base_question}? A grounded answer is ready."
-    elif is_returning:
-        body = f"{base_question}? Open for today's answer."
-    else:
-        body = f"{base_question}? Open for a grounded answer."
-    return title, _clip_sentence(body, 108)
+        opener = f"Your recent thread was {recent_theme.lower()}; today, widen the lens:"
+    body = f"{opener} {base_question}?"
+    return title, _premium_push_body(body, 116)
 
 
 def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    final_title = "Pause here"
+    final_title = _clean_push_title(title, fallback="Pause here")
     clean_body = _remove_brand_mentions(_strip_midday_cta(body))
-    if is_returning and recent_theme:
-        clean_body = f"{clean_body} Stay with what matters in {recent_theme.lower()}."
-    elif not clean_body:
-        clean_body = "Take one quiet minute and return to what matters before the day pulls you away."
-    return final_title, _clip_sentence(clean_body, 104)
+    if not clean_body or len(clean_body) < 36:
+        variant = _stable_variant(title, body, recent_theme, modulo=len(_MIDDAY_FALLBACKS))
+        final_title, clean_body = _MIDDAY_FALLBACKS[variant]
+    elif is_returning and recent_theme:
+        clean_body = f"{clean_body} Let it meet what you are carrying in {recent_theme.lower()}."
+    return final_title, _premium_push_body(clean_body, 116)
 
 
 def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
@@ -274,48 +379,26 @@ def _streak_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str
 
 
 def _night_reflection_copy(recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    seed_parts = [datetime.now(timezone.utc).date().isoformat(), recent_theme or "", "night", "returning" if is_returning else "new"]
-    seed = sha256("|".join(seed_parts).encode("utf-8")).hexdigest()
-    variant = int(seed[:8], 16) % 5
+    variant = _stable_variant(datetime.now(timezone.utc).date().isoformat(), recent_theme, "night", is_returning, modulo=5)
 
     theme_phrase = (recent_theme or "").strip().lower()
 
-    title_options = [
-        "Before rest comes",
-        "One quiet pause tonight",
-        "What stayed with you",
-        "Let the day settle",
-        "Return before sleep",
-    ]
-
     if is_returning and recent_theme:
         body_options = [
-            f"What part of {theme_phrase} still asks for your attention before rest?",
-            f"Before sleep, sit with what stayed in {theme_phrase}.",
-            f"Let tonight hold what remains unsettled in {theme_phrase}.",
-            f"One gentle return to {theme_phrase} before the day closes.",
-            f"There may be more to hear in {theme_phrase} before tomorrow arrives.",
+            f"Before sleep, let one quiet question meet what is still moving in {theme_phrase}.",
+            f"Let tonight hold the part of {theme_phrase} that still wants gentleness.",
+            f"Return to {theme_phrase} for one honest moment before the day closes.",
+            f"Before sleep, what did {theme_phrase} teach you today that deserves not to be rushed past?",
+            f"There may be one more tender truth inside {theme_phrase} before tomorrow begins.",
         ]
     elif is_returning:
-        body_options = [
-            "What stayed with you today that still needs your quiet attention?",
-            "Before rest, give the day one more honest moment.",
-            "Let one calm question help you settle what remains.",
-            "There may be something still waiting for your attention tonight.",
-            "One quiet pause before sleep can soften how tomorrow begins.",
-        ]
+        body_options = list(_NIGHT_BODY_RETURNING)
     else:
-        body_options = [
-            "What from today still deserves your attention before rest?",
-            "One honest question before sleep can bring more peace.",
-            "Before the day closes, sit with what stayed.",
-            "Let tonight hold what still feels unfinished.",
-            "A gentle pause now can help tomorrow begin more calmly.",
-        ]
+        body_options = list(_NIGHT_BODY_NEW)
 
-    title = title_options[variant]
+    title = _NIGHT_TITLES[variant]
     body = body_options[variant]
-    return title, _clip_sentence(body, 100)
+    return title, _premium_push_body(body, 116)
 
 
 def _new_episode_copy(episode_title: str) -> tuple[str, str]:
@@ -387,24 +470,28 @@ def generate_qotd_batch(db: Session, n: int = 20) -> int:
         "Faith", "Identity", "Empowerment", "Transition", "Community",
     ]
 
-    prompt = f"""You are creating push notification questions for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
+    prompt = f"""You are creating premium Question of the Day prompts for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
 
 Recent Mirror Talk episodes include:
 {chr(10).join(f"- {t}" for t in episode_titles[:10])}
 
-Generate exactly {n} unique, compelling questions a listener might ask about the podcast's wisdom. Each question should be something a real person would genuinely wonder about.
+Generate exactly {n} unique, emotionally intelligent questions a listener might genuinely ask when they are trying to understand themselves, their relationships, their faith, or their next step.
 
 Rules:
-- Each question must be distinct in theme and wording
-- Use natural, conversational language (not academic)
+- Each question must be distinct in theme, emotional situation, and wording
+- Use natural, human language, like a thoughtful friend would actually ask it
 - Questions should be answerable using podcast insights
+- Questions must be self-contained, specific, and emotionally clear
+- Avoid generic self-help phrasing such as "embrace your journey", "unlock your potential", "become your best self", or "level up"
+- Avoid questions that sound like marketing copy, therapy worksheets, or search-engine prompts
+- Each hook should feel editorial and premium, not clickbait
 - Cover a range of these themes: {", ".join(themes)}
 - Do NOT repeat any of these existing questions: {", ".join(list(existing_questions)[:20])}
 
 Respond with a JSON array of objects. Each object must have exactly these keys:
   "question" (string), "theme" (one of the themes above), "emoji" (single emoji), "hook" (short 3-6 word title, e.g. "Heal Your Inner Child")
 
-Example: {{"question": "How do I stop self-sabotaging?", "theme": "Growth", "emoji": "🌱", "hook": "Break the Cycle"}}
+Example: {{"question": "How do I stop abandoning myself just to keep the peace?", "theme": "Boundaries", "emoji": "🌿", "hook": "Return to Yourself"}}
 
 Return only the JSON array, no other text."""
 
@@ -736,24 +823,27 @@ def generate_motivation_batch(db: Session, n: int = 20) -> int:
     existing_rows = db.execute(text("SELECT title FROM push_motivation_messages WHERE source != 'personalized'")).fetchall()
     existing_titles = {r[0].strip().lower() for r in existing_rows}
 
-    prompt = f"""You are writing midday motivational push notifications for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
+    prompt = f"""You are writing premium midday reflection notifications for Mirror Talk, a podcast about personal growth, relationships, emotional intelligence, and faith.
 
 Recent Mirror Talk episodes include:
 {chr(10).join(f"- {t}" for t in episode_titles[:10])}
 
-Generate exactly {n} unique midday motivation messages. Each message is sent at noon to give someone a meaningful boost to carry them through the afternoon.
+Generate exactly {n} unique midday messages. Each message should feel like a meaningful interruption in the middle of a real day: thoughtful, emotionally precise, and useful without sounding like generic motivation.
 
 Rules:
-- Title: 3–5 words max, punchy and warm (e.g. "You've come so far", "Pause before you push")
+- Title: 2–5 words max, calm, premium, and memorable
 - Title must NOT contain "Mirror Talk"
-- Body: 1–2 sentences. Start with an emotionally resonant observation, then invite them to go deeper (ending with "Ask Mirror Talk [specific question]")
-- Body should feel personal, not generic — like a wise friend speaking directly to them
+- Body: 1–2 complete sentences. Start with an emotionally resonant observation, then invite them to go deeper by ending with "Ask Mirror Talk [specific question]"
+- Body should feel personal, grounded, and human — like a wise friend who notices what the user may be carrying
+- The body must be complete and must not end mid-thought
+- Avoid clichés: "you got this", "keep pushing", "trust the process", "everything happens for a reason", "embrace the journey"
+- Avoid productivity hustle language unless the message is gently challenging it
 - Vary themes: self-worth, resilience, rest, purpose, relationships, gratitude, courage, growth, faith
 - Do NOT repeat any of these existing titles: {", ".join(list(existing_titles)[:20])}
 
 Respond with a JSON array of objects with keys: "title" (string), "body" (string), "theme" (string), "emoji" (single emoji to prepend to title).
 
-Example: {{"title": "You've come so far", "body": "Progress rarely looks like you expect — but every step has been real. Ask Mirror Talk what keeping going actually means for where you are today.", "theme": "Resilience", "emoji": "🌟"}}
+Example: {{"title": "Come Back Inward", "body": "You may not need more pressure today; you may need one honest pause. Ask Mirror Talk what is asking for care in me right now?", "theme": "Rest", "emoji": "🌿"}}
 
 Return only the JSON array, no other text."""
 
@@ -821,13 +911,14 @@ def _generate_personalized_motivation(questions: list[str]) -> dict | None:
     prompt = f"""A Mirror Talk listener recently asked these questions:
 {recent}
 
-Write ONE midday motivational push notification that speaks directly to the emotional themes behind their questions — without referencing the specific questions literally. It should feel uncannily relevant, like the message was written just for them.
+Write ONE premium midday reflection notification that speaks directly to the emotional themes behind their questions without quoting or naming the questions literally. It should feel uncannily relevant, like a wise friend noticed the deeper pattern.
 
 Rules:
 - Title: 2–4 words max, calm, premium, and emotionally precise. No "Mirror Talk" in the title.
-- Body: 1 short sentence only. No hashtags. No exclamation marks unless absolutely necessary.
+- Body: 1 complete sentence only, emotionally clear and grounded. No hashtags. No exclamation marks unless absolutely necessary.
 - Question: one clear follow-up question that naturally continues the emotional theme.
-- The overall tone should feel like a wise friend who notices what they have been carrying.
+- Avoid clichés, vague encouragement, and pressure language.
+- The overall tone should feel warm, thoughtful, and deeply human.
 
 Respond with a single JSON object with keys: "title", "body", "question", "emoji" (single emoji for title), "theme" (one word).
 Return only the JSON object, no other text."""

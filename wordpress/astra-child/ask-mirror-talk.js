@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.7 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.8 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -2412,6 +2412,7 @@
     return source === 'basic_fallback' ||
       source === 'no_match' ||
       status === 'source_moments_only' ||
+      status === 'generation_failed' ||
       status === 'needs_refinement';
   }
 
@@ -6095,308 +6096,54 @@
   }
 
   let reflectionCardQrMatrix = null;
+  const REFLECTION_CARD_QR_ROWS = [
+    '111111100011100000111011001111111',
+    '100000100100000111100000001000001',
+    '101110101110101110101111001011101',
+    '101110101001100001001001101011101',
+    '101110101011011110111111001011101',
+    '100000101001111001101000101000001',
+    '111111101010101010101010101111111',
+    '000000001110101010000100000000000',
+    '101111100011111001000011101111100',
+    '011101010011010010111011001101101',
+    '011001110011011110001010111010100',
+    '011110001111110010111111111011111',
+    '011110110111101010010010110111001',
+    '100001000100110100011111011001011',
+    '000100110110101110101110011111110',
+    '110100010001000100010100111101100',
+    '111010100010000101000010010110001',
+    '000101010000011011011101001101101',
+    '010001111011001111000000100110110',
+    '001111010001011000000101101111111',
+    '110111111111110101000010100011000',
+    '111101011010100110011101001001001',
+    '101100101000100001101100111111110',
+    '100000011001111010001110010101110',
+    '100111101000100001011010111110001',
+    '000000001010100010011101100010111',
+    '111111100001100100101111101010110',
+    '100000101011111010010111100011110',
+    '101110101100101001011010111111000',
+    '101110101101100100010001110010011',
+    '101110101110011100000110001101100',
+    '100000100010001000111101011011100',
+    '111111101001010101100011110101010'
+  ];
 
   function getReflectionCardQrPayload() {
     return REFLECTION_CARD_QR_URL.length <= 64 ? REFLECTION_CARD_QR_URL : BASE_PAGE_URL;
   }
 
   function createReflectionCardQrMatrix() {
-    const version = 4;
-    const size = 17 + version * 4;
-    const dataCodewordCount = 64;
-    const eccCodewordCount = 18;
-    const blocks = 2;
-    const modules = Array.from({ length: size }, () => Array(size).fill(false));
-    const reserved = Array.from({ length: size }, () => Array(size).fill(false));
-    const payload = getReflectionCardQrPayload();
-
-    function setModule(x, y, dark) {
-      modules[y][x] = !!dark;
-    }
-
-    function setFunctionModule(x, y, dark) {
-      if (x < 0 || y < 0 || x >= size || y >= size) return;
-      modules[y][x] = !!dark;
-      reserved[y][x] = true;
-    }
-
-    function drawFinder(centerX, centerY) {
-      for (let dy = -4; dy <= 4; dy++) {
-        for (let dx = -4; dx <= 4; dx++) {
-          const x = centerX + dx;
-          const y = centerY + dy;
-          if (x < 0 || y < 0 || x >= size || y >= size) continue;
-          const dist = Math.max(Math.abs(dx), Math.abs(dy));
-          setFunctionModule(x, y, dist !== 2 && dist !== 4);
-        }
-      }
-    }
-
-    function drawAlignment(centerX, centerY) {
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          const dist = Math.max(Math.abs(dx), Math.abs(dy));
-          setFunctionModule(centerX + dx, centerY + dy, dist !== 1);
-        }
-      }
-    }
-
-    function appendBits(bits, value, length) {
-      for (let i = length - 1; i >= 0; i--) {
-        bits.push(((value >>> i) & 1) !== 0);
-      }
-    }
-
-    function makeDataCodewords(text) {
-      const bytes = [];
-      for (let i = 0; i < text.length; i++) {
-        const code = text.charCodeAt(i);
-        if (code > 255) throw new Error('QR payload must be ISO-8859-1 compatible');
-        bytes.push(code);
-      }
-
-      const bits = [];
-      appendBits(bits, 0x4, 4); // Byte mode
-      appendBits(bits, bytes.length, 8);
-      bytes.forEach(byte => appendBits(bits, byte, 8));
-
-      const maxBits = dataCodewordCount * 8;
-      if (bits.length > maxBits) throw new Error('QR payload is too long');
-      appendBits(bits, 0, Math.min(4, maxBits - bits.length));
-      while (bits.length % 8 !== 0) bits.push(false);
-
-      const codewords = [];
-      for (let i = 0; i < bits.length; i += 8) {
-        let value = 0;
-        for (let j = 0; j < 8; j++) value = (value << 1) | (bits[i + j] ? 1 : 0);
-        codewords.push(value);
-      }
-      for (let pad = 0xec; codewords.length < dataCodewordCount; pad ^= 0xfd) {
-        codewords.push(pad);
-      }
-      return codewords;
-    }
-
-    const gfExp = new Array(512);
-    const gfLog = new Array(256);
-    let x = 1;
-    for (let i = 0; i < 255; i++) {
-      gfExp[i] = x;
-      gfLog[x] = i;
-      x <<= 1;
-      if (x & 0x100) x ^= 0x11d;
-    }
-    for (let i = 255; i < gfExp.length; i++) gfExp[i] = gfExp[i - 255];
-
-    function gfMultiply(a, b) {
-      return a === 0 || b === 0 ? 0 : gfExp[gfLog[a] + gfLog[b]];
-    }
-
-    function reedSolomonGenerator(degree) {
-      let result = [1];
-      for (let i = 0; i < degree; i++) {
-        const next = Array(result.length + 1).fill(0);
-        for (let j = 0; j < result.length; j++) {
-          next[j] ^= result[j];
-          next[j + 1] ^= gfMultiply(result[j], gfExp[i]);
-        }
-        result = next;
-      }
-      return result.slice(1);
-    }
-
-    function reedSolomonRemainder(data, degree) {
-      const generator = reedSolomonGenerator(degree);
-      const remainder = Array(degree).fill(0);
-      data.forEach(byte => {
-        const factor = byte ^ remainder.shift();
-        remainder.push(0);
-        for (let i = 0; i < degree; i++) {
-          remainder[i] ^= gfMultiply(generator[i], factor);
-        }
-      });
-      return remainder;
-    }
-
-    function makeCodewords() {
-      const data = makeDataCodewords(payload);
-      const blockLength = dataCodewordCount / blocks;
-      const dataBlocks = [];
-      const eccBlocks = [];
-      for (let i = 0; i < blocks; i++) {
-        const block = data.slice(i * blockLength, (i + 1) * blockLength);
-        dataBlocks.push(block);
-        eccBlocks.push(reedSolomonRemainder(block, eccCodewordCount));
-      }
-
-      const result = [];
-      for (let i = 0; i < blockLength; i++) {
-        for (let b = 0; b < blocks; b++) result.push(dataBlocks[b][i]);
-      }
-      for (let i = 0; i < eccCodewordCount; i++) {
-        for (let b = 0; b < blocks; b++) result.push(eccBlocks[b][i]);
-      }
-      return result;
-    }
-
-    function getFormatBits(mask) {
-      const errorCorrectionBits = 0; // M
-      const data = (errorCorrectionBits << 3) | mask;
-      let remainder = data;
-      for (let i = 0; i < 10; i++) {
-        remainder = (remainder << 1) ^ (((remainder >>> 9) & 1) ? 0x537 : 0);
-      }
-      return ((data << 10) | remainder) ^ 0x5412;
-    }
-
-    function drawFormatBits(mask) {
-      const bits = getFormatBits(mask);
-      for (let i = 0; i <= 5; i++) setFunctionModule(8, i, ((bits >>> i) & 1) !== 0);
-      setFunctionModule(8, 7, ((bits >>> 6) & 1) !== 0);
-      setFunctionModule(8, 8, ((bits >>> 7) & 1) !== 0);
-      setFunctionModule(7, 8, ((bits >>> 8) & 1) !== 0);
-      for (let i = 9; i < 15; i++) setFunctionModule(14 - i, 8, ((bits >>> i) & 1) !== 0);
-      for (let i = 0; i < 8; i++) setFunctionModule(8, size - 1 - i, ((bits >>> i) & 1) !== 0);
-      for (let i = 8; i < 15; i++) setFunctionModule(size - 15 + i, 8, ((bits >>> i) & 1) !== 0);
-      setFunctionModule(8, size - 8, true);
-    }
-
-    function maskBit(mask, mx, my) {
-      switch (mask) {
-        case 0: return (mx + my) % 2 === 0;
-        case 1: return my % 2 === 0;
-        case 2: return mx % 3 === 0;
-        case 3: return (mx + my) % 3 === 0;
-        case 4: return (Math.floor(mx / 3) + Math.floor(my / 2)) % 2 === 0;
-        case 5: return ((mx * my) % 2) + ((mx * my) % 3) === 0;
-        case 6: return (((mx * my) % 2) + ((mx * my) % 3)) % 2 === 0;
-        case 7: return (((mx + my) % 2) + ((mx * my) % 3)) % 2 === 0;
-        default: return false;
-      }
-    }
-
-    function drawFunctionPatterns() {
-      drawFinder(3, 3);
-      drawFinder(size - 4, 3);
-      drawFinder(3, size - 4);
-      for (let i = 8; i < size - 8; i++) {
-        setFunctionModule(6, i, i % 2 === 0);
-        setFunctionModule(i, 6, i % 2 === 0);
-      }
-      drawAlignment(26, 26);
-      drawFormatBits(0);
-    }
-
-    function drawCodewords(codewords, mask) {
-      let bitIndex = 0;
-      let upward = true;
-      for (let right = size - 1; right >= 1; right -= 2) {
-        if (right === 6) right = 5;
-        for (let vert = 0; vert < size; vert++) {
-          const y = upward ? size - 1 - vert : vert;
-          for (let dx = 0; dx < 2; dx++) {
-            const xx = right - dx;
-            if (reserved[y][xx]) continue;
-            const bit = bitIndex < codewords.length * 8
-              ? (((codewords[bitIndex >>> 3] >>> (7 - (bitIndex & 7))) & 1) !== 0)
-              : false;
-            setModule(xx, y, bit !== maskBit(mask, xx, y));
-            bitIndex++;
-          }
-        }
-        upward = !upward;
-      }
-    }
-
-    function cloneModules() {
-      return modules.map(row => row.slice());
-    }
-
-    function restoreModules(snapshot) {
-      for (let y = 0; y < size; y++) modules[y] = snapshot[y].slice();
-    }
-
-    function penaltyScore() {
-      let result = 0;
-      for (let y = 0; y < size; y++) {
-        let runColor = modules[y][0];
-        let runLength = 1;
-        for (let xx = 1; xx < size; xx++) {
-          if (modules[y][xx] === runColor) {
-            runLength++;
-          } else {
-            if (runLength >= 5) result += 3 + runLength - 5;
-            runColor = modules[y][xx];
-            runLength = 1;
-          }
-        }
-        if (runLength >= 5) result += 3 + runLength - 5;
-      }
-      for (let xx = 0; xx < size; xx++) {
-        let runColor = modules[0][xx];
-        let runLength = 1;
-        for (let y = 1; y < size; y++) {
-          if (modules[y][xx] === runColor) {
-            runLength++;
-          } else {
-            if (runLength >= 5) result += 3 + runLength - 5;
-            runColor = modules[y][xx];
-            runLength = 1;
-          }
-        }
-        if (runLength >= 5) result += 3 + runLength - 5;
-      }
-      for (let y = 0; y < size - 1; y++) {
-        for (let xx = 0; xx < size - 1; xx++) {
-          const color = modules[y][xx];
-          if (color === modules[y][xx + 1] && color === modules[y + 1][xx] && color === modules[y + 1][xx + 1]) {
-            result += 3;
-          }
-        }
-      }
-      const finderPattern = [true, false, true, true, true, false, true, false, false, false, false];
-      const inverseFinderPattern = finderPattern.map(value => !value);
-      function matchesPattern(values, pattern) {
-        return values.every((value, index) => value === pattern[index]);
-      }
-      for (let y = 0; y < size; y++) {
-        for (let xx = 0; xx <= size - 11; xx++) {
-          const values = modules[y].slice(xx, xx + 11);
-          if (matchesPattern(values, finderPattern) || matchesPattern(values, inverseFinderPattern)) result += 40;
-        }
-      }
-      for (let xx = 0; xx < size; xx++) {
-        for (let y = 0; y <= size - 11; y++) {
-          const values = [];
-          for (let k = 0; k < 11; k++) values.push(modules[y + k][xx]);
-          if (matchesPattern(values, finderPattern) || matchesPattern(values, inverseFinderPattern)) result += 40;
-        }
-      }
-      let dark = 0;
-      modules.forEach(row => row.forEach(value => { if (value) dark++; }));
-      result += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
-      return result;
-    }
-
-    drawFunctionPatterns();
-    const base = cloneModules();
-    const codewords = makeCodewords();
-    let bestMask = 0;
-    let bestPenalty = Infinity;
-    let bestModules = null;
-    for (let mask = 0; mask < 8; mask++) {
-      restoreModules(base);
-      drawCodewords(codewords, mask);
-      drawFormatBits(mask);
-      const penalty = penaltyScore();
-      if (penalty < bestPenalty) {
-        bestPenalty = penalty;
-        bestMask = mask;
-        bestModules = cloneModules();
-      }
-    }
-    restoreModules(bestModules);
-    return { size, modules: cloneModules(), payload, mask: bestMask };
+    const qrSize = REFLECTION_CARD_QR_ROWS.length;
+    return {
+      size: qrSize,
+      modules: REFLECTION_CARD_QR_ROWS.map(row => row.split('').map(bit => bit === '1')),
+      payload: getReflectionCardQrPayload(),
+      mask: 'qrcode-8.2-m'
+    };
   }
 
   function getReflectionCardQrMatrix() {

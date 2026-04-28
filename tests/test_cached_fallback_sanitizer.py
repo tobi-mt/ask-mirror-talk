@@ -32,3 +32,18 @@ def test_answer_cache_does_not_store_generation_failed_responses():
     )
 
     assert cache.stats()["entries"] == 0
+
+
+def test_answer_cache_does_not_store_degraded_text_without_metadata():
+    cache = AnswerCache()
+
+    cache.put(
+        "what's the first step to breaking a bad habit",
+        [1.0, 0.0],
+        {
+            "answer": "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now.",
+            "citations": [{"episode_id": 1}],
+        },
+    )
+
+    assert cache.stats()["entries"] == 0

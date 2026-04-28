@@ -40,6 +40,16 @@ DEFAULT_TTL_SECONDS = 14400  # 4 hours (answers don't change often)
 DEFAULT_MAX_ENTRIES = 500
 
 
+def _looks_like_degraded_answer_text(answer: str) -> bool:
+    text = (answer or "").strip().lower()
+    return text.startswith((
+        "i found related mirror talk material, but i could not generate",
+        "i found a few mirror talk moments",
+        "here are grounded reflections",
+        "the clearest thread is this:",
+    ))
+
+
 @dataclass
 class CacheEntry:
     question: str
@@ -267,6 +277,7 @@ class AnswerCache:
             if (
                 response.get("answer_source") in {"basic_fallback", "no_match"}
                 or response.get("answer_status") in {"generation_failed", "source_moments_only", "needs_refinement"}
+                or _looks_like_degraded_answer_text(str(response.get("answer") or ""))
             ):
                 logger.info("Cache SKIP: degraded answer for '%.60s'", question)
                 return
@@ -406,6 +417,9 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
     loaded = 0
     for question, answer, ep_ids_str in rows:
         try:
+            if _looks_like_degraded_answer_text(str(answer or "")):
+                logger.info("Cache DB prewarm: skipped degraded historical answer for '%.50s'", question)
+                continue
             ep_ids = [
                 int(x.strip()) for x in (ep_ids_str or "").split(",")
                 if x.strip().isdigit()

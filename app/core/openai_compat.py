@@ -51,4 +51,11 @@ def create_chat_completion(
         if frequency_penalty is not None:
             payload["frequency_penalty"] = frequency_penalty
 
-    return client.chat.completions.create(**payload)
+    try:
+        return client.chat.completions.create(**payload)
+    except TypeError as exc:
+        if "max_completion_tokens" not in str(exc) or "max_completion_tokens" not in payload:
+            raise
+        legacy_payload = dict(payload)
+        legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
+        return client.chat.completions.create(**legacy_payload)

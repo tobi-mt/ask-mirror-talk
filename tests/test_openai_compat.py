@@ -21,6 +21,23 @@ class _Client:
         self.chat = _Chat()
 
 
+class _LegacyCompletions:
+    def __init__(self):
+        self.payloads = []
+
+    def create(self, **kwargs):
+        self.payloads.append(kwargs)
+        if "max_completion_tokens" in kwargs:
+            raise TypeError("Completions.create() got an unexpected keyword argument 'max_completion_tokens'")
+        return kwargs
+
+
+class _LegacyClient:
+    def __init__(self):
+        self.chat = _Chat()
+        self.chat.completions = _LegacyCompletions()
+
+
 def test_gpt5_chat_completion_uses_new_token_param_and_omits_legacy_sampling():
     client = _Client()
 
@@ -40,6 +57,22 @@ def test_gpt5_chat_completion_uses_new_token_param_and_omits_legacy_sampling():
     assert "temperature" not in payload
     assert "presence_penalty" not in payload
     assert "frequency_penalty" not in payload
+
+
+def test_gpt5_chat_completion_retries_with_legacy_max_tokens_for_old_sdk():
+    client = _LegacyClient()
+
+    payload = create_chat_completion(
+        client,
+        model="gpt-5-mini",
+        messages=[{"role": "user", "content": "hello"}],
+        max_tokens=123,
+    )
+
+    assert len(client.chat.completions.payloads) == 2
+    assert client.chat.completions.payloads[0]["max_completion_tokens"] == 123
+    assert payload["max_tokens"] == 123
+    assert "max_completion_tokens" not in payload
 
 
 def test_legacy_chat_completion_keeps_legacy_sampling_params():

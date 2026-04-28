@@ -30,7 +30,7 @@ def _generate_degraded_answer(question: str) -> str:
     return (
         "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now. "
         "Please try the question again in a moment, or rephrase it with one extra detail about what you are facing. "
-        f"A stronger version of the question could be: \"What is one wise first step I can take with {question.strip().rstrip('?')}?\""
+        "For example: \"What is one wise first step I can take in this situation?\""
     )
 
 # ── Shared prompt used by both streaming and non-streaming answer generation ──

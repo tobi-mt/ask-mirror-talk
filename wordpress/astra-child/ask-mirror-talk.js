@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.8 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.9 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -6181,67 +6181,58 @@
     const qrQuiet = Number(opts.qrQuiet || 4);
     const qr = getReflectionCardQrMatrix();
     const qrOuter = (qr.size + qrQuiet * 2) * qrModuleSize;
-    const chipW = opts.chipWidth || (align === 'left' ? 760 : 760);
-    const chipH = opts.chipHeight || Math.max(232, qrOuter + 28);
+    const chipW = opts.chipWidth || 760;
+    const chipH = opts.chipHeight || Math.max(228, qrOuter + 24);
     const chipX = align === 'left' ? 96 : Math.round((W - chipW) / 2);
-    const chipY = Math.min(y + 14, 1350 - chipH - 42);
-    const labelY = chipY - 28;
-    const footerX = align === 'left' ? 96 : W / 2;
-    const lineLeft = align === 'left' ? 96 : W / 2 - 168;
-    const lineRight = align === 'left' ? 442 : W / 2 + 168;
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(lineLeft, labelY - 26);
-    ctx.lineTo(lineRight, labelY - 26);
-    ctx.stroke();
-
-    ctx.fillStyle = style.accent;
-    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = align;
-    ctx.fillText('A saved reflection from the Mirror Talk library', footerX, labelY);
+    const chipY = Math.min(y + 26, 1350 - chipH - 14);
 
     ctx.shadowColor = 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 8;
-    ctx.fillStyle = 'rgba(255,250,244,0.96)';
-    _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 7;
+    ctx.fillStyle = 'rgba(255,250,244,0.93)';
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 26);
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.26)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
     ctx.lineWidth = 1.2;
-    _roundRect(ctx, chipX, chipY, chipW, chipH, 28);
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 26);
     ctx.stroke();
 
-    const qrX = chipX + 18;
+    const qrX = chipX + 22;
     const qrY = chipY + Math.round((chipH - qrOuter) / 2);
     ctx.fillStyle = '#ffffff';
     _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 12);
     ctx.fill();
     drawReflectionQrCode(ctx, qrX, qrY, qrModuleSize, { quiet: qrQuiet, bg: '#ffffff', fg: '#000000' });
 
-    const textX = qrX + qrOuter + 24;
-    const textTop = chipY + 56;
+    const textX = qrX + qrOuter + 28;
+    const textTop = chipY + 42;
     const chipText = style.cardText || '#2f261e';
     ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(47,38,30,0.54)';
+    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.letterSpacing = '0.08em';
+    ctx.fillText('SAVED REFLECTION', textX, textTop);
+    ctx.letterSpacing = '0';
+
     ctx.fillStyle = chipText;
-    ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Scan to reflect', textX, textTop);
+    ctx.font = '800 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Scan to reflect', textX, textTop + 31);
 
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.76)';
-    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 36);
+    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 67);
 
     ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.62)';
-    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 70);
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 101);
 
     ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(47,38,30,0.54)';
     ctx.textAlign = 'left';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 104);
+    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 137);
 
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_FOOTER_DEBUG__ = {

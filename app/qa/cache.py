@@ -264,6 +264,12 @@ class AnswerCache:
             # Don't cache error responses
             if not response.get("answer"):
                 return
+            if (
+                response.get("answer_source") in {"basic_fallback", "no_match"}
+                or response.get("answer_status") in {"generation_failed", "source_moments_only", "needs_refinement"}
+            ):
+                logger.info("Cache SKIP: degraded answer for '%.60s'", question)
+                return
 
             # Evict oldest if at capacity
             if len(self._entries) >= self.max_entries:

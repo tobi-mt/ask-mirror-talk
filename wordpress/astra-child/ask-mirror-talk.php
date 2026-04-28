@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.8';
+    return '5.5.9';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -138,7 +138,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.8: premium notifications, stable answer fallback, scannable QR cards
+    $version = ask_mirror_talk_theme_version(); // v5.5.9: polished QR footer, premium notifications, non-sticky degraded answers
     
     // Core styles
     wp_enqueue_style(

@@ -44,6 +44,15 @@ def _ensure_answer_status_fields(response: dict) -> dict:
     return response
 
 
+def _is_degraded_cached_answer(response: dict | None) -> bool:
+    if not isinstance(response, dict):
+        return False
+    return (
+        response.get("answer_source") in {"basic_fallback", "no_match"}
+        or response.get("answer_status") in {"generation_failed", "source_moments_only", "needs_refinement"}
+    )
+
+
 def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], extra: dict | None = None):
     payload = {
         "flow": flow,
@@ -179,23 +188,26 @@ def answer_question(
         exact_cached_response = cache.get_exact(norm_q)
         if exact_cached_response:
             exact_cached_response = _ensure_answer_status_fields(exact_cached_response)
-            latency_ms = int((time.time() - start_time) * 1000)
-            exact_citations = exact_cached_response.get("citations", [])
-            qa_log_id = _log_qa_with_fresh_session(
-                question=question,
-                answer=exact_cached_response["answer"],
-                episode_ids=[c["episode_id"] for c in exact_citations],
-                latency_ms=latency_ms,
-                user_ip=user_ip,
-                is_cached=True,
-                is_answered=len(exact_citations) > 0,
-                log_interaction=log_interaction,
-                context="qa_exact_cache_logging",
-            )
-            exact_cached_response["latency_ms"] = latency_ms
-            exact_cached_response["qa_log_id"] = qa_log_id
-            exact_cached_response["question"] = question
-            return exact_cached_response
+            if _is_degraded_cached_answer(exact_cached_response):
+                logger.info("Ignoring degraded exact cache entry for '%.80s'; regenerating answer", question)
+            else:
+                latency_ms = int((time.time() - start_time) * 1000)
+                exact_citations = exact_cached_response.get("citations", [])
+                qa_log_id = _log_qa_with_fresh_session(
+                    question=question,
+                    answer=exact_cached_response["answer"],
+                    episode_ids=[c["episode_id"] for c in exact_citations],
+                    latency_ms=latency_ms,
+                    user_ip=user_ip,
+                    is_cached=True,
+                    is_answered=len(exact_citations) > 0,
+                    log_interaction=log_interaction,
+                    context="qa_exact_cache_logging",
+                )
+                exact_cached_response["latency_ms"] = latency_ms
+                exact_cached_response["qa_log_id"] = qa_log_id
+                exact_cached_response["question"] = question
+                return exact_cached_response
 
     embed_started_at = time.perf_counter()
     query_embedding = embed_text(question)
@@ -206,24 +218,27 @@ def answer_question(
         cached_response = cache.get(norm_q, query_embedding)
         if cached_response:
             cached_response = _ensure_answer_status_fields(cached_response)
-            latency_ms = int((time.time() - start_time) * 1000)
-            # Log the cached response too
-            cached_citations = cached_response.get("citations", [])
-            qa_log_id = _log_qa_with_fresh_session(
-                question=question,
-                answer=cached_response["answer"],
-                episode_ids=[c["episode_id"] for c in cached_citations],
-                latency_ms=latency_ms,
-                user_ip=user_ip,
-                is_cached=True,
-                is_answered=len(cached_citations) > 0,
-                log_interaction=log_interaction,
-                context="qa_similarity_cache_logging",
-            )
-            cached_response["latency_ms"] = latency_ms
-            cached_response["qa_log_id"] = qa_log_id
-            cached_response["question"] = question
-            return cached_response
+            if _is_degraded_cached_answer(cached_response):
+                logger.info("Ignoring degraded similarity cache entry for '%.80s'; regenerating answer", question)
+            else:
+                latency_ms = int((time.time() - start_time) * 1000)
+                # Log the cached response too
+                cached_citations = cached_response.get("citations", [])
+                qa_log_id = _log_qa_with_fresh_session(
+                    question=question,
+                    answer=cached_response["answer"],
+                    episode_ids=[c["episode_id"] for c in cached_citations],
+                    latency_ms=latency_ms,
+                    user_ip=user_ip,
+                    is_cached=True,
+                    is_answered=len(cached_citations) > 0,
+                    log_interaction=log_interaction,
+                    context="qa_similarity_cache_logging",
+                )
+                cached_response["latency_ms"] = latency_ms
+                cached_response["qa_log_id"] = qa_log_id
+                cached_response["question"] = question
+                return cached_response
 
     # ── Phase 1: DB-heavy retrieval — keep session open ──
     retrieval_started_at = time.perf_counter()
@@ -389,7 +404,10 @@ def answer_question(
     if response.get("fallback_reason"):
         result["fallback_reason"] = response["fallback_reason"]
     
-    cache.put(norm_q, query_embedding, result)
+    if _is_degraded_cached_answer(result):
+        logger.info("Skipping cache PUT for degraded answer to '%.80s'", question)
+    else:
+        cache.put(norm_q, query_embedding, result)
 
     # Explicit garbage collection to free up memory
     gc.collect()
@@ -434,24 +452,27 @@ def answer_question_stream(
     exact_cached_response = cache.get_exact(norm_q) if not bypass_cache else None
     if exact_cached_response:
         exact_cached_response = _ensure_answer_status_fields(exact_cached_response)
-        latency_ms = int((time.time() - start_time) * 1000)
-        _exact_citations = exact_cached_response.get("citations", [])
-        qa_log_id = _log_qa_with_fresh_session(
-            question=question,
-            answer=exact_cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in _exact_citations],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=True,
-            is_answered=len(_exact_citations) > 0,
-            log_interaction=log_interaction,
-            context="qa_stream_exact_cache_logging",
-        )
-        yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
-        yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
-        yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': exact_cached_response.get('answer_source', 'openai'), 'answer_status': exact_cached_response.get('answer_status', 'generated'), 'fallback_reason': exact_cached_response.get('fallback_reason')})}\n\n"
-        return
+        if _is_degraded_cached_answer(exact_cached_response):
+            logger.info("Ignoring degraded stream exact cache entry for '%.80s'; regenerating answer", question)
+        else:
+            latency_ms = int((time.time() - start_time) * 1000)
+            _exact_citations = exact_cached_response.get("citations", [])
+            qa_log_id = _log_qa_with_fresh_session(
+                question=question,
+                answer=exact_cached_response["answer"],
+                episode_ids=[c["episode_id"] for c in _exact_citations],
+                latency_ms=latency_ms,
+                user_ip=user_ip,
+                is_cached=True,
+                is_answered=len(_exact_citations) > 0,
+                log_interaction=log_interaction,
+                context="qa_stream_exact_cache_logging",
+            )
+            yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
+            yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
+            yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': exact_cached_response.get('answer_source', 'openai'), 'answer_status': exact_cached_response.get('answer_status', 'generated'), 'fallback_reason': exact_cached_response.get('fallback_reason')})}\n\n"
+            return
 
     embed_started_at = time.perf_counter()
     query_embedding = embed_text(question)
@@ -460,25 +481,28 @@ def answer_question_stream(
     cached_response = cache.get(norm_q, query_embedding) if not bypass_cache else None
     if cached_response:
         cached_response = _ensure_answer_status_fields(cached_response)
-        latency_ms = int((time.time() - start_time) * 1000)
-        _cached_citations = cached_response.get("citations", [])
-        qa_log_id = _log_qa_with_fresh_session(
-            question=question,
-            answer=cached_response["answer"],
-            episode_ids=[c["episode_id"] for c in _cached_citations],
-            latency_ms=latency_ms,
-            user_ip=user_ip,
-            is_cached=True,
-            is_answered=len(_cached_citations) > 0,
-            log_interaction=log_interaction,
-            context="qa_stream_similarity_cache_logging",
-        )
-        # Stream the full cached answer as a single chunk for instant display
-        yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
-        yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': cached_response.get('answer_source', 'openai'), 'answer_status': cached_response.get('answer_status', 'generated'), 'fallback_reason': cached_response.get('fallback_reason')})}\n\n"
-        return
+        if _is_degraded_cached_answer(cached_response):
+            logger.info("Ignoring degraded stream similarity cache entry for '%.80s'; regenerating answer", question)
+        else:
+            latency_ms = int((time.time() - start_time) * 1000)
+            _cached_citations = cached_response.get("citations", [])
+            qa_log_id = _log_qa_with_fresh_session(
+                question=question,
+                answer=cached_response["answer"],
+                episode_ids=[c["episode_id"] for c in _cached_citations],
+                latency_ms=latency_ms,
+                user_ip=user_ip,
+                is_cached=True,
+                is_answered=len(_cached_citations) > 0,
+                log_interaction=log_interaction,
+                context="qa_stream_similarity_cache_logging",
+            )
+            # Stream the full cached answer as a single chunk for instant display
+            yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
+            yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
+            yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': cached_response.get('answer_source', 'openai'), 'answer_status': cached_response.get('answer_status', 'generated'), 'fallback_reason': cached_response.get('fallback_reason')})}\n\n"
+            return
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
     retrieval_started_at = time.perf_counter()
@@ -655,6 +679,9 @@ def answer_question_stream(
     }
     if fallback_reason:
         cache_payload["fallback_reason"] = fallback_reason
-    cache.put(norm_q, query_embedding, cache_payload)
+    if _is_degraded_cached_answer(cache_payload):
+        logger.info("Skipping cache PUT for degraded streaming answer to '%.80s'", question)
+    else:
+        cache.put(norm_q, query_embedding, cache_payload)
 
     gc.collect()

@@ -33,25 +33,53 @@ _THEME_KEYWORDS: dict[str, tuple[str, ...]] = {
     "Inner peace": ("peace", "stillness", "calm", "uncertain"),
     "Boundaries": ("boundaries", "people-pleasing", "guilty"),
     "Faith": ("faith", "doubt", "god", "spiritual"),
+    "Gratitude": ("gratitude", "thankful", "appreciate"),
+    "Growth": ("growth", "change", "learn", "becoming"),
+    "Communication": ("communication", "conversation", "speak", "listen"),
+    "Community": ("community", "belong", "support", "together"),
+    "Leadership": ("leadership", "leader", "lead", "influence"),
+    "Parenting": ("parenting", "kids", "children", "family"),
+    "Identity": ("identity", "self", "voice", "authentic"),
+    "Transition": ("transition", "life change", "new season", "move forward"),
+    "Empowerment": ("empower", "agency", "strength", "confidence"),
 }
 
 _QOTD_TITLES: dict[str, str] = {
+    "Boundaries": "Where is your yes?",
+    "Communication": "Say it with care",
+    "Community": "Who strengthens you?",
+    "Courage": "Courage for today",
+    "Empowerment": "Take your voice back",
+    "Faith": "Faith in the quiet",
+    "Fear": "Meet fear honestly",
+    "Forgiveness": "Release with wisdom",
+    "Gratitude": "Notice what remains",
     "Grief": "Hold this gently",
-    "Courage": "Stand in this",
-    "Fear": "Stand in this",
-    "Relationships": "Look closer",
-    "Self-worth": "Return here",
-    "Healing": "Stay with this",
-    "Purpose": "Start here",
+    "Growth": "Let growth get honest",
+    "Healing": "Repair starts here",
+    "Identity": "Return to yourself",
     "Inner peace": "A quieter question",
-    "Boundaries": "Look again",
-    "Faith": "Sit with this",
+    "Leadership": "Lead from within",
+    "Parenting": "Parent with presence",
+    "Purpose": "What keeps calling?",
+    "Relationships": "Love with clarity",
+    "Self-worth": "Remember your worth",
+    "Surrender": "Loosen your grip",
+    "Transition": "When life shifts",
 }
 
 _THEME_REFLECTION_OPENERS: dict[str, tuple[str, ...]] = {
     "Boundaries": (
         "For the part of you learning where love ends and self-abandonment begins:",
         "A question for the places where yes has cost too much:",
+    ),
+    "Communication": (
+        "For the conversation that needs more care:",
+        "A question for speaking truth without losing tenderness:",
+    ),
+    "Community": (
+        "For the connections shaping who you become:",
+        "A question for the people who help you feel less alone:",
     ),
     "Courage": (
         "For the moment that needs honesty before confidence:",
@@ -65,13 +93,33 @@ _THEME_REFLECTION_OPENERS: dict[str, tuple[str, ...]] = {
         "For what you are still carrying gently:",
         "A question for the love that has changed shape:",
     ),
+    "Gratitude": (
+        "For the grace still holding part of today:",
+        "A question for noticing what remains good:",
+    ),
+    "Growth": (
+        "For the change asking you to become more honest:",
+        "A question for growth that does not rush past care:",
+    ),
     "Healing": (
         "For the wound that is asking for wiser attention:",
         "A question for the part of you ready to repair:",
     ),
+    "Identity": (
+        "For the voice underneath all the noise:",
+        "A question for remembering who you are becoming:",
+    ),
     "Inner peace": (
         "For the place in you that wants to stop bracing:",
         "A question for a steadier inner weather:",
+    ),
+    "Leadership": (
+        "For the influence you want to carry with integrity:",
+        "A question for leading without performing:",
+    ),
+    "Parenting": (
+        "For the love that wants to repair and guide:",
+        "A question for parenting with presence instead of pressure:",
     ),
     "Purpose": (
         "For the calling that keeps tapping your shoulder:",
@@ -85,27 +133,102 @@ _THEME_REFLECTION_OPENERS: dict[str, tuple[str, ...]] = {
         "For the part of you tired of proving your value:",
         "A question for returning to your own center:",
     ),
+    "Surrender": (
+        "For the grip you may not need to keep:",
+        "A question for trusting without giving up:",
+    ),
+    "Transition": (
+        "For the season that no longer fits the old map:",
+        "A question for moving forward without abandoning yourself:",
+    ),
+    "Empowerment": (
+        "For the strength that wants to come back online:",
+        "A question for choosing with your own voice again:",
+    ),
+}
+
+_QOTD_THEME_TEASERS: dict[str, tuple[str, ...]] = {
+    "Boundaries": (
+        "A boundaries reflection is ready. Tap for a steadier way to honor your yes and your no.",
+        "Today’s question opens a wiser way to protect peace without closing your heart.",
+    ),
+    "Communication": (
+        "A communication reflection is ready. Tap for a gentler way to say what matters.",
+        "Today’s question can help you listen beneath the words and respond with care.",
+    ),
+    "Community": (
+        "A community reflection is ready. Tap to explore the people and places that help you become whole.",
+        "Today’s question looks at belonging, support, and the kind of connection that strengthens you.",
+    ),
+    "Courage": (
+        "A courage reflection is ready. Tap for the next honest step, not the perfect one.",
+        "Today’s question meets the brave part of you that is ready to move with honesty.",
+    ),
+    "Faith": (
+        "A faith reflection is ready. Tap for a quieter way to hold doubt, trust, and hope.",
+        "Today’s question meets the place where doubt and hope are still talking.",
+    ),
+    "Gratitude": (
+        "A gratitude reflection is ready. Tap to notice what is still carrying you.",
+        "Today’s question can help you find grace inside an ordinary moment.",
+    ),
+    "Grief": (
+        "A grief reflection is ready. Tap for a gentle way to carry what still matters.",
+        "Today’s question gives tenderness to the love that has changed shape.",
+    ),
+    "Growth": (
+        "A growth reflection is ready. Tap to name what is changing and what is asking for courage.",
+        "Today’s question can help you grow without rushing past what needs care.",
+    ),
+    "Healing": (
+        "A healing reflection is ready. Tap for a wiser way to tend what still hurts.",
+        "Today’s question offers gentleness for the part of you learning to repair.",
+    ),
+    "Inner peace": (
+        "An inner peace reflection is ready. Tap to loosen what has been keeping you braced.",
+        "Today’s question can help your nervous system find a little more room.",
+    ),
+    "Leadership": (
+        "A leadership reflection is ready. Tap to lead from clarity instead of performance.",
+        "Today’s question brings leadership back to presence, courage, and inner alignment.",
+    ),
+    "Parenting": (
+        "A parenting reflection is ready. Tap for presence, repair, and steadier love.",
+        "Today’s question can help you parent with honesty instead of pressure.",
+    ),
+    "Purpose": (
+        "A purpose reflection is ready. Tap to listen to what keeps calling you forward.",
+        "Today’s question helps separate pressure from the deeper pull of purpose.",
+    ),
+    "Relationships": (
+        "A relationship reflection is ready. Tap for a clearer way to love without losing yourself.",
+        "Today’s question can help you bring honesty and tenderness into connection.",
+    ),
+    "Self-worth": (
+        "A self-worth reflection is ready. Tap to return to the value you do not have to prove.",
+        "Today’s question helps you step out of comparison and back into your own center.",
+    ),
 }
 
 _MIDDAY_FALLBACKS: tuple[tuple[str, str], ...] = (
-    ("Pause with this", "You do not have to force the whole day into clarity; one honest pause can return you to what matters."),
+    ("One honest pause", "You do not have to force the whole day into clarity; one honest pause can return you to what matters."),
     ("Come back inward", "Before the afternoon pulls you further outward, listen for the one thing in you asking to be handled with care."),
-    ("Hold steady", "Progress can be quiet and still be real; choose the next faithful step instead of measuring the whole mountain."),
-    ("Make room", "A little space around what you feel can change how you carry the rest of today."),
-    ("Start again gently", "You are allowed to begin the day again from this moment, with more honesty and less pressure."),
+    ("Hold the next step", "Progress can be quiet and still be real; choose the next faithful step instead of measuring the whole mountain."),
+    ("Make room inside", "A little space around what you feel can change how you carry the rest of today."),
+    ("Begin again gently", "You are allowed to begin the day again from this moment, with more honesty and less pressure."),
 )
 
 _NIGHT_TITLES: tuple[str, ...] = (
-    "Let the day exhale",
-    "Before you rest",
-    "A quieter return",
-    "What stayed with you",
-    "Close the day gently",
+    "Let the day settle",
+    "Before you sleep",
+    "Return softly",
+    "What stayed with you?",
+    "Close with care",
 )
 
 _NIGHT_BODY_RETURNING: tuple[str, ...] = (
-    "Let one honest question gather what the day left scattered.",
-    "Before sleep, return to the insight that still feels alive.",
+    "Let one honest question gather what the day left scattered before you carry it into sleep.",
+    "Before sleep, return to the insight that still feels alive and let it become wisdom.",
     "Give the unfinished part of today a softer place to land.",
     "You do not need to solve the whole day; just notice what still wants care.",
     "A quiet reflection tonight can help tomorrow begin with less noise.",
@@ -291,7 +414,7 @@ def _remove_brand_mentions(text_value: str) -> str:
 
 def _question_text_only(question: str) -> str:
     clean = re.sub(r"\s+", " ", (question or "").strip())
-    return clean.rstrip(" .")
+    return clean.rstrip(" .?!")
 
 
 def _clean_push_title(title: str, fallback: str = "Pause here") -> str:
@@ -300,8 +423,16 @@ def _clean_push_title(title: str, fallback: str = "Pause here") -> str:
     return _clip_sentence(clean or fallback, 42)
 
 
-def _premium_push_body(body: str, max_len: int = 118) -> str:
-    clean = _remove_brand_mentions(body)
+def _clean_qotd_title(hook: str | None, theme: str) -> str:
+    hook_text = re.sub(r"\s+", " ", (hook or "").strip())
+    generic_hooks = {"", "today's question", "todays question", "question of the day"}
+    if hook_text.lower() not in generic_hooks:
+        return _clean_push_title(hook_text, fallback=_QOTD_TITLES.get(theme or "", "Today's question"))
+    return _QOTD_TITLES.get(theme or "", "Today's question")
+
+
+def _premium_push_body(body: str, max_len: int = 118, *, remove_brand_mentions: bool = True) -> str:
+    clean = _remove_brand_mentions(body) if remove_brand_mentions else (body or "")
     clean = re.sub(r"\s+", " ", clean).strip(" ,;:-")
     if not clean:
         return ""
@@ -310,15 +441,27 @@ def _premium_push_body(body: str, max_len: int = 118) -> str:
     return _clip_sentence(clean, max_len)
 
 
+def _qotd_theme_teaser(theme: str, base_question: str) -> str:
+    options = _QOTD_THEME_TEASERS.get(theme or "")
+    if options:
+        return options[_stable_variant(theme, base_question, "qotd-teaser", modulo=len(options))]
+    theme_label = (theme or "reflection").strip().lower()
+    return f"Today’s {theme_label} reflection is ready. Tap to open the question and carry one clear insight with you."
+
+
 def _qotd_copy(question: str, theme: str, hook: str | None, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
-    title = _QOTD_TITLES.get(theme or "", "Today's question")
+    title = _clean_qotd_title(hook, theme)
     base_question = _question_text_only(question)
     openers = _THEME_REFLECTION_OPENERS.get(theme or "", ())
     opener = openers[_stable_variant(base_question, theme, modulo=len(openers))] if openers else "A question worth carrying today:"
     if is_returning and recent_theme and recent_theme.lower() != (theme or "").lower():
         opener = f"Your recent thread was {recent_theme.lower()}; today, widen the lens:"
     body = f"{opener} {base_question}?"
-    return title, _premium_push_body(body, 116)
+    if len(body) > 116:
+        body = f"Today's question: {base_question}?"
+    if len(body) > 116:
+        body = _qotd_theme_teaser(theme, base_question)
+    return title, _premium_push_body(body, 116, remove_brand_mentions=False)
 
 
 def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: bool) -> tuple[str, str]:
@@ -328,6 +471,8 @@ def _midday_copy(title: str, body: str, recent_theme: str | None, is_returning: 
         variant = _stable_variant(title, body, recent_theme, modulo=len(_MIDDAY_FALLBACKS))
         final_title, clean_body = _MIDDAY_FALLBACKS[variant]
     elif is_returning and recent_theme:
+        if clean_body[-1] not in ".!?":
+            clean_body = f"{clean_body}."
         clean_body = f"{clean_body} Let it meet what you are carrying in {recent_theme.lower()}."
     return final_title, _premium_push_body(clean_body, 116)
 

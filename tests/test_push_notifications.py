@@ -33,11 +33,41 @@ def test_qotd_copy_is_human_complete_and_not_generic():
         is_returning=False,
     )
 
-    assert title == "Look again"
+    assert title == "Return to Yourself"
     assert "A grounded answer is ready" not in body
     assert "Open for" not in body
     assert body.endswith("?")
     assert "abandoning myself" in body
+
+
+def test_qotd_copy_preserves_mirror_talk_question_text():
+    title, body = _qotd_copy(
+        "What does Mirror Talk teach about the power of community?",
+        "Community",
+        None,
+        recent_theme=None,
+        is_returning=False,
+    )
+
+    assert title == "Who strengthens you?"
+    assert "What does Mirror Talk teach about the power of community?" in body
+    assert "What does teach" not in body
+    assert "??" not in body
+
+
+def test_qotd_copy_uses_safe_teaser_for_long_questions():
+    _title, body = _qotd_copy(
+        "How do I stop abandoning myself to keep the peace when the people I love expect me to say yes before I have listened to myself?",
+        "Boundaries",
+        "Return to Yourself",
+        recent_theme=None,
+        is_returning=False,
+    )
+
+    assert len(body) <= 116
+    assert body[-1] in ".?"
+    assert "abandoning myself to keep the peace when" not in body
+    assert "reflection is ready" in body.lower() or "today’s question" in body.lower()
 
 
 def test_midday_copy_keeps_distinct_title_and_removes_cta():
@@ -51,7 +81,8 @@ def test_midday_copy_keeps_distinct_title_and_removes_cta():
     assert title == "Come Back Inward"
     assert "Ask Mirror Talk" not in body
     assert body.endswith(".")
-    assert "self-worth" in body.lower()
+    assert "pause Let" not in body
+    assert len(body) <= 116
 
 
 def test_nightly_reflection_copy_feels_complete_and_calm():
@@ -59,5 +90,6 @@ def test_nightly_reflection_copy_feels_complete_and_calm():
 
     assert title
     assert body[-1] in ".?"
+    assert len(body) <= 116
     assert "tonight" in body.lower() or "before" in body.lower()
     assert "Open for" not in body

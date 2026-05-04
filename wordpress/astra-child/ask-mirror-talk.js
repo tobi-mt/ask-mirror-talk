@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.9 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.10 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -311,6 +311,71 @@
     return chosen || fallback;
   }
 
+  function buildThemeReflectionQuestion(theme, moment) {
+    const cleanTheme = String(theme || '').trim();
+    const themeKey = cleanTheme.toLowerCase();
+    const nightly = moment === 'night';
+    const prompts = {
+      'self-worth': nightly
+        ? 'What does Mirror Talk teach about resting in my worth instead of proving myself?'
+        : 'What does Mirror Talk teach about returning to my worth without comparing myself?',
+      boundaries: nightly
+        ? 'What does Mirror Talk teach about ending the day with healthier boundaries?'
+        : 'How can I honor my boundaries without losing compassion?',
+      grief: nightly
+        ? 'How can I carry grief gently without losing myself?'
+        : 'What does Mirror Talk teach about carrying grief with honesty and hope?',
+      healing: nightly
+        ? 'What does Mirror Talk teach about giving healing a gentler place to begin?'
+        : 'How do I start the healing process with honesty and patience?',
+      relationships: nightly
+        ? 'What does Mirror Talk teach about bringing honesty and tenderness into relationships?'
+        : 'How can I love with honesty without losing myself?',
+      gratitude: nightly
+        ? 'What role does gratitude play in helping me carry today with more peace?'
+        : 'How can gratitude shift the way I move through hardship?',
+      purpose: nightly
+        ? 'What does Mirror Talk teach about listening to purpose without forcing clarity?'
+        : 'How do I find my purpose without rushing the process?',
+      faith: nightly
+        ? 'How can I hold faith and doubt with honesty before I rest?'
+        : 'How do I reconnect with my faith in a more honest way?',
+      courage: nightly
+        ? 'What does courage look like when I am tired but still trying to grow?'
+        : 'What does courage look like in everyday life?',
+      fear: nightly
+        ? 'What is fear asking me to notice before I move forward?'
+        : 'How can I move with courage when fear is still present?',
+      community: nightly
+        ? 'What does Mirror Talk teach about the kind of community that helps me become whole?'
+        : 'What does Mirror Talk teach about the power of community?',
+      leadership: nightly
+        ? 'What does Mirror Talk teach about leading with vulnerability and integrity?'
+        : 'What does it look like to lead with vulnerability?',
+      parenting: nightly
+        ? 'How can I parent with more presence, repair, and emotional steadiness?'
+        : 'How do I raise kids who are emotionally resilient?',
+      growth: nightly
+        ? 'How do I know whether growth is really changing me over time?'
+        : 'What can I learn from the growth this season is asking of me?',
+      communication: nightly
+        ? 'What does Mirror Talk teach about speaking truth with care?'
+        : 'How do I have hard conversations without damaging the relationship?',
+      identity: nightly
+        ? 'What does it mean to live authentically without losing my voice?'
+        : 'How do I discover my true identity?'
+    };
+    if (prompts[themeKey]) return prompts[themeKey];
+    if (cleanTheme) {
+      return nightly
+        ? `What does Mirror Talk teach about carrying ${cleanTheme} with more honesty and peace?`
+        : `What does Mirror Talk teach about ${cleanTheme} in everyday life?`;
+    }
+    return nightly
+      ? 'What does Mirror Talk teach about turning today into wisdom before I rest?'
+      : 'What does Mirror Talk teach about paying attention to what matters today?';
+  }
+
   function buildNightReflectionPrompt() {
     const today = todayStr();
     const lastSession = loadLastSession() || null;
@@ -344,16 +409,14 @@
       
       if (isRecurringTheme) {
         return {
-          question: `${todayTheme} keeps returning for you. What part of it still needs your attention before rest?`,
+          question: buildThemeReflectionQuestion(todayTheme, 'night'),
           strategy: 'recurring_theme_session',
           theme: todayTheme || null
         };
       }
       
       return {
-        question: todayTheme
-          ? `Before the day closes, what from today's reflection on ${todayTheme} is still asking for your attention?`
-          : `Before the day closes, what from today's reflection is still asking for your attention?`,
+        question: buildThemeReflectionQuestion(todayTheme, 'night'),
         strategy: 'today_last_session',
         theme: todayTheme || null
       };
@@ -361,11 +424,8 @@
 
     if (notes.length > 0) {
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
-      const mostRecentNote = notes[0];
       return {
-        question: todayTheme
-          ? `What did you write about ${todayTheme} today that still feels alive before rest?`
-          : `What did you write down today that still holds your attention?`,
+        question: buildThemeReflectionQuestion(todayTheme, 'night'),
         strategy: 'today_note',
         theme: todayTheme || null
       };
@@ -374,9 +434,7 @@
     if (insights.length > 0) {
       if (todayTheme) rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, todayTheme);
       return {
-        question: todayTheme
-          ? `What truth from today's saved insight on ${todayTheme} do I want to carry gently into tomorrow?`
-          : `What truth from today's saved insight do I want to carry gently into tomorrow?`,
+        question: buildThemeReflectionQuestion(todayTheme, 'night'),
         strategy: 'today_saved_insight',
         theme: todayTheme || null
       };
@@ -390,25 +448,26 @@
       ].filter(Boolean).filter(theme => theme !== todayTheme);
       const rotatedTheme = chooseRotatingTheme(recapCandidates, recap.topTheme, RECENT_NIGHT_THEMES_KEY);
       return {
-        question: `What keeps returning for me around ${rotatedTheme}, and what is it inviting me to notice before I rest?`,
+        question: buildThemeReflectionQuestion(rotatedTheme, 'night'),
         strategy: 'weekly_recap',
         theme: rotatedTheme
       };
     }
 
     if (latestQotd && latestQotd.question) {
+      const qotdTheme = latestQotd.theme || inferTheme(latestQotd.question, '');
       if (latestQotd.theme && !recentNightThemes.includes(latestQotd.theme)) {
         rememberRecentTheme(RECENT_NIGHT_THEMES_KEY, latestQotd.theme);
       }
       return {
-        question: `What is today's question still trying to show me tonight: ${latestQotd.question}`,
+        question: buildThemeReflectionQuestion(qotdTheme, 'night'),
         strategy: 'qotd_fallback',
-        theme: latestQotd.theme || null
+        theme: qotdTheme || null
       };
     }
 
     return {
-      question: 'What from today is still asking for my quiet attention before the day ends?',
+      question: buildThemeReflectionQuestion('', 'night'),
       strategy: 'default',
       theme: null
     };
@@ -431,32 +490,31 @@
 
     if (lastSession && lastSession.question && lastSession.time && formatLocalDate(new Date(lastSession.time)) === today) {
       return {
-        question: todayTheme
-          ? `What about today's reflection on ${todayTheme} wants a deeper look right now?`
-          : `What about today's reflection wants a deeper look right now?`,
+        question: buildThemeReflectionQuestion(todayTheme, 'midday'),
         strategy: 'today_last_session',
         theme: todayTheme || null
       };
     }
 
     if (latestQotd && latestQotd.question) {
+      const qotdTheme = latestQotd.theme || inferTheme(latestQotd.question, '');
       return {
-        question: `Go deeper on this: ${latestQotd.question}`,
+        question: buildThemeReflectionQuestion(qotdTheme, 'midday'),
         strategy: 'qotd_fallback',
-        theme: latestQotd.theme || null
+        theme: qotdTheme || null
       };
     }
 
     if (recap && recap.topTheme) {
       return {
-        question: `What needs my attention most around ${recap.topTheme} this afternoon?`,
+        question: buildThemeReflectionQuestion(recap.topTheme, 'midday'),
         strategy: 'weekly_recap',
         theme: recap.topTheme
       };
     }
 
     return {
-      question: 'What needs my attention most this afternoon?',
+      question: buildThemeReflectionQuestion('', 'midday'),
       strategy: 'default',
       theme: null
     };
@@ -3149,7 +3207,7 @@
   })();
 
   // ========================================
-  // Push Notifications — Daily QOTD & New Episodes
+  // Push Notifications — Daily question, reflections, and episode alerts
   // ========================================
 
   /**
@@ -3450,11 +3508,11 @@
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-midday" checked>
-          <span>💡 Midday check-in</span>
+          <span>💡 Midday and nightly reflections</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-episodes" checked>
-          <span>🎙️ New episode alerts</span>
+          <span>🎙️ New podcast episode alerts</span>
         </label>
         <button class="amt-notif-save" type="button">Enable selected reminders</button>
       </div>
@@ -3784,11 +3842,11 @@
         </label>
         <label class="amt-nmp-pref">
           <input type="checkbox" id="amt-nmp-midday" checked>
-          <span>🌤 Midday Motivation <em class="amt-nmp-pref-desc">A brief encouragement at noon</em></span>
+          <span>🌤 Reflection nudges <em class="amt-nmp-pref-desc">Midday encouragement and a calm nightly reflection</em></span>
         </label>
         <label class="amt-nmp-pref">
           <input type="checkbox" id="amt-nmp-episodes" checked>
-          <span>🎙️ New Episode Alerts <em class="amt-nmp-pref-desc">When a new podcast episode is added</em></span>
+          <span>🎙️ New podcast episodes <em class="amt-nmp-pref-desc">Only when a fresh Mirror Talk episode is published</em></span>
         </label>
       </div>
       <div class="amt-nmp-actions">
@@ -3856,13 +3914,12 @@
         btn.textContent = 'Unsubscribing…';
         await unsubscribeFromPush();
         const retain = panel.querySelector('.amt-nmp-retain');
-        retain.innerHTML = '<p class="amt-nmp-unsub-msg">You\'ve been unsubscribed. You can always re-enable notifications from the settings bell.</p>';
-        // Hide the bell button — no longer subscribed
+        retain.innerHTML = '<p class="amt-nmp-unsub-msg">You\'ve been unsubscribed. You can re-enable reminders here anytime.</p>';
+        // Keep the bell visible so users can opt back in later.
         const bellBtn = document.getElementById('amt-notif-manage-btn');
         setTimeout(() => {
           panel.style.display = 'none';
           if (bellBtn) {
-            bellBtn.style.display = 'none';
             bellBtn.setAttribute('aria-expanded', 'false');
           }
         }, 3000);
@@ -3875,21 +3932,17 @@
     const btn = document.getElementById('amt-notif-manage-btn');
     if (!btn) return;
     
-    // Show bell for all users (subscribed or not)
-    // If not subscribed, clicking will show the opt-in prompt
-    // If subscribed, clicking will show the management panel
+    // Show bell for all users on notification-capable platforms. If a user is
+    // not subscribed, clicking opens the opt-in/help prompt; if subscribed,
+    // clicking opens the management panel.
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                          window.navigator.standalone === true;
-    const hasStatsBar = document.getElementById('amt-stats-bar');
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
+    const hasNotificationSurface = ('Notification' in window) || isIOS;
     
-    // Show bell if user has visited before OR is in standalone mode (PWA installed)
-    try {
-      const lastSession = loadLastSession();
-      const hasVisited = !!(lastSession && lastSession.question);
-      if ((hasVisited || isStandalone) && hasStatsBar) {
-        btn.style.display = '';
-      }
-    } catch (e) {}
+    if (hasNotificationSurface || isStandalone) {
+      btn.style.display = '';
+    }
     
     btn.addEventListener('click', () => {
       console.log('[Bell] Notification bell clicked');

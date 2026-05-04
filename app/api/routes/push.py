@@ -292,11 +292,15 @@ def get_push_stats(
     episodes_enabled = db.execute(
         text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true AND notify_new_episodes = true")
     ).scalar() or 0
+    reflections_enabled = db.execute(
+        text("SELECT COUNT(*) FROM push_subscriptions WHERE active = true AND notify_midday = true")
+    ).scalar() or 0
 
     return {
         "total_subscriptions": total,
         "active": active,
         "inactive": total - active,
         "qotd_enabled": qotd_enabled,
+        "reflection_nudges_enabled": reflections_enabled,
         "new_episodes_enabled": episodes_enabled,
     }

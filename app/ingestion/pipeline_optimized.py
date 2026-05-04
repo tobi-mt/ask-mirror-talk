@@ -73,6 +73,7 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
     processed = 0
     skipped = 0
     failed = 0
+    processed_episodes: list[dict] = []
     audio_path = None  # Track current audio file for cleanup
 
     try:
@@ -201,6 +202,12 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
                 
                 logger.info("  └─ ✓ Episode complete (id=%s)", episode.id)
                 processed += 1
+                processed_episodes.append({
+                    "id": episode.id,
+                    "guid": episode.guid,
+                    "title": episode.title,
+                    "published_at": episode.published_at,
+                })
                 
                 # Clean up audio file immediately after processing to save disk space
                 if audio_path and audio_path.exists():
@@ -256,7 +263,12 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
         message = f"processed={processed}, skipped={skipped}, failed={failed}"
         repository.finish_ingest_run(db, run.id, status="success", message=message)
         logger.info("Ingestion complete: %s", message)
-        return {"processed": processed, "skipped": skipped, "failed": failed}
+        return {
+            "processed": processed,
+            "skipped": skipped,
+            "failed": failed,
+            "processed_episodes": processed_episodes,
+        }
         
     except Exception as exc:
         logger.exception("Ingestion failed: %s", exc)

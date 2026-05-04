@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""  # Base64url-encoded public key for browser subscriptions
     vapid_private_key: str = ""  # PEM-encoded private key for signing push messages
     vapid_claim_email: str = ""  # Contact email for VAPID claims (e.g. mailto:you@example.com)
+    notify_new_episode_after_ingest: bool = True
+    notify_new_episode_max_age_days: int = 14
 
     @field_validator("vapid_private_key")
     @classmethod

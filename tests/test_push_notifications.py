@@ -4,6 +4,7 @@ from app.notifications.push import (
     _midday_copy,
     _night_reflection_copy,
     _qotd_copy,
+    send_new_episode_notification,
     send_streak_protection_notification,
 )
 
@@ -93,3 +94,21 @@ def test_nightly_reflection_copy_feels_complete_and_calm():
     assert len(body) <= 116
     assert "tonight" in body.lower() or "before" in body.lower()
     assert "Open for" not in body
+
+
+def test_new_episode_notification_targets_episode_opt_in(monkeypatch):
+    captured = {}
+
+    def fake_broadcast(**kwargs):
+        captured.update(kwargs)
+        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+
+    monkeypatch.setattr("app.notifications.push._broadcast_notification", fake_broadcast)
+
+    result = send_new_episode_notification(MagicMock(), "A Fresh Episode", 123)
+
+    assert result["sent"] == 0
+    assert captured["preference_column"] == "notify_new_episodes"
+    assert captured["notification_type"] == "new_episode"
+    assert captured["data"]["type"] == "new_episode"
+    assert captured["data"]["episode_id"] == 123

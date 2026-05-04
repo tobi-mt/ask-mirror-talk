@@ -8,21 +8,24 @@ good coverage for in the episode library.
 
 import sys
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text, create_engine
 from app.core.config import settings
+from scripts.analytics_queries import INTERNAL_USER_IP, PLACEHOLDER_QUESTION_SQL
 
 
 def analyze_weak_matches(days: int = 180):
     """Analyze weak match questions and identify patterns."""
     engine = create_engine(str(settings.database_url))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     
     with engine.connect() as db:
         # Get all unanswered/weak match questions
-        query = text("""
+        query = text(f"""
             SELECT 
                 question,
                 user_ip,
@@ -33,11 +36,13 @@ def analyze_weak_matches(days: int = 180):
             FROM qa_logs
             WHERE 
                 is_answered = FALSE
-                AND created_at >= NOW() - INTERVAL ':days days'
+                AND created_at >= :cutoff
+                AND COALESCE(user_ip, '') != :internal_user_ip
+                {PLACEHOLDER_QUESTION_SQL}
             ORDER BY created_at DESC
         """)
         
-        results = db.execute(query, {"days": days}).fetchall()
+        results = db.execute(query, {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}).fetchall()
         
         if not results:
             print("✅ No weak matches found! All questions are being answered well.")

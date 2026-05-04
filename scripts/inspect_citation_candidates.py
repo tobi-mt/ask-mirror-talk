@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import sys
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 load_dotenv(project_root / ".env")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
 
 from app.core.db import get_session_local, safe_close_session
 from app.indexing.embeddings import embed_text

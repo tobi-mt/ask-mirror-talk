@@ -447,6 +447,37 @@ def analyze_product_event_mix(db, days=30):
     )
 
 
+def analyze_weak_match_details(db, days=30):
+    """Show recent unanswered / no-citation logs so weak-match spikes are actionable."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = """
+        SELECT
+            question,
+            COUNT(*) AS weak_logs,
+            COUNT(DISTINCT user_ip) AS unique_users,
+            MIN(created_at) AS first_seen,
+            MAX(created_at) AS last_seen,
+            ROUND(AVG(latency_ms), 2) AS avg_latency_ms,
+            SUM(CASE WHEN COALESCE(latency_ms, 0) = 0 THEN 1 ELSE 0 END) AS instant_logs
+        FROM qa_logs
+        WHERE created_at >= :cutoff
+          AND is_answered = FALSE
+          {{INTERNAL_FILTER}}
+          {{QUESTION_FILTER}}
+        GROUP BY question
+        ORDER BY weak_logs DESC, last_seen DESC
+        LIMIT 20
+    """
+
+    run_query(
+        db,
+        _with_question_quality_filter(_with_internal_filter(query)),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+        f"Recent Weak Match / No-Citation Questions (Last {days} Days)"
+    )
+
+
 def analyze_hourly_patterns(db, days=7):
     """Analyze usage patterns by hour of day"""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -529,6 +560,7 @@ def generate_summary_report(db, days=7):
     analyze_prompt_origin_usage(db, min(days, 30))
     analyze_feature_engagement(db, min(days, 30))
     analyze_product_event_mix(db, min(days, 30))
+    analyze_weak_match_details(db, min(days, 30))
     
     print("\n" + "="*80)
     print("✅ Report Complete")

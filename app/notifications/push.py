@@ -1,7 +1,7 @@
 """
 Web Push Notifications for Ask Mirror Talk.
 
-Sends daily QOTD notifications and new episode alerts to subscribed users.
+Sends daily questions, reflection nudges, and episode alerts to subscribed users.
 Uses the Web Push protocol with VAPID authentication.
 """
 
@@ -1598,7 +1598,7 @@ def send_new_episode_notification(
         url=f"/?utm_source=push&utm_medium=new_episode&utm_campaign=ep{episode_id}#ask-mirror-talk-form",
         tag=f"new-episode-{episode_id}",
         notification_type="new_episode",
-        data={"episode_id": episode_id, "episode_title": episode_title},
+        data={"type": "new_episode", "episode_id": episode_id, "episode_title": episode_title},
         actions=actions,
         vibrate=vibrate,
         require_interaction=False,  # Allow auto-dismiss after viewing

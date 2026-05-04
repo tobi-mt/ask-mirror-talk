@@ -3,7 +3,9 @@
 
 import sys
 import asyncio
+import os
 from pathlib import Path
+import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.prewarm_cache import prewarm_cache
@@ -14,10 +16,12 @@ TEST_QUESTIONS = [
     "How do I stop comparing myself to others?",
 ]
 
-async def test_prewarm():
+def test_prewarm():
     """Test pre-warming with a small subset."""
+    if os.getenv("AMT_RUN_PREWARM_INTEGRATION") != "1":
+        pytest.skip("Set AMT_RUN_PREWARM_INTEGRATION=1 to run live cache prewarm integration test.")
     print("\n🧪 Testing cache pre-warming with 2 sample questions...\n")
-    await prewarm_cache(TEST_QUESTIONS, force=False)
+    asyncio.run(prewarm_cache(TEST_QUESTIONS, force=False))
 
 if __name__ == "__main__":
-    asyncio.run(test_prewarm())
+    asyncio.run(prewarm_cache(TEST_QUESTIONS, force=False))

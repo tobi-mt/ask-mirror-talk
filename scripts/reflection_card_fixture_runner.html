@@ -153,6 +153,12 @@
         answer: 'Healthy relationships grow where respect, honesty, and repair are practiced consistently. Connection becomes stronger when both people feel safe enough to tell the truth.',
         excerpt: 'Healthy relationships grow where respect, honesty, and repair are practiced consistently.'
       },
+      relationships_truncated_fragment: {
+        question: 'How do I acknowledge what I feel in relationships?',
+        theme: 'Relationships',
+        answer: "Remember, it’s okay to acknowledge th",
+        excerpt: "Remember, it’s okay to acknowledge th"
+      },
       leadership_long: {
         question: 'What does it look like to lead with vulnerability?',
         theme: 'Leadership',
@@ -177,6 +183,12 @@
         answer: '',
         excerpt: ''
       },
+      inner_peace_repetitive: {
+        question: 'How do I find peace when everything feels uncertain?',
+        theme: 'Inner peace',
+        answer: "The central insight is simple: when you allow genuine stillness, your deeper self and the raw world start speaking in ways you didn’t know to expect.",
+        excerpt: "Allow genuine stillness, your deeper self and the raw world start speaking in ways you didn’t know to expect."
+      },
       saved_reflection_long_note: {
         question: 'What helped me remember my strength?',
         theme: 'Reflection',
@@ -196,6 +208,19 @@
         theme: 'Purpose',
         answer: "Here are grounded reflections from Mirror Talk that speak to your question: 1. every day awakened and also to their full capacity, to their full engagement, basically. 2. Wow, thank you so much. I really appreciate you sharing that. 3. To wrap up today's episode, I encourage you to take a moment to reflect on your own habits. 4. Be with nature and connect to what you're feeling and thinking. Because if you don't do that for yourself, no one's really going to do that for you.",
         excerpt: "Here are grounded reflections from Mirror Talk that speak to your question: 1. Be with nature and connect to what you're feeling and thinking."
+      },
+      achievement_streak: {
+        cardKind: 'achievement',
+        achievementType: 'streak'
+      },
+      achievement_badge: {
+        cardKind: 'achievement',
+        achievementType: 'badge',
+        badge: { id: 'streak_7', emoji: '💫', name: 'Week Warrior', desc: 'Kept a 7-day streak' }
+      },
+      achievement_progress: {
+        cardKind: 'achievement',
+        achievementType: 'progress'
       }
     };
 
@@ -207,6 +232,33 @@
 
       if (!exports) {
         document.getElementById('fixture-debug').textContent = 'AMT test exports were not available.';
+        return;
+      }
+
+      if (fixture.cardKind === 'achievement') {
+        const stats = {
+          totalQuestions: 28,
+          currentStreak: 7,
+          maxStreak: 14,
+          themesExplored: new Set(['Purpose', 'Healing', 'Relationships', 'Gratitude', 'Courage', 'Faith']),
+          earnedBadges: new Set(['first_step', 'curious', 'streak_3', 'streak_7', 'explorer'])
+        };
+        const badge = fixture.badge || null;
+        const dataUrl = exports.buildShareCard(badge, stats, fixture.achievementType);
+        const rendered = window.__AMT_LAST_ACHIEVEMENT_RENDER_DEBUG__ || {};
+        document.getElementById('card-preview').src = dataUrl;
+        document.getElementById('fixture-title').textContent = fixtureName;
+        document.getElementById('fixture-summary').textContent = `achievementType=${fixture.achievementType}`;
+        document.getElementById('fixture-debug').textContent = JSON.stringify({
+          cardKind: 'achievement',
+          rendered,
+          footer: window.__AMT_LAST_FOOTER_DEBUG__ || null,
+          qrPayload: exports.getReflectionCardQrPayload ? exports.getReflectionCardQrPayload() : null,
+          qrMatrix: exports.getReflectionCardQrMatrix ? {
+            size: exports.getReflectionCardQrMatrix().size,
+            mask: exports.getReflectionCardQrMatrix().mask
+          } : null
+        }, null, 2);
         return;
       }
 

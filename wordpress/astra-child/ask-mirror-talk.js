@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.10 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.13 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -29,6 +29,8 @@
   const answerUtilities = document.querySelector('#amt-answer-utilities');
   const citationTrustNote = document.querySelector('#amt-citation-trust-note');
   const questionCoach = document.querySelector('#amt-question-coach');
+  const workflowBar = document.querySelector('#amt-workflow-bar');
+  const workflowNudge = document.querySelector('#amt-workflow-nudge');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -842,6 +844,7 @@
     const hasContent = (topicsContainer && topicsContainer.style.display !== 'none') ||
                        (suggestionsContainer && suggestionsContainer.style.display !== 'none');
     exploreExpander.style.display = hasContent ? '' : 'none';
+    updateWorkflowBarState();
   }
 
   function restoreExploreContent() {
@@ -1767,11 +1770,11 @@
   }
 
   function joinReflectionTextParts(parts) {
-    return (parts || [])
+    const cleanParts = (parts || [])
       .map(part => normalizeReflectionText(part))
       .filter(Boolean)
-      .map(part => /[.!?]$/.test(part) ? part : `${part}.`)
-      .join(' ');
+      .filter(part => /[.!?]$/.test(part) && !/…|\.\.\./.test(part));
+    return cleanParts.join(' ');
   }
 
   function escapeRegExp(text) {
@@ -1794,6 +1797,7 @@
     // Must end with proper punctuation
     if (!/[.!?]$/.test(clean)) return false;
     if (/…|\.\.\./.test(clean)) return false;
+    if (/\b[a-z]{1,2}\s+[A-Z][a-z]/.test(clean)) return false;
     
     // Can't be a question
     if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
@@ -1807,6 +1811,9 @@
     // Must have reasonable word count for a complete thought
     const words = clean.split(/\s+/).filter(Boolean);
     if (words.length < 5) return false;
+    const lastWord = (words[words.length - 1] || '').replace(/[^A-Za-z']/g, '').replace(/^'+|'+$/g, '');
+    const allowedShortEndings = new Set(['me', 'us']);
+    if (lastWord && lastWord.length <= 2 && !allowedShortEndings.has(lastWord.toLowerCase())) return false;
     
     // Should have action or being verb for completeness
     const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|starts|looks|feels|helps|lets|gives|make|makes|remember|remembers|remind|reminds|notice|notices|open|opens|repair|repairs|rebuild|rebuilds|restore|restores|reconnect|reconnects|transform|transforms|strengthen|strengthens|ground|grounds|anchor|anchors|soften|softens|require|requires|invite|invites|call|calls|create|creates|grow|grows|become|becomes|allow|allows|ask|asks|teach|teaches|reveal|reveals|hold|holds|carry|carries|stay|trust|return|release|choose|protect|honor|pause|listen|lead|follow|speak|learn|face|faced|succeed|succeeded)\b/i.test(clean);
@@ -2085,7 +2092,7 @@
       purpose: 'Follow the thread that keeps calling you forward.',
       gratitude: 'Let gratitude return your attention to what is still giving life.',
       forgiveness: 'Release what keeps your heart closed while protecting what wisdom has taught you.',
-      'inner peace': 'Let stillness make room for the truth beneath the noise.',
+      'inner peace': 'Stillness gives your heart room to hear what is true.',
       growth: 'Let this season teach you without requiring you to become perfect.',
       communication: 'Speak with enough honesty to be clear and enough care to stay connected.',
       community: 'Let yourself be supported by the people who can hold the truth with you.',
@@ -2248,15 +2255,28 @@
     if (left === right) return true;
     if (left.includes(right) || right.includes(left)) return true;
 
-    const leftWords = new Set(left.split(/[^a-z0-9]+/).filter(word => word.length >= 4));
-    const rightWords = new Set(right.split(/[^a-z0-9]+/).filter(word => word.length >= 4));
+    const fillerWords = new Set([
+      'about', 'after', 'again', 'also', 'because', 'before', 'central', 'could',
+      'deeper', 'does', 'from', 'genuine', 'insight', 'itself', 'just', 'know',
+      'likely', 'more', 'most', 'simple', 'still', 'that', 'their', 'there',
+      'these', 'this', 'those', 'today', 'when', 'where', 'with', 'without',
+      'world', 'would', 'your'
+    ]);
+    const toWordSet = (value) => new Set(
+      value
+        .split(/[^a-z0-9]+/)
+        .map(word => word.replace(/’/g, "'").replace(/'s$/, ''))
+        .filter(word => word.length >= 4 && !fillerWords.has(word))
+    );
+    const leftWords = toWordSet(left);
+    const rightWords = toWordSet(right);
     if (!leftWords.size || !rightWords.size) return false;
     let overlap = 0;
     leftWords.forEach(word => {
       if (rightWords.has(word)) overlap += 1;
     });
     const ratio = overlap / Math.max(1, Math.min(leftWords.size, rightWords.size));
-    return ratio >= 0.75;
+    return ratio >= 0.56 || (overlap >= 5 && ratio >= 0.45);
   }
 
   function getThemeStarter(theme) {
@@ -2501,6 +2521,213 @@
 
   function getAnswerUtilitiesRoot() {
     return answerUtilities || responseContainer;
+  }
+
+  function setWorkflowActive(action) {
+    if (!workflowBar) return;
+    workflowBar.querySelectorAll('.amt-workflow-step').forEach(step => {
+      const isActive = step.dataset.workflowAction === action;
+      step.classList.toggle('amt-workflow-step-active', isActive);
+      if (isActive) {
+        step.setAttribute('aria-current', 'step');
+      } else {
+        step.removeAttribute('aria-current');
+      }
+    });
+  }
+
+  function setWorkflowHint(action, hint) {
+    if (!workflowBar) return;
+    const step = workflowBar.querySelector(`[data-workflow-action="${action}"] .amt-workflow-hint`);
+    if (step) step.textContent = hint;
+  }
+
+  function setWorkflowNudge(text) {
+    if (!workflowNudge || !text) return;
+    workflowNudge.textContent = text;
+  }
+
+  function getWorkflowNudge(action, state) {
+    const current = state || {};
+    if (action === 'explore') {
+      if (current.hasFollowups) return 'Choose a follow-up when you want to keep the reflection close.';
+      if (current.hasCitations) return 'Open the referenced episodes when you want to hear where the answer came from.';
+      return 'Explore prompts and themes when you want help finding the next honest question.';
+    }
+    if (action === 'save') {
+      if (current.hasReflectPrompt) return 'Pause here to write what landed before the moment passes.';
+      if (current.insightCount > 0) return 'Your saved insights stay here, ready to revisit or turn into a card.';
+      return 'After an answer, save the line you may want to return to later.';
+    }
+    if (action === 'share') {
+      if (current.hasShareSection) return 'If the reflection helped, pass on the card or invite someone into the same path.';
+      return 'Sharing unlocks after a complete answer, so the card carries something worth passing on.';
+    }
+    if (action === 'progress') {
+      if (current.hasProgress) return 'Your rhythm, badges, Reflection Pass, and weekly recap live here.';
+      return 'Return here as your reflection rhythm starts to grow.';
+    }
+    if (current.hasAnswer) {
+      return 'Next, explore the sources, save what landed, or share the reflection when it feels ready.';
+    }
+    return 'Start with one honest question. After the answer, the next steps will open naturally.';
+  }
+
+  function updateWorkflowBarState() {
+    if (!workflowBar) return;
+    const answerText = normalizeReflectionText(output ? (output.innerText || output.textContent || '') : '');
+    const hasAnswer = answerText.length > 24 && responseContainer && responseContainer.style.display !== 'none';
+    const shareSection = document.getElementById('amt-share-section');
+    const insights = typeof loadInsights === 'function' ? loadInsights() : [];
+    const stats = typeof loadStats === 'function' ? loadStats() : null;
+    const hasExplore = !!(exploreExpander && exploreExpander.style.display !== 'none');
+    const hasFollowups = !!(followupsContainer && followupsContainer.style.display !== 'none');
+    const hasCitations = !!(citationsContainer && citationsContainer.style.display !== 'none');
+    const hasReflectPrompt = !!(document.getElementById('amt-reflect-section')?.style.display !== 'none');
+    const hasProgress = !!(stats && (stats.totalQuestions > 0 || stats.currentStreak > 0 || stats.earnedBadges.size > 0));
+    const state = {
+      hasAnswer,
+      hasShareSection: !!shareSection,
+      hasExplore,
+      hasFollowups,
+      hasCitations,
+      hasReflectPrompt,
+      hasProgress,
+      insightCount: insights.length
+    };
+
+    workflowBar.classList.toggle('amt-workflow-has-answer', !!hasAnswer);
+    workflowBar.querySelector('[data-workflow-action="explore"]')?.classList.toggle('amt-workflow-step-available', hasExplore || hasFollowups || hasCitations);
+    workflowBar.querySelector('[data-workflow-action="save"]')?.classList.toggle('amt-workflow-step-available', hasAnswer || insights.length > 0);
+    workflowBar.querySelector('[data-workflow-action="share"]')?.classList.toggle('amt-workflow-step-available', !!shareSection);
+    workflowBar.querySelector('[data-workflow-action="progress"]')?.classList.toggle('amt-workflow-step-available', hasProgress);
+
+    setWorkflowHint('explore', hasFollowups ? 'Follow-up' : (hasCitations ? 'Episodes' : (hasExplore ? 'Prompts' : 'Soon')));
+    setWorkflowHint('save', hasReflectPrompt ? 'Reflect' : (insights.length ? `${insights.length} kept` : (hasAnswer ? 'Keep it' : 'After')));
+    setWorkflowHint('share', shareSection ? 'Ready' : 'After answer');
+    setWorkflowHint('progress', stats && stats.currentStreak > 0 ? `${stats.currentStreak}-day` : 'Streak');
+
+    if (shareSection) {
+      setWorkflowActive('share');
+      setWorkflowNudge(getWorkflowNudge('share', state));
+    } else if (hasAnswer) {
+      setWorkflowActive('save');
+      setWorkflowNudge(getWorkflowNudge('ask', state));
+    } else {
+      setWorkflowActive('ask');
+      setWorkflowNudge(getWorkflowNudge('ask', state));
+    }
+  }
+
+  function scrollToElementSafely(element, block) {
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: block || 'center' });
+  }
+
+  function initWorkflowBar() {
+    if (!workflowBar) return;
+    workflowBar.querySelectorAll('.amt-workflow-step').forEach(step => {
+      step.addEventListener('click', () => {
+        const action = step.dataset.workflowAction;
+        setWorkflowActive(action);
+        setWorkflowNudge(getWorkflowNudge(action, {
+          hasAnswer: normalizeReflectionText(output ? (output.innerText || output.textContent || '') : '').length > 24,
+          hasShareSection: !!document.getElementById('amt-share-section'),
+          hasExplore: !!(exploreExpander && exploreExpander.style.display !== 'none'),
+          hasFollowups: !!(followupsContainer && followupsContainer.style.display !== 'none'),
+          hasCitations: !!(citationsContainer && citationsContainer.style.display !== 'none'),
+          hasReflectPrompt: !!(document.getElementById('amt-reflect-section')?.style.display !== 'none'),
+          hasProgress: !!(typeof loadStats === 'function' && (() => {
+            const s = loadStats();
+            return s && (s.totalQuestions > 0 || s.currentStreak > 0 || (s.earnedBadges && s.earnedBadges.size > 0));
+          })()),
+          insightCount: typeof loadInsights === 'function' ? loadInsights().length : 0
+        }));
+
+        if (action === 'ask') {
+          focusFormWithQuestion(input ? input.value : '');
+          if (input) input.focus();
+          return;
+        }
+
+        if (action === 'explore') {
+          restoreExploreContent();
+          if (exploreToggle && explorePanel) {
+            exploreToggle.setAttribute('aria-expanded', 'true');
+            explorePanel.classList.add('amt-explore-panel--open');
+          }
+          const followupsVisible = followupsContainer && followupsContainer.style.display !== 'none';
+          const citationsVisible = citationsContainer && citationsContainer.style.display !== 'none';
+          if (followupsVisible) {
+            scrollToElementSafely(followupsContainer, 'center');
+            return;
+          }
+          if (citationsVisible) {
+            scrollToElementSafely(citationsContainer, 'center');
+            return;
+          }
+          scrollToElementSafely(questionCoach || exploreExpander || qotdContainer || form, 'center');
+          return;
+        }
+
+        if (action === 'save') {
+          const insightsBtn = document.getElementById('amt-insights-btn');
+          const insights = typeof loadInsights === 'function' ? loadInsights() : [];
+          const reflectSection = document.getElementById('amt-reflect-section');
+          if (reflectSection && reflectSection.style.display !== 'none') {
+            scrollToElementSafely(reflectSection, 'center');
+            return;
+          }
+          if (insights.length && insightsBtn) {
+            insightsBtn.click();
+            scrollToElementSafely(document.getElementById('amt-insights-panel'), 'start');
+            return;
+          }
+          const journalBtn = document.getElementById('amt-journal-btn');
+          if (journalBtn) journalBtn.click();
+          return;
+        }
+
+        if (action === 'share') {
+          const shareSection = document.getElementById('amt-share-section');
+          if (shareSection) {
+            scrollToElementSafely(shareSection, 'center');
+            shareSection.classList.add('amt-workflow-focus-pulse');
+            setTimeout(() => shareSection.classList.remove('amt-workflow-focus-pulse'), 900);
+            return;
+          }
+          scrollToElementSafely(responseContainer || form, 'center');
+          return;
+        }
+
+        if (action === 'progress') {
+          const stats = loadStats();
+          renderStatsBar(stats);
+          renderBadgeShelf(stats);
+          renderWeeklyRecap();
+          renderStreakRevivalCard(stats);
+          const shelf = document.getElementById('amt-badge-shelf');
+          const recap = document.getElementById('amt-weekly-recap-card');
+          const revival = document.getElementById('amt-streak-revival-card');
+          const badgesBtn = document.getElementById('amt-badges-btn');
+          if (shelf) shelf.style.display = '';
+          if (badgesBtn) badgesBtn.setAttribute('aria-expanded', 'true');
+          scrollToElementSafely(
+            (revival && revival.style.display !== 'none' && revival) ||
+            (recap && recap.style.display !== 'none' && recap) ||
+            shelf ||
+            document.getElementById('amt-stats-bar'),
+            'start'
+          );
+        }
+      });
+    });
+
+    const workflowObserver = new MutationObserver(() => updateWorkflowBarState());
+    if (output) workflowObserver.observe(output, { childList: true, subtree: true, characterData: true, attributes: true });
+    if (answerUtilities) workflowObserver.observe(answerUtilities, { childList: true, subtree: true });
+    if (exploreExpander) workflowObserver.observe(exploreExpander, { attributes: true, attributeFilter: ['style', 'class'] });
+    updateWorkflowBarState();
   }
 
   function updateCitationTrustNote(citationsList) {
@@ -4756,6 +4983,7 @@
       <span class="amt-stats-prompt-text">${escapeHtml(getDailyMomentumText(stats))}</span>
       <span class="amt-stats-prompt-subtext">${stats.currentStreak >= 3 ? 'Your streak is active and your return rhythm is building.' : 'Small consistent returns matter more than intensity.'}</span>
     `;
+    updateWorkflowBarState();
   }
 
   function renderBadgeShelf(stats) {
@@ -5163,6 +5391,7 @@
     }
     renderStreakRevivalCard(initStats);
     renderWeeklyRecap();
+    initWorkflowBar();
   } catch (e) {}
 
   // ========================================
@@ -5175,143 +5404,264 @@
    * @param {Object} stats  — current gamification stats
    * @param {string} type   — 'badge' | 'streak' | 'progress'
    */
+  function getAchievementTheme(type, badge) {
+    if (type === 'streak') {
+      return {
+        label: 'Daily rhythm',
+        bg: ['#28140f', '#8a3d20', '#f0a63a'],
+        ink: '#fff7e8',
+        accent: '#ffd180',
+        glow: 'rgba(255,178,78,0.34)'
+      };
+    }
+    if (type === 'progress') {
+      return {
+        label: 'Growth journey',
+        bg: ['#102821', '#246859', '#c4a766'],
+        ink: '#f8fff9',
+        accent: '#dff5be',
+        glow: 'rgba(194,238,187,0.28)'
+      };
+    }
+    const badgeThemes = {
+      first_step: ['#17342c', '#3f8a6d', '#e5c588'],
+      curious: ['#111f3a', '#375e9d', '#d8b86a'],
+      streak_3: ['#27120e', '#9b4327', '#ffc061'],
+      streak_7: ['#18213d', '#6a5aad', '#e2c879'],
+      streak_14: ['#142e2b', '#4a9a82', '#f2d590'],
+      streak_30: ['#151526', '#5c6fb4', '#d7ecff'],
+      explorer: ['#16241b', '#3d7553', '#d9b76d'],
+      deep_diver: ['#101b2f', '#286b85', '#a7efff'],
+      sharer: ['#2d1830', '#9e5273', '#ffd1bc'],
+      guide: ['#22172e', '#684c8f', '#ffc9a8'],
+      collector: ['#2a2517', '#81713a', '#f1db92'],
+      night_owl: ['#10111f', '#38406f', '#d7d3ff'],
+      wisdom_seeker: ['#211725', '#70456f', '#f4c6d8'],
+      deep_session: ['#102635', '#317b95', '#b5ebf2'],
+      completionist: ['#1b1710', '#876529', '#ffe3a1']
+    };
+    const palette = badgeThemes[badge && badge.id] || ['#171f2b', '#536376', '#d8be77'];
+    return {
+      label: 'Badge unlocked',
+      bg: palette,
+      ink: '#fff8ee',
+      accent: '#ffe0a3',
+      glow: 'rgba(255,224,163,0.26)'
+    };
+  }
+
+  function completeAchievementSentence(text) {
+    const clean = normalizeReflectionText(text).replace(/[,:;]+$/g, '').trim();
+    if (!clean) return '';
+    return /[.!?]$/.test(clean) ? clean : `${clean}.`;
+  }
+
+  function getAchievementShareCopy(badge, stats, type) {
+    const safeStats = stats || {};
+    if (type === 'streak') {
+      const days = Math.max(1, Number(safeStats.currentStreak || safeStats.maxStreak || 1));
+      return {
+        theme: 'Streak',
+        eyebrow: 'Ask Mirror Talk',
+        metric: String(days),
+        metricLabel: days === 1 ? 'Day streak' : 'Day streak',
+        headline: completeAchievementSentence(`${days} day${days === 1 ? '' : 's'} of returning to reflection is becoming a rhythm worth honoring`),
+        supporting: completeAchievementSentence('Small daily returns can become a steadier inner life'),
+        badgeLabel: 'Daily rhythm'
+      };
+    }
+    if (type === 'progress') {
+      const questions = Math.max(0, Number(safeStats.totalQuestions || 0));
+      const streak = Math.max(0, Number(safeStats.currentStreak || 0));
+      const badges = safeStats.earnedBadges && safeStats.earnedBadges.size ? safeStats.earnedBadges.size : 0;
+      return {
+        theme: 'Progress',
+        eyebrow: 'Ask Mirror Talk',
+        metric: String(questions),
+        metricLabel: questions === 1 ? 'Question asked' : 'Questions asked',
+        headline: completeAchievementSentence('Every honest question is part of a larger journey toward wisdom'),
+        supporting: completeAchievementSentence(`${streak} day${streak === 1 ? '' : 's'} in rhythm and ${badges} badge${badges === 1 ? '' : 's'} earned so far`),
+        badgeLabel: 'Growth journey'
+      };
+    }
+    const cleanBadge = badge || {};
+    const badgeCopy = {
+      first_step: 'The first honest question has opened the door to a deeper journey.',
+      curious: 'Curiosity is becoming a practice, not just a passing moment.',
+      streak_3: 'Three steady returns show that reflection is becoming part of your rhythm.',
+      streak_7: 'A full week of reflection is a quiet kind of devotion.',
+      streak_14: 'Two weeks of returning shows a heart learning steadiness.',
+      streak_30: 'Thirty days of reflection is a rhythm worth honoring and protecting.',
+      explorer: 'You are exploring more of your inner world with courage and curiosity.',
+      deep_diver: 'You followed the source deeper and let wisdom have more room to speak.',
+      sharer: 'You passed a reflection forward and invited someone else to pause.',
+      guide: 'Your reflections are becoming invitations for others to slow down and listen.',
+      collector: 'You are gathering insight with care and returning to what matters.',
+      night_owl: 'Even late in the day, you made room for an honest question.',
+      wisdom_seeker: 'Your questions are becoming a meaningful path of wisdom.',
+      deep_session: 'You stayed with the reflection long enough for something deeper to open.',
+      completionist: 'You explored the whole landscape and made curiosity a practice.'
+    };
+    const name = String(cleanBadge.name || 'Reflection Badge').trim();
+    return {
+      theme: name,
+      eyebrow: 'Ask Mirror Talk',
+      metric: String(cleanBadge.emoji || '✦'),
+      metricLabel: 'Badge earned',
+      headline: completeAchievementSentence(badgeCopy[cleanBadge.id] || `The ${name} badge marks a meaningful step in your reflection journey`),
+      supporting: completeAchievementSentence('A small moment of progress is still progress worth celebrating'),
+      badgeLabel: 'Badge unlocked'
+    };
+  }
+
+  function drawAchievementStatPill(ctx, x, y, w, h, text, accent) {
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    _roundRect(ctx, x, y, w, h, h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 1.4;
+    _roundRect(ctx, x, y, w, h, h / 2);
+    ctx.stroke();
+    ctx.fillStyle = accent || '#ffe0a3';
+    ctx.font = '800 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, x + w / 2, y + Math.round(h / 2) + 8);
+  }
+
   function buildShareCard(badge, stats, type) {
-    const W = 1200, H = 630;
+    const W = 1080, H = 1350;
     const canvas = document.createElement('canvas');
     canvas.width  = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
+    const cardType = type || 'progress';
+    const theme = getAchievementTheme(cardType, badge);
+    const copy = getAchievementShareCopy(badge, stats, cardType);
 
-    // ── Background gradient ──
     const grad = ctx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0,   '#1a1410');
-    grad.addColorStop(0.5, '#2d2318');
-    grad.addColorStop(1,   '#1a1410');
+    grad.addColorStop(0, theme.bg[0]);
+    grad.addColorStop(0.56, theme.bg[1]);
+    grad.addColorStop(1, theme.bg[2]);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Subtle grain texture overlay ──
-    ctx.fillStyle = 'rgba(255,255,255,0.015)';
-    for (let i = 0; i < 4000; i++) {
-      ctx.fillRect(
-        Math.random() * W,
-        Math.random() * H,
-        Math.random() < 0.5 ? 1 : 2,
-        1
-      );
+    const glowOne = ctx.createRadialGradient(W * 0.18, H * 0.18, 0, W * 0.18, H * 0.18, 470);
+    glowOne.addColorStop(0, theme.glow);
+    glowOne.addColorStop(0.62, 'rgba(255,255,255,0.05)');
+    glowOne.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glowOne;
+    ctx.fillRect(0, 0, W, H);
+
+    const glowTwo = ctx.createRadialGradient(W * 0.82, H * 0.78, 0, W * 0.82, H * 0.78, 520);
+    glowTwo.addColorStop(0, 'rgba(255,255,255,0.24)');
+    glowTwo.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+    glowTwo.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glowTwo;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+    ctx.lineWidth = 3;
+    _roundRect(ctx, 34, 34, W - 68, H - 68, 46);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1.5;
+    _roundRect(ctx, 56, 56, W - 112, H - 112, 36);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 7; i++) {
+      const y = 160 + i * 116;
+      ctx.beginPath();
+      ctx.moveTo(96, y);
+      ctx.lineTo(W - 96, y - 12);
+      ctx.stroke();
     }
 
-    // ── Gold accent border ──
-    ctx.strokeStyle = '#c9a84c';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(20, 20, W - 40, H - 40);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.ink;
+    ctx.font = '800 26px Georgia, "Times New Roman", serif';
+    ctx.fillText(copy.eyebrow.toUpperCase(), W / 2, 114);
 
-    // ── Inner corner accents ──
-    const accentLen = 40;
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(201,168,76,0.4)';
-    [[24, 24], [W - 24 - accentLen, 24], [24, H - 24 - accentLen], [W - 24 - accentLen, H - 24 - accentLen]].forEach(([x, y]) => {
-      ctx.strokeRect(x, y, accentLen, accentLen);
+    ctx.fillStyle = 'rgba(255,255,255,0.74)';
+    ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(copy.badgeLabel.toUpperCase(), W / 2, 152);
+
+    if (cardType === 'badge') {
+      ctx.font = '112px serif';
+      ctx.fillText(copy.metric, W / 2, 304);
+    } else {
+      ctx.fillStyle = theme.accent;
+      ctx.font = '900 152px Georgia, "Times New Roman", serif';
+      ctx.fillText(copy.metric, W / 2, 330);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    ctx.font = '800 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(copy.metricLabel.toUpperCase(), W / 2, 382);
+
+    const pillText = String(copy.theme || 'Progress');
+    ctx.font = '800 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    drawAchievementStatPill(ctx, W / 2 - 150, 420, 300, 58, pillText, theme.accent);
+
+    ctx.shadowColor = 'rgba(0,0,0,0.30)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 10;
+    ctx.fillStyle = theme.ink;
+    drawFittedCanvasText(ctx, {
+      text: copy.headline,
+      x: W / 2,
+      y: 570,
+      maxWidth: W - 196,
+      maxHeight: 360,
+      maxLines: 4,
+      align: 'center',
+      fontTemplate: '800 __SIZE__px Georgia, "Times New Roman", serif',
+      maxSize: 76,
+      minSize: 44,
+      lineHeightRatio: 1.12
+    });
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    _roundRect(ctx, 132, 930, W - 264, 112, 34);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+    ctx.lineWidth = 1.2;
+    _roundRect(ctx, 132, 930, W - 264, 112, 34);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    drawFittedCanvasText(ctx, {
+      text: copy.supporting,
+      x: W / 2,
+      y: 970,
+      maxWidth: W - 340,
+      maxHeight: 58,
+      maxLines: 2,
+      align: 'center',
+      fontTemplate: '650 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      maxSize: 26,
+      minSize: 20,
+      lineHeightRatio: 1.22
     });
 
-    // ── Branding ──
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#c9a84c';
-    ctx.font = 'bold 22px Georgia, serif';
-    ctx.fillText('MIRROR TALK', W / 2, 80);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = '14px Georgia, serif';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 105);
+    drawShareFooter(ctx, { accent: theme.accent }, W, 1098, 'center', {
+      qrModuleSize: 4,
+      chipWidth: 500,
+      chipHeight: 174
+    });
 
-    if (type === 'badge' && badge) {
-      // ── Big emoji ──
-      ctx.font = '120px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(badge.emoji, W / 2, 310);
-
-      // ── Badge name ──
-      ctx.fillStyle = '#f5e6c8';
-      ctx.font = 'bold 56px Georgia, serif';
-      ctx.fillText(badge.name, W / 2, 390);
-
-      // ── Subtitle ──
-      ctx.fillStyle = 'rgba(245,230,200,0.65)';
-      ctx.font = '26px Georgia, serif';
-      ctx.fillText(badge.desc, W / 2, 438);
-
-      // ── Unlocked pill ──
-      const pillW = 240, pillH = 40, pillX = (W - pillW) / 2, pillY = 468;
-      ctx.fillStyle = 'rgba(201,168,76,0.18)';
-      _roundRect(ctx, pillX, pillY, pillW, pillH, 20);
-      ctx.fill();
-      ctx.strokeStyle = '#c9a84c';
-      ctx.lineWidth = 1.5;
-      _roundRect(ctx, pillX, pillY, pillW, pillH, 20);
-      ctx.stroke();
-      ctx.fillStyle = '#c9a84c';
-      ctx.font = 'bold 16px Georgia, serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('✨  BADGE UNLOCKED', W / 2, pillY + 26);
-
-    } else if (type === 'streak') {
-      ctx.font = '120px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('🔥', W / 2, 310);
-
-      ctx.fillStyle = '#f7c948';
-      ctx.font = `bold 100px Georgia, serif`;
-      ctx.fillText(`${stats.currentStreak}`, W / 2, 415);
-
-      ctx.fillStyle = '#f5e6c8';
-      ctx.font = 'bold 40px Georgia, serif';
-      ctx.fillText('DAY STREAK', W / 2, 467);
-
-      ctx.fillStyle = 'rgba(245,230,200,0.55)';
-      ctx.font = '24px Georgia, serif';
-      ctx.fillText('Keep the wisdom flowing 🌊', W / 2, 510);
-
-    } else {
-      // ── Progress card ──
-      ctx.font = '90px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('🌱', W / 2, 285);
-
-      ctx.fillStyle = '#f5e6c8';
-      ctx.font = 'bold 40px Georgia, serif';
-      ctx.fillText('My Mirror Talk Journey', W / 2, 355);
-
-      const cols = [
-        { label: 'Questions', value: stats.totalQuestions },
-        { label: 'Day Streak', value: stats.currentStreak },
-        { label: 'Themes',    value: stats.themesExplored.size },
-        { label: 'Badges',    value: stats.earnedBadges.size },
-      ];
-      const cellW = 220, startX = (W - cols.length * cellW) / 2;
-      cols.forEach((col, i) => {
-        const cx = startX + i * cellW + cellW / 2;
-        const cy = 420;
-        ctx.fillStyle = 'rgba(201,168,76,0.12)';
-        _roundRect(ctx, cx - 90, cy - 55, 180, 110, 12);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(201,168,76,0.35)';
-        ctx.lineWidth = 1;
-        _roundRect(ctx, cx - 90, cy - 55, 180, 110, 12);
-        ctx.stroke();
-        ctx.fillStyle = '#f7c948';
-        ctx.font = 'bold 44px Georgia, serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(String(col.value), cx, cy + 10);
-        ctx.fillStyle = 'rgba(245,230,200,0.55)';
-        ctx.font = '18px Georgia, serif';
-        ctx.fillText(col.label, cx, cy + 40);
-      });
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_ACHIEVEMENT_RENDER_DEBUG__ = {
+        type: cardType,
+        headline: copy.headline,
+        supporting: copy.supporting,
+        theme: copy.theme
+      };
     }
-
-    // ── Footer CTA ──
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = '18px Georgia, serif';
-    ctx.fillText('Ask your own questions at mirrortalkpodcast.com/ask-mirror-talk', W / 2, H - 38);
 
     return canvas.toDataURL('image/png');
   }
@@ -5541,12 +5891,23 @@
   function shareMilestone(badge, type) {
     const stats = loadStats();
     const dataUrl = buildShareCard(badge, stats, type);
+    const shareCopy = getAchievementShareCopy(badge, stats, type);
     const caption = type === 'badge'
-      ? `I just unlocked the "${badge.name}" badge on Mirror Talk! ${badge.emoji} ${badge.desc}`
+      ? `I just unlocked the "${badge.name}" badge on Ask Mirror Talk. ${shareCopy.headline}`
       : type === 'streak'
-      ? `🔥 ${stats.currentStreak}-day streak on Mirror Talk — asking questions, growing daily.`
-      : `🌱 My Mirror Talk journey: ${stats.totalQuestions} questions · ${stats.currentStreak}-day streak · ${stats.earnedBadges.size} badges earned.`;
-    showShareModal(dataUrl, caption);
+      ? `${stats.currentStreak}-day streak on Ask Mirror Talk. Small daily returns can become a steadier inner life.`
+      : `My Ask Mirror Talk journey: ${stats.totalQuestions} questions, ${stats.currentStreak}-day streak, and ${stats.earnedBadges.size} badges earned.`;
+    showShareModal(dataUrl, caption, {
+      title: type === 'badge' ? 'Share this badge' : type === 'streak' ? 'Share your streak' : 'Share your progress',
+      hint: 'This card is polished and ready to share as a quiet celebration of your reflection rhythm.',
+      filename: type === 'badge' ? 'mirror-talk-badge.png' : type === 'streak' ? 'mirror-talk-streak.png' : 'mirror-talk-progress.png',
+      contextLabel: type === 'badge' ? (badge && badge.name ? badge.name : 'Badge unlocked') : type === 'streak' ? `${stats.currentStreak}-day streak` : 'Reflection progress',
+      invitePrompt: 'Share the progress without pressure. The card celebrates consistency and invites someone else to reflect too.',
+      previewText: shareCopy.headline || '',
+      nativeShareLabel: 'Open share sheet',
+      copyTextLabel: 'Copy share caption',
+      copyLinkLabel: 'Copy Ask Mirror Talk link'
+    });
   }
 
   // ── Wire share button into milestone toast ──
@@ -6047,8 +6408,15 @@
   function getInsightShareFamily(insight) {
     if (TEST_FORCE_FAMILY) return TEST_FORCE_FAMILY;
 
+    const headline = extractShareHeadline(insight);
+    const words = String(headline || '').split(/\s+/).filter(Boolean);
+    if (words.length <= 20) {
+      return 'aura_poster';
+    }
+
     const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
-    return seed % 3 === 0 ? 'editorial_serene' : 'editorial';
+    const families = ['aura_poster', 'gradient_immersive', 'aura_poster', 'prismatic_quote'];
+    return families[seed % families.length];
   }
 
   function drawShareCardShell(ctx, style, W, H, variant) {
@@ -6230,62 +6598,65 @@
 
   function drawShareFooter(ctx, style, W, y, align, options) {
     const opts = options || {};
-    const qrModuleSize = Number(opts.qrModuleSize || 5);
+    const qrModuleSize = Number(opts.qrModuleSize || 4);
     const qrQuiet = Number(opts.qrQuiet || 4);
     const qr = getReflectionCardQrMatrix();
     const qrOuter = (qr.size + qrQuiet * 2) * qrModuleSize;
-    const chipW = opts.chipWidth || 760;
-    const chipH = opts.chipHeight || Math.max(228, qrOuter + 24);
+    const chipW = opts.chipWidth || 484;
+    const chipH = opts.chipHeight || Math.max(188, qrOuter + 20);
     const chipX = align === 'left' ? 96 : Math.round((W - chipW) / 2);
-    const chipY = Math.min(y + 26, 1350 - chipH - 14);
+    const chipY = Math.min(y + 28, 1350 - chipH - 42);
 
-    ctx.shadowColor = 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 7;
-    ctx.fillStyle = 'rgba(255,250,244,0.93)';
-    _roundRect(ctx, chipX, chipY, chipW, chipH, 26);
+    const glassGrad = ctx.createLinearGradient(chipX, chipY, chipX + chipW, chipY + chipH);
+    glassGrad.addColorStop(0, 'rgba(255,255,255,0.26)');
+    glassGrad.addColorStop(0.52, 'rgba(255,255,255,0.13)');
+    glassGrad.addColorStop(1, 'rgba(255,255,255,0.06)');
+
+    ctx.shadowColor = 'rgba(0,0,0,0.14)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 6;
+    ctx.fillStyle = glassGrad;
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 30);
     ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,0.42)';
-    ctx.lineWidth = 1.2;
-    _roundRect(ctx, chipX, chipY, chipW, chipH, 26);
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 1.4;
+    _roundRect(ctx, chipX, chipY, chipW, chipH, 30);
     ctx.stroke();
 
-    const qrX = chipX + 22;
+    const qrX = chipX + 16;
     const qrY = chipY + Math.round((chipH - qrOuter) / 2);
+    ctx.shadowColor = 'rgba(0,0,0,0.12)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 4;
     ctx.fillStyle = '#ffffff';
-    _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 12);
+    _roundRect(ctx, qrX, qrY, qrOuter, qrOuter, 14);
     ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
     drawReflectionQrCode(ctx, qrX, qrY, qrModuleSize, { quiet: qrQuiet, bg: '#ffffff', fg: '#000000' });
 
-    const textX = qrX + qrOuter + 28;
-    const textTop = chipY + 42;
-    const chipText = style.cardText || '#2f261e';
+    const textX = qrX + qrOuter + 20;
+    const textTop = chipY + Math.round(chipH / 2) - 8;
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(47,38,30,0.54)';
-    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.letterSpacing = '0.08em';
-    ctx.fillText('SAVED REFLECTION', textX, textTop);
-    ctx.letterSpacing = '0';
 
-    ctx.fillStyle = chipText;
-    ctx.font = '800 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Scan to reflect', textX, textTop + 31);
+    ctx.strokeStyle = style.accent || 'rgba(255,226,166,0.90)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(textX, textTop - 28);
+    ctx.lineTo(Math.min(chipX + chipW - 26, textX + 112), textTop - 26);
+    ctx.stroke();
 
-    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(47,38,30,0.76)';
-    ctx.fillText('Open Ask Mirror Talk', textX, textTop + 67);
+    ctx.fillStyle = '#fffaf4';
+    ctx.font = '800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Scan to reflect', textX, textTop);
 
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(47,38,30,0.62)';
-    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 101);
-
-    ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(47,38,30,0.54)';
-    ctx.textAlign = 'left';
-    ctx.fillText('Save the insight. Share the reflection. Pass it on.', textX, textTop + 137);
+    ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,250,244,0.78)';
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 29);
 
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_FOOTER_DEBUG__ = {
@@ -6485,6 +6856,100 @@
     drawShareFooter(ctx, style, W, H - 154, 'center');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = { family: 'spotlight', headline };
+    }
+  }
+
+  function buildAuraPosterShareCard(ctx, normalized, style, W, H, variant) {
+    const headlineOptions = {
+      maxWidth: W - 190,
+      maxHeight: 470,
+      maxLines: 4,
+      fontTemplate: '700 __SIZE__px Georgia, serif',
+      maxSize: 88,
+      minSize: 44,
+      lineHeightRatio: 1.12
+    };
+    const headline = selectFittingShareHeadline(ctx, normalized, headlineOptions);
+
+    const theme = String(normalized.theme || 'Reflection');
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, style.bg[0]);
+    grad.addColorStop(0.46, style.bg[1]);
+    grad.addColorStop(1, style.bg[2]);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    const bloomA = ctx.createRadialGradient(W * 0.24, H * 0.22, 0, W * 0.24, H * 0.22, 390);
+    bloomA.addColorStop(0, 'rgba(255,255,255,0.24)');
+    bloomA.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = bloomA;
+    ctx.fillRect(0, 0, W, H);
+
+    const bloomB = ctx.createRadialGradient(W * 0.82, H * 0.76, 0, W * 0.82, H * 0.76, 420);
+    bloomB.addColorStop(0, style.orbA || 'rgba(255,255,255,0.18)');
+    bloomB.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = bloomB;
+    ctx.fillRect(0, 0, W, H);
+
+    const depth = ctx.createLinearGradient(0, 0, 0, H);
+    depth.addColorStop(0, 'rgba(0,0,0,0.08)');
+    depth.addColorStop(0.52, 'rgba(0,0,0,0.00)');
+    depth.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = depth;
+    ctx.fillRect(0, 0, W, H);
+
+    drawThemeArtDirection(ctx, style, W, H, variant);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(132, 164);
+    ctx.lineTo(W - 132, 164);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(theme.toUpperCase(), W / 2, 118);
+
+    ctx.shadowColor = 'rgba(0,0,0,0.24)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = '#fffaf4';
+    const metrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: 445,
+      maxWidth: headlineOptions.maxWidth,
+      maxHeight: headlineOptions.maxHeight,
+      maxLines: headlineOptions.maxLines,
+      align: 'center',
+      fontTemplate: headlineOptions.fontTemplate,
+      maxSize: headlineOptions.maxSize,
+      minSize: headlineOptions.minSize,
+      lineHeightRatio: headlineOptions.lineHeightRatio
+    });
+    ctx.shadowColor = 'transparent';
+
+    const lineY = 445 + metrics.height + 82;
+    const lineGrad = ctx.createLinearGradient(W * 0.28, lineY, W * 0.72, lineY);
+    lineGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    lineGrad.addColorStop(0.5, style.accent || 'rgba(255,255,255,0.75)');
+    lineGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = lineGrad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.30, lineY);
+    ctx.lineTo(W * 0.70, lineY);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('ASK MIRROR TALK', W / 2, lineY + 44);
+
+    drawShareFooter(ctx, style, W, H - 206, 'center', { chipWidth: 472 });
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'aura_poster', headline };
     }
   }
 
@@ -6705,7 +7170,7 @@
       maxWidth: variant.questionWidth,
       maxHeightWithExcerpt: 390,
       maxHeightWithoutExcerpt: 560,
-      maxLines: 5,
+      maxLines: 4,
       fontTemplate: '700 __SIZE__px Georgia, serif',
       maxSizeWithExcerpt: 76,
       maxSizeWithoutExcerpt: 82,
@@ -6774,7 +7239,7 @@
     const supportingExcerpt = headlineCanShareSpace
       ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
       : '';
-    const showExcerpt = !!supportingExcerpt;
+    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
     const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
       text: headline,
       maxWidth: headlineOptions.maxWidth,
@@ -6926,7 +7391,7 @@
       maxWidth: 848,
       maxHeightWithExcerpt: 360,
       maxHeightWithoutExcerpt: 500,
-      maxLines: 5,
+      maxLines: 4,
       fontTemplate: '700 __SIZE__px Georgia, serif',
       maxSizeWithExcerpt: 72,
       maxSizeWithoutExcerpt: 78,
@@ -6996,7 +7461,7 @@
     const supportingExcerpt = headlineCanShareSpace
       ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
       : '';
-    const showExcerpt = !!supportingExcerpt;
+    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
     const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
       text: headline,
       maxWidth: headlineOptions.maxWidth,
@@ -7450,7 +7915,9 @@
       window.__AMT_LAST_RENDER_DEBUG__ = null;
       window.__AMT_LAST_FOOTER_DEBUG__ = null;
     }
-    if (family === 'poster') {
+    if (family === 'aura_poster') {
+      buildAuraPosterShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'poster') {
       buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'gradient_immersive') {
       buildGradientImmersiveShareCard(ctx, normalized, style, W, H, variant);
@@ -8095,6 +8562,7 @@
 
     getAnswerUtilitiesRoot().appendChild(shareSection);
     emitProductEvent('share_panel_shown', { mode: 'reflection_or_invite' });
+    updateWorkflowBarState();
 
     shareSection.querySelectorAll('.amt-share-btn').forEach(btn => {
       btn.addEventListener('click', async function() {
@@ -8623,6 +9091,8 @@
       buildThemeReflectionFallback,
       buildJournalReflectionInsight,
       buildInsightShareCard,
+      buildShareCard,
+      getAchievementShareCopy,
       getReflectionCardQrMatrix,
       getReflectionCardQrPayload,
       getInsightShareThemeStyle,

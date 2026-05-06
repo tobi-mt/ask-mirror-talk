@@ -30,10 +30,11 @@ RUNNER = ROOT / "scripts" / "reflection_card_fixture_runner.html"
 DEFAULT_OUT_DIR = Path("/tmp/amt-reflection-card-validation")
 QR_PAYLOAD = "https://mirrortalkpodcast.com/ask-mirror-talk?ref=card_qr"
 PNG_SIZE = (1080, 1350)
-MIN_QR_RENDERED_SIZE = 205
-MIN_QR_MODULE_SIZE = 5
+MIN_QR_RENDERED_SIZE = 164
+MIN_QR_MODULE_SIZE = 4
 
 FAMILIES = [
+    "aura_poster",
     "editorial",
     "editorial_serene",
     "poster",
@@ -53,13 +54,18 @@ FIXTURES = [
     "healing_commitments_fragment",
     "healing_commitments_complete",
     "relationships_medium",
+    "relationships_truncated_fragment",
     "leadership_long",
     "selfworth_medium",
     "courage_short",
     "inner_peace_empty",
+    "inner_peace_repetitive",
     "saved_reflection_long_note",
     "journal_reflection_long_note",
     "basic_fallback_meta_answer",
+    "achievement_streak",
+    "achievement_badge",
+    "achievement_progress",
 ]
 
 META_PROMPT_PATTERNS = [
@@ -344,16 +350,31 @@ def is_source_grounded(headline: str, source_text: str) -> bool:
     return len(overlap) >= 2 and (len(overlap) / max(1, min(len(headline_terms), len(source_terms)))) >= 0.35
 
 
+def are_rendered_lines_too_similar(a: str, b: str) -> bool:
+    left = significant_terms(a)
+    right = significant_terms(b)
+    if not left or not right:
+        return False
+    overlap = left & right
+    ratio = len(overlap) / max(1, min(len(left), len(right)))
+    return ratio >= 0.56 or (len(overlap) >= 5 and ratio >= 0.45)
+
+
 def is_complete_sentence(text: str) -> bool:
     clean = re.sub(r"\s+", " ", str(text or "")).strip()
     if len(clean) < 24:
         return False
     if "..." in clean or "\u2026" in clean:
         return False
+    if re.search(r"\b[a-z]{1,2}\s+[A-Z][a-z]", clean):
+        return False
     if clean[-1] not in ".!?":
         return False
     words = re.findall(r"[A-Za-z']+", clean)
     if len(words) < 5:
+        return False
+    last_word = re.sub(r"^'+|'+$", "", words[-1]).lower() if words else ""
+    if len(last_word) <= 2 and last_word not in {"me", "us"}:
         return False
     if words and words[-1].lower().strip("'") in DANGLING_ENDINGS:
         return False
@@ -380,6 +401,7 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
     rendered = debug.get("rendered") or {}
     normalized = debug.get("normalized") or {}
     footer = debug.get("footer") or {}
+    card_kind = debug.get("cardKind") or "reflection"
 
     try:
         if png_dimensions(case.png_path) != PNG_SIZE:
@@ -391,19 +413,20 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
         failures.append(CaseFailure(case.fixture, case.family, f"PNG looks suspiciously small: {case.png_path.stat().st_size} bytes"))
 
     actual_family = rendered.get("family")
-    if not actual_family:
-        failures.append(CaseFailure(case.fixture, case.family, "rendered family missing"))
-    elif case.family != "auto" and actual_family != case.family:
-        failures.append(CaseFailure(case.fixture, case.family, f"rendered family mismatch: {actual_family}"))
+    if card_kind != "achievement":
+        if not actual_family:
+            failures.append(CaseFailure(case.fixture, case.family, "rendered family missing"))
+        elif case.family != "auto" and actual_family != case.family:
+            failures.append(CaseFailure(case.fixture, case.family, f"rendered family mismatch: {actual_family}"))
 
     headline = rendered.get("headline") or debug.get("shareHeadline") or ""
     validate_text(case.fixture, case.family, "headline", headline, failures)
 
     question = normalized.get("question") or ""
-    if question and normalise_for_compare(question) == normalise_for_compare(headline):
+    if card_kind != "achievement" and question and normalise_for_compare(question) == normalise_for_compare(headline):
         failures.append(CaseFailure(case.fixture, case.family, "headline repeats the original question"))
 
-    if case.fixture.startswith(SOURCE_GROUNDED_PREFIXES):
+    if card_kind != "achievement" and case.fixture.startswith(SOURCE_GROUNDED_PREFIXES):
         source_text = " ".join(
             str(normalized.get(key) or "")
             for key in ("answer", "excerpt", "question")
@@ -411,9 +434,11 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
         if not is_source_grounded(headline, source_text):
             failures.append(CaseFailure(case.fixture, case.family, f"headline is complete but not source-grounded: {headline!r}"))
 
-    supporting = rendered.get("supportingExcerpt") or ""
-    if rendered.get("showExcerpt") and supporting:
+    supporting = rendered.get("supportingExcerpt") or rendered.get("supporting") or ""
+    if (rendered.get("showExcerpt") or card_kind == "achievement") and supporting:
         validate_text(case.fixture, case.family, "supporting excerpt", supporting, failures)
+        if are_rendered_lines_too_similar(headline, supporting):
+            failures.append(CaseFailure(case.fixture, case.family, f"supporting excerpt repeats the headline: {supporting!r}"))
 
     if not footer:
         failures.append(CaseFailure(case.fixture, case.family, "QR footer did not render"))

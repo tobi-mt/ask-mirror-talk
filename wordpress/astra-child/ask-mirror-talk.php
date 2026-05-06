@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.10';
+    return '5.5.13';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -24,7 +24,7 @@ function ask_mirror_talk_shortcode() {
             <div class="amt-heading-copy">
                 <p class="amt-heading-kicker">Premium reflection, grounded in real episodes</p>
                 <h2>Ask Mirror Talk</h2>
-                <p class="amt-heading-subtitle">Bring a question. Get a calm, thoughtful answer shaped by the Mirror Talk library and anchored with trusted references.</p>
+                <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
                 <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
                     <span class="amt-heading-trust-pill">Private by default</span>
                     <span class="amt-heading-trust-pill">Real episode references</span>
@@ -56,6 +56,35 @@ function ask_mirror_talk_shortcode() {
             <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
             <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>                <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
         </div>
+        <nav id="amt-workflow-bar" class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
+            <span class="amt-workflow-guide" aria-hidden="true">Tap a step to move through your reflection</span>
+            <button type="button" class="amt-workflow-step amt-workflow-step-active" data-workflow-action="ask" aria-current="step">
+                <span class="amt-workflow-icon" aria-hidden="true">✦</span>
+                <span class="amt-workflow-label">Ask</span>
+                <span class="amt-workflow-hint">Begin</span>
+            </button>
+            <button type="button" class="amt-workflow-step" data-workflow-action="explore">
+                <span class="amt-workflow-icon" aria-hidden="true">⌁</span>
+                <span class="amt-workflow-label">Explore</span>
+                <span class="amt-workflow-hint">Prompts</span>
+            </button>
+            <button type="button" class="amt-workflow-step" data-workflow-action="save">
+                <span class="amt-workflow-icon" aria-hidden="true">◇</span>
+                <span class="amt-workflow-label">Save</span>
+                <span class="amt-workflow-hint">Keep it</span>
+            </button>
+            <button type="button" class="amt-workflow-step" data-workflow-action="share">
+                <span class="amt-workflow-icon" aria-hidden="true">↗</span>
+                <span class="amt-workflow-label">Share</span>
+                <span class="amt-workflow-hint">Pass on</span>
+            </button>
+            <button type="button" class="amt-workflow-step" data-workflow-action="progress">
+                <span class="amt-workflow-icon" aria-hidden="true">◷</span>
+                <span class="amt-workflow-label">Rhythm</span>
+                <span class="amt-workflow-hint">Streak</span>
+            </button>
+        </nav>
+        <p id="amt-workflow-nudge" class="amt-workflow-nudge" role="status" aria-live="polite">Start with one honest question. After the answer, the next steps will open naturally.</p>
         <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
         <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
         <div id="amt-streak-revival-card" class="amt-streak-revival-card" style="display:none;" role="region" aria-label="Streak recovery"></div>
@@ -138,7 +167,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.10: notification prompt quality, episode alerts, analytics diagnostics
+    $version = ask_mirror_talk_theme_version(); // v5.5.13: workflow continuity polish and final release packaging
     
     // Core styles
     wp_enqueue_style(

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask Mirror Talk Workflow Bar Fixture</title>
+  <link rel="stylesheet" href="../wordpress/astra-child/ask-mirror-talk.css">
+  <style>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 36px 18px;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(232, 196, 138, 0.24), transparent 34%),
+        linear-gradient(135deg, #f8f3ea, #ebe3d8 52%, #d9c7ad);
+    }
+
+    .fixture-grid {
+      display: grid;
+      gap: 28px;
+      grid-template-columns: minmax(0, 720px) minmax(320px, 390px);
+      justify-content: center;
+      align-items: start;
+    }
+
+    .fixture-frame {
+      padding: 12px;
+      border: 1px solid rgba(139, 115, 85, 0.18);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.32);
+      box-shadow: 0 24px 60px rgba(46, 42, 36, 0.12);
+    }
+
+    .fixture-mobile {
+      max-width: 390px;
+    }
+
+    .fixture-frame .amt-heading-row {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .fixture-frame .amt-heading-copy {
+      max-width: 540px;
+      text-align: center;
+    }
+
+    .fixture-frame .amt-heading-kicker,
+    .fixture-frame .amt-heading-subtitle {
+      text-align: center;
+    }
+
+    .fixture-frame .amt-heading-subtitle {
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .fixture-frame .amt-heading-trust-strip {
+      justify-content: center;
+    }
+
+    .fixture-frame .amt-heading-controls {
+      width: min(100%, 252px);
+      max-width: 252px;
+      margin: 18px auto 0;
+      padding: 8px 12px 9px;
+      justify-content: center;
+      border: 1px solid rgba(139, 115, 85, 0.28);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.88), rgba(239,229,213,0.78));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.88), 0 12px 26px rgba(46,42,36,0.08);
+    }
+
+    .fixture-frame .amt-heading-controls-note {
+      text-align: center;
+    }
+
+    .fixture-frame #ask-mirror-talk-form button[type="submit"] {
+      display: block;
+      width: min(100%, 280px);
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .fixture-mobile .amt-heading-copy {
+      max-width: none;
+      text-align: center !important;
+    }
+
+    .fixture-mobile .ask-mirror-talk h2,
+    .fixture-mobile .amt-heading-kicker,
+    .fixture-mobile .amt-heading-subtitle {
+      text-align: center !important;
+    }
+
+    .fixture-label {
+      margin: 0 0 10px;
+      color: #6d5a42;
+      font: 800 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .fixture-panel {
+      display: none;
+      margin: 18px 0 0;
+      padding: 18px;
+      border: 1px solid rgba(212, 206, 198, 0.9);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.68);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.66);
+    }
+
+    .fixture-panel.fixture-panel-active {
+      display: block;
+    }
+
+    .fixture-panel:target {
+      display: block;
+    }
+
+    .ask-mirror-talk.fixture-workflow-panel-active form[data-fixture-panel="ask"] {
+      display: none;
+    }
+
+    .ask-mirror-talk:has(.fixture-panel:target) form[data-fixture-panel="ask"] {
+      display: none;
+    }
+
+    .ask-mirror-talk:has(form[data-fixture-panel="ask"]:target) form[data-fixture-panel="ask"] {
+      display: block;
+    }
+
+    a.amt-workflow-step {
+      text-decoration: none;
+    }
+
+    .fixture-panel-kicker {
+      margin: 0 0 8px;
+      color: #8b7355;
+      font: 800 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .fixture-panel-title {
+      margin: 0 0 8px;
+      color: #2e2a24;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .fixture-panel-text {
+      margin: 0;
+      color: #5f574e;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .fixture-tool-note {
+      display: none;
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(139, 115, 85, 0.09);
+      color: #5f5143;
+      font: 700 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center;
+    }
+
+    .fixture-tool-note.fixture-tool-note-active {
+      display: block;
+    }
+
+    #ask-mirror-talk-form-mobile {
+      margin-top: 18px;
+      padding: 18px 16px;
+      border: 1px solid rgba(212, 206, 198, 0.9);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.68);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+    }
+
+    #ask-mirror-talk-input-mobile {
+      width: 100%;
+      min-height: 150px;
+      padding: 14px 16px;
+      font-size: 16px;
+      line-height: 1.6;
+      margin: 8px 0 12px;
+      border: 2px solid #d4cec6;
+      border-radius: 10px;
+      font-family: inherit;
+      background: #fff;
+      color: #2e2a24;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    #ask-mirror-talk-form-mobile button[type="submit"] {
+      width: 100%;
+    }
+
+    @media (max-width: 920px) {
+      .fixture-grid {
+        grid-template-columns: minmax(0, 720px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="fixture-grid">
+    <section class="fixture-frame">
+      <p class="fixture-label">Desktop first-open state</p>
+      <div class="ask-mirror-talk">
+        <div class="amt-heading-row">
+          <div class="amt-heading-copy">
+            <p class="amt-heading-kicker">Premium reflection, grounded in real episodes</p>
+            <h2>Ask Mirror Talk</h2>
+            <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
+            <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
+              <span class="amt-heading-trust-pill">Private by default</span>
+              <span class="amt-heading-trust-pill">Real episode references</span>
+            </div>
+          </div>
+          <div class="amt-heading-controls">
+            <button type="button" id="amt-text-size-btn" class="amt-text-size-btn">Aa</button>
+            <button type="button" id="amt-journal-btn" class="amt-journal-btn">📓</button>
+            <button type="button" id="amt-about-btn" class="amt-about-btn">ⓘ</button>
+            <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
+          </div>
+          <div class="fixture-tool-note" aria-live="polite"></div>
+        </div>
+        <div class="amt-stats-bar" style="display:flex;">
+          <div class="amt-stat amt-stat-streak"><span class="amt-stat-icon">🔥</span><span class="amt-stat-value">4</span><span class="amt-stat-label">day streak</span></div>
+          <div class="amt-stat amt-stat-questions"><span class="amt-stat-icon">💬</span><span class="amt-stat-value">18</span><span class="amt-stat-label">questions</span></div>
+          <div class="amt-stat amt-stat-themes"><span class="amt-stat-icon">🗺️</span><span class="amt-stat-value">7</span><span class="amt-stat-label">/ 20 topics</span></div>
+          <button type="button" class="amt-badges-btn"><span>🏆</span> <span>5</span></button>
+          <button type="button" class="amt-insights-btn">🔖</button>
+          <button type="button" class="amt-notif-manage-btn">🔔</button>
+          <div class="amt-stats-prompt">
+            <span class="amt-stats-prompt-kicker">Today’s rhythm</span>
+            <span class="amt-stats-prompt-text">You are building a quiet habit of returning to what matters.</span>
+            <span class="amt-stats-prompt-subtext">Small consistent returns matter more than intensity.</span>
+          </div>
+        </div>
+        <nav class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
+          <span class="amt-workflow-guide" aria-hidden="true">Tap a step to move through your reflection</span>
+          <a href="#ask-mirror-talk-form" class="amt-workflow-step amt-workflow-step-active" data-workflow-action="ask"><span class="amt-workflow-icon">✦</span><span class="amt-workflow-label">Ask</span><span class="amt-workflow-hint">Begin</span></a>
+          <a href="#desktop-explore" class="amt-workflow-step" data-workflow-action="explore"><span class="amt-workflow-icon">⌁</span><span class="amt-workflow-label">Explore</span><span class="amt-workflow-hint">Prompts</span></a>
+          <a href="#desktop-save" class="amt-workflow-step" data-workflow-action="save"><span class="amt-workflow-icon">◇</span><span class="amt-workflow-label">Save</span><span class="amt-workflow-hint">Keep it</span></a>
+          <a href="#desktop-share" class="amt-workflow-step" data-workflow-action="share"><span class="amt-workflow-icon">↗</span><span class="amt-workflow-label">Share</span><span class="amt-workflow-hint">Pass on</span></a>
+          <a href="#desktop-progress" class="amt-workflow-step" data-workflow-action="progress"><span class="amt-workflow-icon">◷</span><span class="amt-workflow-label">Rhythm</span><span class="amt-workflow-hint">Streak</span></a>
+        </nav>
+        <p class="amt-workflow-nudge" role="status" aria-live="polite">Start with one honest question. After the answer, the next steps will open naturally.</p>
+        <form id="ask-mirror-talk-form" data-fixture-panel="ask">
+          <div class="amt-form-intro">
+            <div>
+              <p class="amt-form-kicker">Start your reflection</p>
+              <label for="ask-mirror-talk-input">What’s on your heart?</label>
+            </div>
+          </div>
+          <textarea id="ask-mirror-talk-input" rows="4">How do I move forward after a major life change?</textarea>
+          <button type="submit">Ask Mirror Talk</button>
+        </form>
+        <div class="fixture-panel" id="desktop-explore" data-fixture-panel="explore">
+          <p class="fixture-panel-kicker">Explore</p>
+          <h3 class="fixture-panel-title">Find the next honest question.</h3>
+          <p class="fixture-panel-text">Browse prompts and themes without losing your place in the reflection.</p>
+        </div>
+        <div class="fixture-panel" id="desktop-save" data-fixture-panel="save">
+          <p class="fixture-panel-kicker">Save</p>
+          <h3 class="fixture-panel-title">Keep what feels worth returning to.</h3>
+          <p class="fixture-panel-text">Saved insights and journal notes stay connected, so the reflection can continue later.</p>
+        </div>
+        <div class="fixture-panel" id="desktop-share" data-fixture-panel="share">
+          <p class="fixture-panel-kicker">Share</p>
+          <h3 class="fixture-panel-title">Pass on a polished reflection.</h3>
+          <p class="fixture-panel-text">Share cards should carry one clear thought beautifully, without exposing private notes.</p>
+        </div>
+        <div class="fixture-panel" id="desktop-progress" data-fixture-panel="progress">
+          <p class="fixture-panel-kicker">Rhythm</p>
+          <h3 class="fixture-panel-title">Return without pressure.</h3>
+          <p class="fixture-panel-text">Streaks and badges should feel like gentle momentum, not another demand.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="fixture-frame fixture-mobile">
+      <p class="fixture-label">Mobile first-open state</p>
+      <div class="ask-mirror-talk">
+        <div class="amt-heading-row">
+          <div class="amt-heading-copy">
+            <p class="amt-heading-kicker">Premium reflection</p>
+            <h2>Ask Mirror Talk</h2>
+            <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
+            <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
+              <span class="amt-heading-trust-pill">Private by default</span>
+              <span class="amt-heading-trust-pill">Real episode references</span>
+            </div>
+          </div>
+          <div class="amt-heading-controls">
+            <button type="button" class="amt-text-size-btn">Aa</button>
+            <button type="button" class="amt-journal-btn">📓</button>
+            <button type="button" class="amt-about-btn">ⓘ</button>
+            <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
+          </div>
+          <div class="fixture-tool-note" aria-live="polite"></div>
+        </div>
+        <div class="amt-stats-bar" style="display:flex;">
+          <div class="amt-stat amt-stat-streak"><span class="amt-stat-icon">🔥</span><span class="amt-stat-value">4</span><span class="amt-stat-label">day streak</span></div>
+          <div class="amt-stat amt-stat-questions"><span class="amt-stat-icon">💬</span><span class="amt-stat-value">18</span><span class="amt-stat-label">questions</span></div>
+          <div class="amt-stat amt-stat-themes"><span class="amt-stat-icon">🗺️</span><span class="amt-stat-value">7</span><span class="amt-stat-label">/ 20 topics</span></div>
+          <button type="button" class="amt-badges-btn"><span>🏆</span> <span>5</span></button>
+          <button type="button" class="amt-insights-btn">🔖</button>
+          <button type="button" class="amt-notif-manage-btn">🔔</button>
+          <div class="amt-stats-prompt">
+            <span class="amt-stats-prompt-kicker">Today’s rhythm</span>
+            <span class="amt-stats-prompt-text">You are building a quiet habit of returning to what matters.</span>
+          </div>
+        </div>
+        <nav class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
+          <span class="amt-workflow-guide" aria-hidden="true">Tap a step to move through your reflection</span>
+          <a href="#ask-mirror-talk-form-mobile" class="amt-workflow-step amt-workflow-step-active" data-workflow-action="ask"><span class="amt-workflow-icon">✦</span><span class="amt-workflow-label">Ask</span><span class="amt-workflow-hint">Begin</span></a>
+          <a href="#mobile-explore" class="amt-workflow-step" data-workflow-action="explore"><span class="amt-workflow-icon">⌁</span><span class="amt-workflow-label">Explore</span><span class="amt-workflow-hint">Prompts</span></a>
+          <a href="#mobile-save" class="amt-workflow-step" data-workflow-action="save"><span class="amt-workflow-icon">◇</span><span class="amt-workflow-label">Save</span><span class="amt-workflow-hint">Keep it</span></a>
+          <a href="#mobile-share" class="amt-workflow-step" data-workflow-action="share"><span class="amt-workflow-icon">↗</span><span class="amt-workflow-label">Share</span><span class="amt-workflow-hint">Pass on</span></a>
+          <a href="#mobile-progress" class="amt-workflow-step" data-workflow-action="progress"><span class="amt-workflow-icon">◷</span><span class="amt-workflow-label">Rhythm</span><span class="amt-workflow-hint">Streak</span></a>
+        </nav>
+        <p class="amt-workflow-nudge" role="status" aria-live="polite">Start with one honest question. After the answer, the next steps will open naturally.</p>
+        <form id="ask-mirror-talk-form-mobile" data-fixture-panel="ask">
+          <div class="amt-form-intro">
+            <div>
+              <p class="amt-form-kicker">Start your reflection</p>
+              <label for="ask-mirror-talk-input-mobile">What’s on your heart?</label>
+            </div>
+          </div>
+          <textarea id="ask-mirror-talk-input-mobile" rows="4"></textarea>
+          <button type="submit">Ask Mirror Talk</button>
+        </form>
+        <div class="fixture-panel" id="mobile-explore" data-fixture-panel="explore">
+          <p class="fixture-panel-kicker">Explore</p>
+          <h3 class="fixture-panel-title">Find the next honest question.</h3>
+          <p class="fixture-panel-text">Browse prompts and themes without losing your place in the reflection.</p>
+        </div>
+        <div class="fixture-panel" id="mobile-save" data-fixture-panel="save">
+          <p class="fixture-panel-kicker">Save</p>
+          <h3 class="fixture-panel-title">Keep what feels worth returning to.</h3>
+          <p class="fixture-panel-text">Saved insights and journal notes stay connected, so the reflection can continue later.</p>
+        </div>
+        <div class="fixture-panel" id="mobile-share" data-fixture-panel="share">
+          <p class="fixture-panel-kicker">Share</p>
+          <h3 class="fixture-panel-title">Pass on a polished reflection.</h3>
+          <p class="fixture-panel-text">Share cards should carry one clear thought beautifully, without exposing private notes.</p>
+        </div>
+        <div class="fixture-panel" id="mobile-progress" data-fixture-panel="progress">
+          <p class="fixture-panel-kicker">Rhythm</p>
+          <h3 class="fixture-panel-title">Return without pressure.</h3>
+          <p class="fixture-panel-text">Streaks and badges should feel like gentle momentum, not another demand.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.ask-mirror-talk').forEach(widget => {
+      const panels = Array.from(widget.querySelectorAll('[data-fixture-panel]'));
+      const note = widget.querySelector('.fixture-tool-note');
+      const nudge = widget.querySelector('.amt-workflow-nudge');
+      const nudgeCopy = {
+        ask: 'Start with one honest question. After the answer, the next steps will open naturally.',
+        explore: 'Explore prompts and themes when you want help finding the next honest question.',
+        save: 'Saved insights and journal notes stay here, ready when you want to return.',
+        share: 'When something lands, pass on a polished card or invite someone into the same path.',
+        progress: 'Your rhythm, badges, Reflection Pass, and weekly recap live here.'
+      };
+
+      widget.querySelectorAll('.amt-workflow-step').forEach(step => {
+        step.addEventListener('click', event => {
+          const activeStep = event.currentTarget;
+          const action = activeStep.dataset.workflowAction || 'ask';
+          if (nudge) nudge.textContent = nudgeCopy[action] || nudgeCopy.ask;
+          widget.querySelectorAll('.amt-workflow-step').forEach(item => {
+            item.classList.remove('amt-workflow-step-active');
+            item.removeAttribute('aria-current');
+          });
+          activeStep.classList.add('amt-workflow-step-active');
+          activeStep.setAttribute('aria-current', 'step');
+
+          panels.forEach(panel => {
+            const isActive = panel.dataset.fixturePanel === action;
+            panel.classList.toggle('fixture-panel-active', isActive && action !== 'ask');
+          });
+          widget.classList.toggle('fixture-workflow-panel-active', action !== 'ask');
+
+          const target = action === 'ask'
+            ? widget.querySelector('[data-fixture-panel="ask"]')
+            : widget.querySelector(`[data-fixture-panel="${action}"]`);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+
+      widget.querySelector('.amt-text-size-btn')?.addEventListener('click', () => {
+        widget.classList.toggle('amt-text-large');
+        if (note) {
+          note.textContent = widget.classList.contains('amt-text-large')
+            ? 'Preview: larger reading text is active.'
+            : 'Preview: standard reading text is active.';
+          note.classList.add('fixture-tool-note-active');
+        }
+      });
+
+      widget.querySelector('.amt-journal-btn')?.addEventListener('click', () => {
+        if (note) {
+          note.textContent = 'Preview: the journal opens saved reflection notes.';
+          note.classList.add('fixture-tool-note-active');
+        }
+      });
+
+      widget.querySelector('.amt-about-btn')?.addEventListener('click', () => {
+        if (note) {
+          note.textContent = 'Preview: the info panel explains how Ask Mirror Talk works.';
+          note.classList.add('fixture-tool-note-active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.18 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.20 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -228,10 +228,8 @@
 
     qotdContainer.querySelector('.amt-qotd-ask').addEventListener('click', () => {
       setQuestionOrigin('qotd', { theme: source.theme || null });
-      input.value = source.question;
-      input.focus();
       qotdContainer.style.display = 'none';
-      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      submitQuestionFromPrompt(source.question);
     });
 
     if (!options || options.persist !== false) {
@@ -283,6 +281,7 @@
     if (submitBtn && submitBtn.disabled) return;
     setQuestionOrigin(origin || 'notification_autoask', metadata || {});
     input.value = question;
+    runWorkflowAction('ask', { persist: true, scroll: false });
     // Hide the QOTD card so the answer takes centre stage
     if (qotdContainer) qotdContainer.style.display = 'none';
     // Scroll the form into view smoothly before firing
@@ -771,9 +770,7 @@
           btn.textContent = q;
           btn.addEventListener('click', () => {
             setQuestionOrigin('suggested_question');
-            input.value = q;
-            input.focus();
-            form.dispatchEvent(new Event('submit', { cancelable: true }));
+            submitQuestionFromPrompt(q);
           });
           suggestionsList.appendChild(btn);
         });
@@ -844,10 +841,8 @@
           item.querySelectorAll('.amt-topic-starter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
               setQuestionOrigin('topic_starter', { topic: t.label || null });
-              input.value = btn.dataset.q;
-              input.focus();
               topicsContainer.style.display = 'none';
-              form.dispatchEvent(new Event('submit', { cancelable: true }));
+              submitQuestionFromPrompt(btn.dataset.q);
             });
           });
 
@@ -867,11 +862,20 @@
   loadTopics();
 
   // ─── Explore Expander ──────────────────────────────────────
+  function collapseExploreExpander() {
+    if (!exploreToggle || !explorePanel) return;
+    exploreToggle.setAttribute('aria-expanded', 'false');
+    explorePanel.classList.remove('amt-explore-panel--open');
+  }
+
   function updateExploreExpander() {
     if (!exploreExpander) return;
     const hasContent = (topicsContainer && topicsContainer.style.display !== 'none') ||
                        (suggestionsContainer && suggestionsContainer.style.display !== 'none');
     exploreExpander.style.display = hasContent ? '' : 'none';
+    if (hasContent && exploreToggle && exploreToggle.getAttribute('aria-expanded') !== 'true') {
+      collapseExploreExpander();
+    }
     updateWorkflowBarState();
   }
 
@@ -1009,10 +1013,8 @@
       btn.textContent = q;
       btn.addEventListener('click', () => {
         setQuestionOrigin('follow_up');
-        input.value = q;
-        input.focus();
         followupsContainer.style.display = 'none';
-        form.dispatchEvent(new Event('submit', { cancelable: true }));
+        submitQuestionFromPrompt(q);
       });
       followupsList.appendChild(btn);
     });
@@ -1793,6 +1795,50 @@
     appendConversationTurn(questionText, answer);
     runPostAnswerExtras(questionText, answer);
 
+    // ═══ PREMIUM FEATURES INTEGRATION ═══
+    if (window.AskMirrorTalkPremium) {
+      // Save reflection to local database
+      window.AskMirrorTalkPremium.saveReflection({
+        question: questionText,
+        answer: answer,
+        citations: citationsList,
+        metadata: meta
+      }).catch(err => console.warn('Failed to save reflection:', err));
+      
+      // Show follow-up suggestions from history
+      window.AskMirrorTalkPremium.suggestFollowUps().then(suggestions => {
+        if (suggestions && suggestions.length > 0 && followupsContainer && followupsList) {
+          const existingFollowups = Array.from(followupsList.children || [])
+            .map(btn => btn.textContent.trim());
+          
+          suggestions.forEach(suggestion => {
+            if (!existingFollowups.includes(suggestion)) {
+              const btn = document.createElement('button');
+              btn.className = 'amt-followup-btn amt-smart-followup';
+              btn.textContent = suggestion;
+              btn.addEventListener('click', () => {
+                if (typeof submitQuestionFromPrompt === 'function') {
+                  submitQuestionFromPrompt(suggestion);
+                }
+              });
+              followupsList.appendChild(btn);
+            }
+          });
+          
+          followupsContainer.style.display = 'block';
+        }
+      }).catch(err => console.warn('Failed to suggest follow-ups:', err));
+      
+      // Show pattern insights periodically (every 5th question)
+      window.AskMirrorTalkPremium.getCachedPatterns().then(patterns => {
+        if (patterns && patterns.totalReflections > 0 && patterns.totalReflections % 5 === 0) {
+          if (typeof showPatternInsight === 'function') {
+            showPatternInsight(patterns);
+          }
+        }
+      }).catch(err => console.warn('Failed to get patterns:', err));
+    }
+
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
@@ -2393,6 +2439,41 @@
     return THEME_STARTERS[theme] || `What does Mirror Talk say about ${String(theme || 'this theme').toLowerCase()}?`;
   }
 
+  function getRhythmReflectionQuestion(preferredTheme, options) {
+    const opts = options || {};
+    const cleanTheme = String(preferredTheme || '').trim();
+    const latestQotd = typeof loadLatestQotd === 'function' ? loadLatestQotd() : null;
+    if (opts.preferQotd !== false && latestQotd && latestQotd.question) {
+      return latestQotd.question;
+    }
+
+    if (cleanTheme) {
+      return getThemeStarter(cleanTheme);
+    }
+
+    const lastSession = typeof loadLastSession === 'function' ? loadLastSession() : null;
+    const lastTheme = String((lastSession && lastSession.theme) || '').trim();
+    if (lastTheme) {
+      return getThemeStarter(lastTheme);
+    }
+
+    if (latestQotd && latestQotd.question) {
+      return latestQotd.question;
+    }
+
+    return 'What do I need to notice before today ends?';
+  }
+
+  function submitRhythmQuestion(question, origin, metadata) {
+    const cleanQuestion = String(question || '').trim();
+    if (!cleanQuestion) {
+      runWorkflowAction('ask', { persist: true, scroll: true });
+      return;
+    }
+    setQuestionOrigin(origin || 'rhythm', metadata || {});
+    submitQuestionFromPrompt(cleanQuestion);
+  }
+
   function generateLowMatchPrompts(question, theme) {
     const activeTheme = theme || inferTheme(question, '') || 'this';
     return [
@@ -2415,6 +2496,7 @@
     input.value = question;
     input.focus();
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    runWorkflowAction('ask', { persist: true, scroll: false });
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 180);
   }
@@ -2853,9 +2935,8 @@
       btn.addEventListener('click', () => {
         const action = btn.dataset.saveShareAction;
         if (action === 'revisit' && lastQuestion) {
-          input.value = lastQuestion;
-          runWorkflowAction('ask', { persist: true, scroll: true });
-          setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 150);
+          setQuestionOrigin('saved_reflection_revisit', { theme: lastTheme || null });
+          submitQuestionFromPrompt(lastQuestion);
           return;
         }
         if (action === 'insights') {
@@ -2941,10 +3022,7 @@
 
     if (action === 'explore') {
       restoreExploreContent();
-      if (exploreToggle && explorePanel) {
-        exploreToggle.setAttribute('aria-expanded', 'true');
-        explorePanel.classList.add('amt-explore-panel--open');
-      }
+      collapseExploreExpander();
       if (shouldScroll) scrollToWorkflowPanel('explore');
       return;
     }
@@ -3151,10 +3229,8 @@
 
     journeyCard.querySelectorAll('.amt-journey-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        input.value = btn.dataset.q || '';
-        input.focus();
-        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 180);
+        setQuestionOrigin('continue_reflection', { theme: btn === journeyCard.querySelector('.amt-journey-btn-secondary') ? nextTheme : lastTheme || null });
+        submitQuestionFromPrompt(btn.dataset.q || '');
       });
     });
   }
@@ -3268,7 +3344,7 @@
         if (action === 'tomorrow') {
           emitProductEvent('continuation_action_used', { action: 'come_back_with_theme', theme: nextTheme });
           if (!hasReferences) emitProductEvent('low_match_action', { action: 'come_back_with_theme', theme: nextTheme });
-          focusFormWithQuestion(tomorrowQuestion);
+          submitQuestionFromPrompt(tomorrowQuestion);
         }
       });
     });
@@ -4429,6 +4505,7 @@
     btn.setAttribute('aria-expanded', 'true');
     renderNotificationPrefsPanel(panel);
     panel.style.display = '';
+    scrollToElementSafely(panel, 'center');
   }
 
   function renderNotificationPrefsPanel(panel) {
@@ -4533,9 +4610,9 @@
     const btn = document.getElementById('amt-notif-manage-btn');
     if (!btn) return;
     
-    // Show bell for all users on notification-capable platforms. If a user is
-    // not subscribed, clicking opens the opt-in/help prompt; if subscribed,
-    // clicking opens the management panel.
+    // Show bell for all users on notification-capable platforms. The bell is a
+    // stable entry point into notification settings; saving preferences can
+    // subscribe or update the user as needed.
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                          window.navigator.standalone === true;
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
@@ -4547,22 +4624,7 @@
     
     btn.addEventListener('click', () => {
       console.log('[Bell] Notification bell clicked');
-      try {
-        const isSubscribed = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
-        console.log('[Bell] Subscribed status:', isSubscribed);
-        if (isSubscribed) {
-          // User is subscribed — show management panel
-          toggleNotificationManagePanel();
-        } else {
-          // User is not subscribed — show opt-in prompt (pass 'fromBell' to bypass dismissal checks)
-          console.log('[Bell] Showing notification opt-in');
-          showNotificationOptIn('fromBell');
-        }
-      } catch (e) {
-        console.error('[Bell] Error:', e);
-        // Fallback to showing opt-in
-        showNotificationOptIn('fromBell');
-      }
+      toggleNotificationManagePanel();
     });
   })();
 
@@ -5075,8 +5137,11 @@
 
     streakRevivalCard.querySelector('.amt-streak-revival-btn-primary').addEventListener('click', () => {
       try { sessionStorage.setItem('amt_pending_streak_revive', '1'); } catch (e) {}
-      input.focus();
-      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      submitRhythmQuestion(
+        getRhythmReflectionQuestion('', { preferQotd: true }),
+        'streak_revival',
+        { feature: 'reflection_pass' }
+      );
     });
 
     streakRevivalCard.querySelector('.amt-streak-revival-btn-secondary').addEventListener('click', () => {
@@ -5288,9 +5353,9 @@
     const primaryBtn = weeklyRecapCard.querySelector('.amt-weekly-recap-btn-primary');
     if (primaryBtn) {
       primaryBtn.addEventListener('click', () => {
-        input.value = primaryBtn.dataset.q || recap.recapPrompt;
-        input.focus();
-        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        submitRhythmQuestion(primaryBtn.dataset.q || recap.recapPrompt, 'weekly_recap', {
+          theme: recap.topTheme || null
+        });
       });
     }
 
@@ -5356,7 +5421,11 @@
     const askBtn = momentumCard.querySelector('.amt-momentum-ask-btn');
     if (askBtn) {
       askBtn.addEventListener('click', () => {
-        runWorkflowAction('ask', { persist: true, scroll: true });
+        submitRhythmQuestion(
+          getRhythmReflectionQuestion('', { preferQotd: askedToday === 0 }),
+          'rhythm_momentum',
+          { asked_today: askedToday }
+        );
       });
     }
   }
@@ -5642,9 +5711,9 @@
   const badgeShelf = document.getElementById('amt-badge-shelf');
   if (badgesBtn && badgeShelf) {
     badgesBtn.addEventListener('click', () => {
-      const open = badgeShelf.style.display !== 'none';
-      badgeShelf.style.display = open ? 'none' : '';
-      if (!open) renderBadgeShelf(loadStats());
+      runWorkflowAction('progress', { persist: true, scroll: true });
+      badgeShelf.style.display = '';
+      renderBadgeShelf(loadStats());
     });
   }
 
@@ -8681,8 +8750,7 @@
   function updateInsightsBadge() {
     const btn = document.getElementById('amt-insights-btn');
     if (!btn) return;
-    const count = loadInsights().length;
-    btn.style.display = count > 0 ? '' : 'none';
+    btn.style.display = '';
   }
 
   function renderInsightsPanel() {
@@ -8729,11 +8797,9 @@
 
     panel.querySelectorAll('.amt-insight-ask-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        input.value = btn.dataset.q;
         panel.style.display = 'none';
-        input.focus();
-        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 200);
+        setQuestionOrigin('saved_insight_revisit');
+        submitQuestionFromPrompt(btn.dataset.q);
       });
     });
 
@@ -8756,6 +8822,27 @@
     });
   }
 
+  function openInsightsPanel(options) {
+    const opts = options || {};
+    const panel = document.getElementById('amt-insights-panel');
+    if (!panel) return false;
+    const insights = loadInsights();
+
+    if (insights.length === 0) {
+      panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
+      panel.style.display = '';
+    } else {
+      renderInsightsPanel();
+    }
+
+    panel.classList.add('amt-insights-panel-pulse');
+    setTimeout(() => panel.classList.remove('amt-insights-panel-pulse'), 900);
+    if (opts.scroll !== false) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return true;
+  }
+
   // Wire insights button
   (function initInsightsBtn() {
     const btn = document.getElementById('amt-insights-btn');
@@ -8767,14 +8854,8 @@
         panel.style.display = 'none';
         return;
       }
-      const insights = loadInsights();
-      if (insights.length === 0) {
-        panel.innerHTML = '<div class="amt-insights-empty"><p>No saved insights yet.</p><p class="amt-insights-empty-hint">After an answer, tap 🔖 Save insight to keep it here.</p></div>';
-        panel.style.display = '';
-      } else {
-        renderInsightsPanel();
-      }
-      panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      runWorkflowAction('save_share', { persist: true, scroll: false });
+      openInsightsPanel({ scroll: true });
     });
   })();
 
@@ -8813,8 +8894,11 @@
 
       banner.querySelector('.amt-streak-protect-cta').addEventListener('click', () => {
         banner.style.display = 'none';
-        input.focus();
-        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        submitRhythmQuestion(
+          getRhythmReflectionQuestion('', { preferQotd: true }),
+          'streak_protection',
+          { feature: 'streak_protection_banner' }
+        );
       });
 
       banner.querySelector('.amt-streak-protect-dismiss').addEventListener('click', () => {
@@ -8856,9 +8940,9 @@
 
     section.innerHTML = `
       <div class="amt-reflect-inner">
-        <p class="amt-reflect-label">✍️ Pause before you keep it.</p>
+        <p class="amt-reflect-label">✍️ Pause and jot what landed.</p>
         <p class="amt-reflect-question">${escapeHtml(prompt)}</p>
-        <button type="button" class="amt-reflect-toggle">Jot a note ↓</button>
+        <button type="button" class="amt-reflect-toggle">Jot a private note ↓</button>
         <div class="amt-reflect-note-wrap" style="display:none;">
           <textarea class="amt-reflect-textarea" rows="3" maxlength="500" placeholder="Write for yourself — this stays private on your device…" aria-label="Private reflection note"></textarea>
           <div class="amt-reflect-actions">
@@ -8874,7 +8958,7 @@
       const wrap = section.querySelector('.amt-reflect-note-wrap');
       const isOpen = wrap.style.display !== 'none';
       wrap.style.display = isOpen ? 'none' : '';
-      this.textContent = isOpen ? 'Jot a note ↓' : 'Hide note ↑';
+      this.textContent = isOpen ? 'Jot a private note ↓' : 'Hide note ↑';
       if (!isOpen) {
         emitProductEvent('reflection_note_opened', { prompt });
         section.querySelector('.amt-reflect-textarea').focus();
@@ -8906,6 +8990,40 @@
       setTimeout(() => { msg.style.display = 'none'; }, 2000);
     });
   }
+
+  function openReflectNoteComposer() {
+    let section = document.getElementById('amt-reflect-section');
+    const lastSession = loadLastSession() || {};
+    const hasReflectionContext = !!(lastSession.question || lastSession.answer || lastSession.excerpt);
+
+    if (section && (!section.innerHTML.trim() || section.style.display === 'none') && hasReflectionContext) {
+      showReflectPrompt();
+      section = document.getElementById('amt-reflect-section');
+    }
+
+    if (section && section.innerHTML.trim()) {
+      runWorkflowAction('save_share', { persist: true, scroll: false });
+      section.style.display = '';
+      const toggle = section.querySelector('.amt-reflect-toggle');
+      const wrap = section.querySelector('.amt-reflect-note-wrap');
+      if (toggle && wrap && wrap.style.display === 'none') {
+        toggle.click();
+      }
+      scrollToElementSafely(section, 'center');
+      return;
+    }
+
+    runWorkflowAction('ask', { persist: true, scroll: true });
+    if (input) {
+      input.focus();
+    }
+  }
+
+  (function initQuickNoteButton() {
+    const btn = document.getElementById('amt-note-btn');
+    if (!btn) return;
+    btn.addEventListener('click', openReflectNoteComposer);
+  })();
 
   // ========================================
   // FEATURE 4: "Come Back Tomorrow" Teaser
@@ -9124,7 +9242,7 @@
       const pageUrl = window.location.href;
 
       const noteItems = notes.length === 0
-        ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After asking a question, look for the <strong>✍️ Pause before you keep it.</strong> section in Save &amp; Share.</p>`
+        ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After reading an answer, tap <strong>✍️</strong> beside the journal to jot what landed.</p>`
         : notes.map((entry, i) => `
           <div class="amt-journal-entry" data-index="${i}">
             <div class="amt-insight-topline">
@@ -9175,7 +9293,8 @@
           const questionText = revisitBtn.dataset.question || '';
           if (!questionText) return;
           close();
-          focusFormWithQuestion(questionText);
+          setQuestionOrigin('journal_revisit');
+          submitQuestionFromPrompt(questionText);
         });
       });
 
@@ -9454,6 +9573,250 @@
   // Intercept the 'done' event path by patching the SSE done block
   // We do this by overriding addShareButton to the V2 version everywhere
   // and calling the new functions at the right time.
+
+  // ═══════════════════════════════════════════════════════════════
+  // ██ PREMIUM FEATURES - UI HELPERS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Show pattern insight card
+   */
+  function showPatternInsight(patterns) {
+    if (!patterns || !patterns.topTheme) return;
+
+    const existing = document.getElementById('amt-pattern-insight-card');
+    if (existing) existing.remove();
+
+    const card = document.createElement('div');
+    card.id = 'amt-pattern-insight-card';
+    card.className = 'amt-pattern-card';
+    
+    const themeEmojis = {
+      relationships: '🫂',
+      identity: '🪞',
+      anxiety: '🌊',
+      growth: '🌱',
+      grief: '🕊️',
+      confidence: '💪',
+      boundaries: '🛡️',
+      forgiveness: '🤝',
+      vulnerability: '🦋',
+      healing: '✨'
+    };
+
+    const icon = themeEmojis[patterns.topTheme] || '💭';
+    
+    card.innerHTML = `
+      <div class="amt-pattern-header">
+        <span class="amt-pattern-icon">${icon}</span>
+        <h4 class="amt-pattern-title">Your Reflection Journey</h4>
+      </div>
+      <p class="amt-pattern-insight">
+        You've asked <strong>${patterns.totalReflections} questions</strong>. 
+        <span class="amt-pattern-stat">${patterns.topTheme}</span> keeps calling you back—
+        there's wisdom here for you to uncover.
+      </p>
+    `;
+
+    // Insert after response
+    if (responseContainer && responseContainer.parentNode) {
+      responseContainer.parentNode.insertBefore(card, responseContainer.nextSibling);
+    }
+  }
+
+  /**
+   * Show contextual greeting based on history
+   */
+  async function showContextualGreeting() {
+    if (!window.AskMirrorTalkPremium) return;
+
+    try {
+      const greeting = await window.AskMirrorTalkPremium.generateContextualGreeting();
+      if (!greeting || greeting.type === 'first_time') return;
+
+      const existing = document.querySelector('.amt-contextual-greeting');
+      if (existing) existing.remove();
+
+      const greetingEl = document.createElement('div');
+      greetingEl.className = 'amt-contextual-greeting';
+      greetingEl.textContent = greeting.text;
+
+      const formIntro = document.querySelector('.amt-form-intro');
+      if (formIntro && formIntro.parentNode) {
+        formIntro.parentNode.insertBefore(greetingEl, formIntro);
+      }
+    } catch (error) {
+      console.warn('Failed to show contextual greeting:', error);
+    }
+  }
+
+  /**
+   * Show progress summary in Progress workflow panel
+   */
+  async function showProgressSummary() {
+    if (!window.AskMirrorTalkPremium) return;
+
+    try {
+      const summary = await window.AskMirrorTalkPremium.generateProgressSummary();
+      if (!summary) return;
+
+      const progressPanel = document.querySelector('#amt-workflow-panel-progress');
+      if (!progressPanel) return;
+
+      const existing = progressPanel.querySelector('.amt-progress-summary');
+      if (existing) existing.remove();
+
+      const card = document.createElement('div');
+      card.className = 'amt-progress-summary';
+      
+      card.innerHTML = `
+        <p class="amt-progress-narrative">${summary.message}</p>
+        <div class="amt-progress-stats">
+          <div class="amt-progress-stat">
+            <span class="amt-progress-stat-value">${summary.stats.total || 0}</span>
+            <span class="amt-progress-stat-label">Reflections</span>
+          </div>
+          <div class="amt-progress-stat">
+            <span class="amt-progress-stat-value">${summary.stats.weeklyAverage || '0'}</span>
+            <span class="amt-progress-stat-label">Per Week</span>
+          </div>
+          <div class="amt-progress-stat">
+            <span class="amt-progress-stat-value">${summary.stats.topTheme || 'general'}</span>
+            <span class="amt-progress-stat-label">Top Theme</span>
+          </div>
+          <div class="amt-progress-stat">
+            <span class="amt-progress-stat-value">${summary.stats.bestTime || 'evening'}</span>
+            <span class="amt-progress-stat-label">Best Time</span>
+          </div>
+        </div>
+      `;
+
+      progressPanel.insertBefore(card, progressPanel.firstChild);
+    } catch (error) {
+      console.warn('Failed to show progress summary:', error);
+    }
+  }
+
+  /**
+   * Add export/import controls to Save & Share panel
+   */
+  function addDataControls() {
+    if (!window.AskMirrorTalkPremium) return;
+
+    const saveSharePanel = document.querySelector('#amt-workflow-panel-save-share');
+    if (!saveSharePanel) return;
+
+    const existing = saveSharePanel.querySelector('.amt-data-controls');
+    if (existing) return; // Already added
+
+    const controls = document.createElement('div');
+    controls.className = 'amt-data-controls';
+    controls.innerHTML = `
+      <button type="button" class="amt-export-btn" title="Export all reflections">
+        📤 Export Reflections
+      </button>
+      <button type="button" class="amt-import-btn" title="Import reflections">
+        📥 Import Reflections
+      </button>
+      <input type="file" id="amt-import-file" accept=".json" style="display:none;">
+    `;
+
+    saveSharePanel.appendChild(controls);
+
+    // Wire up export
+    controls.querySelector('.amt-export-btn').addEventListener('click', async () => {
+      const success = await window.AskMirrorTalkPremium.exportReflections();
+      if (success) {
+        alert('✅ Reflections exported successfully!');
+      } else {
+        alert('❌ Failed to export reflections. Please try again.');
+      }
+    });
+
+    // Wire up import
+    const importBtn = controls.querySelector('.amt-import-btn');
+    const fileInput = controls.querySelector('#amt-import-file');
+    
+    importBtn.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const result = await window.AskMirrorTalkPremium.importReflections(file);
+      if (result.success) {
+        alert(`✅ Imported ${result.imported} reflections successfully!`);
+        fileInput.value = ''; // Reset
+      } else {
+        alert(`❌ Import failed: ${result.error}`);
+      }
+    });
+  }
+
+  /**
+   * Handle offline mode
+   */
+  function handleOfflineMode() {
+    if (!window.AskMirrorTalkPremium) return;
+
+    // Listen for offline submit attempts
+    document.addEventListener('amt:offline-submit', async (e) => {
+      const { question, queueId } = e.detail;
+      
+      try {
+        // Try to submit via normal flow
+        input.value = question;
+        const submitEvent = new Event('submit', { cancelable: true });
+        const success = await form.dispatchEvent(submitEvent);
+        
+        if (success) {
+          // Remove from queue on successful submission
+          await window.AskMirrorTalkPremium.removeFromOfflineQueue(queueId);
+        }
+      } catch (error) {
+        console.error('Failed to process offline submission:', error);
+      }
+    });
+
+    // Show offline indicator when offline
+    window.addEventListener('offline', () => {
+      const existing = document.querySelector('.amt-offline-banner');
+      if (existing) return;
+
+      const banner = document.createElement('div');
+      banner.className = 'amt-offline-banner';
+      banner.textContent = 'You\'re offline. Reflections will sync when reconnected.';
+      document.body.appendChild(banner);
+    });
+
+    window.addEventListener('online', () => {
+      const banner = document.querySelector('.amt-offline-banner');
+      if (banner) banner.remove();
+    });
+  }
+
+  // Initialize premium features on page load
+  if (window.AskMirrorTalkPremium) {
+    // Show contextual greeting
+    showContextualGreeting();
+    
+    // Initialize offline mode handlers
+    handleOfflineMode();
+    
+    // Add data controls to Save & Share panel
+    setTimeout(() => addDataControls(), 1000);
+    
+    // Update progress summary when switching to Progress panel
+    document.querySelectorAll('[data-workflow-action="progress"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setTimeout(() => showProgressSummary(), 300);
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ██ END PREMIUM FEATURES
+  // ═══════════════════════════════════════════════════════════════
 
   // Replace addShareButton globally within this scope
   // (The original is still bound in the SSE done handler — we override it here)

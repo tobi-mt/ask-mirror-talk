@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.18';
+    return '5.5.20';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -29,8 +29,9 @@ function ask_mirror_talk_shortcode() {
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
                 <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
+                <button type="button" id="amt-note-btn" class="amt-note-btn" title="Jot a private note" aria-label="Jot a private note">✍️</button>
                 <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
-                <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
+                <div class="amt-heading-controls-note">Jot with <strong>✍️</strong>. Saved notes live in <strong>📓</strong></div>
             </div>
         </div>
         <div id="amt-stats-bar" class="amt-stats-bar" style="display:none;">
@@ -63,6 +64,7 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-stat-action-label">alerts</span>
             </button>
         </div>
+        <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
         <nav id="amt-workflow-bar" class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
             <span class="amt-workflow-guide" aria-hidden="true">Choose your next step</span>
             <button type="button" class="amt-workflow-step amt-workflow-step-active" data-workflow-action="ask" aria-current="step">
@@ -180,7 +182,6 @@ function ask_mirror_talk_shortcode() {
                 <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
                 <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
                 <div id="amt-streak-revival-card" class="amt-streak-revival-card" style="display:none;" role="region" aria-label="Streak recovery"></div>
-                <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
                 <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
             </section>
         </div>
@@ -203,7 +204,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.18: mobile fit guardrails and release cache refresh
+    $version = ask_mirror_talk_theme_version(); // v5.5.20: premium features - question coaching, memory, patterns, offline, export, notifications
     
     // Core styles
     wp_enqueue_style(
@@ -221,11 +222,29 @@ function ask_mirror_talk_enqueue_assets() {
         $version
     );
     
+    // Premium features styles
+    wp_enqueue_style(
+        'ask-mirror-talk-premium',
+        $theme_uri . '/ask-mirror-talk-premium.css',
+        array('ask-mirror-talk'),
+        $version
+    );
+    
     // Core scripts
     wp_enqueue_script(
         'ask-mirror-talk',
         $theme_uri . '/ask-mirror-talk.js',
         array('jquery'),
+        $version,
+        true
+    );
+    
+    // Premium features: question coaching, conversational memory, pattern recognition,
+    // offline mode, export/import, notification intelligence, insight library
+    wp_enqueue_script(
+        'ask-mirror-talk-premium',
+        $theme_uri . '/ask-mirror-talk-premium.js',
+        array('ask-mirror-talk'),
         $version,
         true
     );

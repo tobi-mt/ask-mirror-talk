@@ -21,7 +21,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.5.18 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v5.5.20 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();

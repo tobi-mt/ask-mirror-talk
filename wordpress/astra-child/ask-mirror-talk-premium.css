@@ -1,0 +1,614 @@
+/* ========================================
+   Ask Mirror Talk — Premium Features Styles
+   v5.5.19
+   
+   Styles for:
+   - Question coaching UI
+   - Onboarding flow
+   - Progress visualization
+   - Insight library
+   - Pattern displays
+   ======================================== */
+
+/* ═══════════════════════════════════════
+   ONBOARDING OVERLAY
+   ═══════════════════════════════════════ */
+
+.amt-onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(46, 42, 36, 0.95);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.amt-onboarding-card {
+  max-width: 520px;
+  background: linear-gradient(135deg, #faf8f4 0%, #f5f2ed 100%);
+  border-radius: 18px;
+  padding: 32px 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.amt-onboarding-card h3 {
+  margin: 0 0 12px;
+  color: #2e2a24;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.amt-onboarding-card > p {
+  margin: 0 0 24px;
+  color: #6b665d;
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.amt-onboarding-example {
+  margin-bottom: 24px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  border: 1px solid #e6e2dc;
+}
+
+.amt-onboarding-example-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8b7355;
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-onboarding-example-poor {
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+  border-radius: 6px;
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  font-style: italic;
+}
+
+.amt-onboarding-example-good {
+  padding: 10px 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border-left: 3px solid #10b981;
+  border-radius: 6px;
+  color: #065f46;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.amt-onboarding-promise {
+  padding: 14px;
+  background: rgba(139, 115, 85, 0.08);
+  border-radius: 10px;
+  color: #6b665d;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  margin-bottom: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-onboarding-promise strong {
+  color: #2e2a24;
+}
+
+.amt-onboarding-start {
+  width: 100%;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #2e2a24, #3d3731);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(46, 42, 36, 0.2);
+}
+
+.amt-onboarding-start:hover {
+  background: linear-gradient(135deg, #3d3731, #524b42);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(46, 42, 36, 0.3);
+}
+
+.amt-onboarding-start:active {
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════
+   QUESTION COACHING (Enhanced)
+   ═══════════════════════════════════════ */
+
+.amt-question-coach {
+  margin: 10px 0 8px;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.amt-question-coach-inner {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(139, 115, 85, 0.3);
+  background: linear-gradient(135deg, rgba(250,248,244,0.98), rgba(244,239,232,0.96));
+  box-shadow: 0 2px 8px rgba(46, 42, 36, 0.06);
+}
+
+.amt-question-coach-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-text {
+  margin: 0 0 12px;
+  color: #6b665d;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amt-question-coach-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #ddd4c9;
+  background: rgba(255,255,255,0.92);
+  color: #2e2a24;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.amt-question-coach-btn:hover {
+  border-color: #8b7355;
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(46, 42, 36, 0.08);
+}
+
+.amt-question-coach-btn:active {
+  transform: translateY(0);
+}
+
+.amt-question-coach-btn-label {
+  color: #8b7355;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-question-coach-btn-text {
+  color: #2e2a24;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ═══════════════════════════════════════
+   PROGRESS VISUALIZATION
+   ═══════════════════════════════════════ */
+
+.amt-progress-summary {
+  margin: 20px 0;
+  padding: 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.amt-progress-narrative {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #f5f2ed;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+.amt-progress-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.amt-progress-stat {
+  text-align: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.amt-progress-stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: #f7c948;
+  margin-bottom: 4px;
+}
+
+.amt-progress-stat-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ═══════════════════════════════════════
+   CONTEXTUAL GREETING
+   ═══════════════════════════════════════ */
+
+.amt-contextual-greeting {
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: rgba(139, 115, 85, 0.06);
+  border-left: 3px solid #8b7355;
+  border-radius: 8px;
+  color: #6b665d;
+  font-size: 14px;
+  line-height: 1.5;
+  font-style: italic;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.amt-contextual-greeting strong {
+  color: #2e2a24;
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════
+   INSIGHT LIBRARY
+   ═══════════════════════════════════════ */
+
+.amt-insight-library {
+  margin-top: 24px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e6e2dc;
+}
+
+.amt-insight-library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.amt-insight-library-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2e2a24;
+}
+
+.amt-insight-save-btn {
+  padding: 8px 16px;
+  background: rgba(139, 115, 85, 0.1);
+  border: 1px solid #d4cec6;
+  border-radius: 8px;
+  color: #6d5a42;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.amt-insight-save-btn:hover {
+  background: rgba(139, 115, 85, 0.15);
+  border-color: #8b7355;
+  color: #2e2a24;
+}
+
+.amt-insight-item {
+  padding: 14px;
+  margin-bottom: 10px;
+  background: rgba(250, 248, 244, 0.7);
+  border-left: 3px solid #8b7355;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #2e2a24;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.amt-insight-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.amt-insight-tag {
+  padding: 3px 10px;
+  background: rgba(139, 115, 85, 0.15);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6d5a42;
+}
+
+/* ═══════════════════════════════════════
+   PATTERN INSIGHTS
+   ═══════════════════════════════════════ */
+
+.amt-pattern-card {
+  padding: 18px;
+  margin: 16px 0;
+  background: linear-gradient(135deg, rgba(250,248,244,0.95), rgba(245,242,237,0.92));
+  border: 1px solid #e6e2dc;
+  border-radius: 14px;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.amt-pattern-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.amt-pattern-icon {
+  font-size: 24px;
+}
+
+.amt-pattern-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2e2a24;
+}
+
+.amt-pattern-insight {
+  color: #6b665d;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.amt-pattern-stat {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(139, 115, 85, 0.12);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d5a42;
+  margin-right: 6px;
+}
+
+/* ═══════════════════════════════════════
+   EXPORT/IMPORT UI
+   ═══════════════════════════════════════ */
+
+.amt-data-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(139, 115, 85, 0.05);
+  border-radius: 12px;
+}
+
+.amt-export-btn,
+.amt-import-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #d4cec6;
+  border-radius: 8px;
+  background: #fff;
+  color: #6d5a42;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.amt-export-btn:hover,
+.amt-import-btn:hover {
+  border-color: #8b7355;
+  background: #faf8f4;
+  color: #2e2a24;
+}
+
+/* ═══════════════════════════════════════
+   OFFLINE INDICATOR
+   ═══════════════════════════════════════ */
+
+.amt-offline-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  background: #2e2a24;
+  color: #fff;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 9000;
+  animation: slideInUp 0.3s ease-out;
+}
+
+.amt-offline-banner::before {
+  content: '📡';
+  margin-right: 8px;
+}
+
+/* ═══════════════════════════════════════
+   RESPONSE FORMATTING ENHANCEMENTS
+   ═══════════════════════════════════════ */
+
+/* Highlight first strong element as key insight */
+#ask-mirror-talk-output strong:first-of-type {
+  display: block;
+  font-size: 1.1em;
+  color: #2e2a24;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(139, 115, 85, 0.2);
+}
+
+/* Highlight last paragraph as action step */
+#ask-mirror-talk-output p:last-child {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(139, 115, 85, 0.08);
+  border-left: 3px solid #8b7355;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Better blockquote styling */
+#ask-mirror-talk-output blockquote {
+  margin: 16px 0;
+  padding: 14px 16px;
+  background: rgba(250, 248, 244, 0.8);
+  border-left: 4px solid #d4a857;
+  border-radius: 8px;
+  font-style: italic;
+  color: #4a453d;
+}
+
+/* ═══════════════════════════════════════
+   FOLLOW-UP SUGGESTIONS (Enhanced)
+   ═══════════════════════════════════════ */
+
+.amt-smart-followup {
+  position: relative;
+  padding-left: 32px;
+}
+
+.amt-smart-followup::before {
+  content: '💭';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+}
+
+.amt-suggested-from-history {
+  font-size: 10px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE ADJUSTMENTS
+   ═══════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  .amt-onboarding-card {
+    padding: 24px 20px;
+  }
+
+  .amt-onboarding-card h3 {
+    font-size: 20px;
+  }
+
+  .amt-progress-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .amt-progress-stat-value {
+    font-size: 20px;
+  }
+
+  .amt-data-controls {
+    flex-direction: column;
+  }
+
+  .amt-pattern-card {
+    padding: 14px;
+  }
+}
+
+/* ═══════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════ */
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

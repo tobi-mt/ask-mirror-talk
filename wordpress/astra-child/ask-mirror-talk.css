@@ -1455,7 +1455,7 @@ body {
    ======================================== */
 @media (max-width: 768px) {
   .ask-mirror-talk {
-    padding: 24px 16px;
+    padding: 20px 14px;
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -1480,17 +1480,17 @@ body {
   }
 
   .amt-heading-controls {
-    width: min(100%, 252px);
-    max-width: 252px;
+    width: min(100%, 240px);
+    max-width: 240px;
     justify-content: center;
     align-self: center;
     margin-left: auto;
     margin-right: auto;
-    padding: 8px 12px 9px;
-    border: 1px solid rgba(139, 115, 85, 0.28);
-    border-radius: 18px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.88), rgba(239,229,213,0.78));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.88), 0 12px 26px rgba(46,42,36,0.08);
+    padding: 7px 11px 8px;
+    border: 1px solid rgba(139, 115, 85, 0.26);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.86), rgba(239,229,213,0.76));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 22px rgba(46,42,36,0.07);
   }
 
   .amt-heading-controls-note {
@@ -1525,11 +1525,11 @@ body {
   }
 
   .amt-topics-list {
-    gap: 6px;
+    gap: 5px;
   }
 
   .amt-topic-btn {
-    padding: 7px 12px;
+    padding: 7px 11px;
     font-size: 12px;
   }
 
@@ -1552,7 +1552,17 @@ body {
   }
 
   .amt-qotd-inner {
-    padding: 16px 18px;
+    padding: 14px 16px;
+  }
+
+  .amt-workflow-bar {
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .amt-stats-bar {
+    padding: 9px 14px;
+    gap: 10px;
   }
 }
 
@@ -1565,7 +1575,7 @@ body {
   .ask-mirror-talk {
     width: 100%;
     max-width: 100%;
-    padding: 16px clamp(10px, 3.4vw, 14px);
+    padding: 12px clamp(10px, 3vw, 12px);
     margin: 0 auto;
     border-radius: 0;
     border-left: none;
@@ -1577,40 +1587,97 @@ body {
     height: 2px;
   }
 
+  /* ── Heading Area ───────────────────── */
+  .amt-heading-row {
+    margin-bottom: 10px;
+    gap: 12px;
+  }
+
+  .amt-heading-kicker {
+    font-size: 10px;
+    margin-bottom: 4px;
+    letter-spacing: 0.10em;
+  }
+
+  .amt-heading-subtitle {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  .amt-text-size-btn,
+  .amt-journal-btn,
+  .amt-note-btn,
+  .amt-about-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+
+  .amt-journal-btn,
+  .amt-note-btn,
+  .amt-about-btn {
+    font-size: 15px;
+  }
+
+  .amt-heading-controls-note {
+    font-size: 10px;
+  }
+
   /* ── Typography ─────────────────────── */
   .ask-mirror-talk h2 {
-    font-size: 22px;
+    font-size: 20px;
     text-align: center;
     margin-bottom: 2px;
   }
 
   .ask-mirror-talk h3 {
-    font-size: 16px;
-    margin-top: 18px;
-    margin-bottom: 8px;
+    font-size: 15px;
+    margin-top: 14px;
+    margin-bottom: 6px;
   }
 
   .ask-mirror-talk label {
-    font-size: 14px;
+    font-size: 13px;
     text-align: left;
   }
 
   /* ── Form Input ─────────────────────── */
   #ask-mirror-talk-input {
     font-size: 16px;            /* prevents iOS zoom on focus */
-    padding: 12px 14px;
-    margin: 6px 0 10px;
-    border-radius: 10px;
-    min-height: 72px;           /* compact on mobile */
+    padding: 10px 12px;
+    margin: 4px 0 8px;
+    border-radius: 8px;
+    min-height: 68px;           /* compact on mobile */
+  }
+
+  #ask-mirror-talk-form {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+  }
+
+  .amt-form-intro {
+    margin-bottom: 6px;
+    gap: 10px;
+  }
+
+  .amt-form-kicker {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+
+  .amt-form-note {
+    font-size: 11px;
   }
 
   /* ── Submit Button — full-width tap target ── */
   .ask-mirror-talk button[type="submit"] {
-    margin-top: 12px;
-    width: min(100%, 320px);
-    padding: 14px 20px;
-    font-size: 16px;
-    border-radius: 10px;
+    margin-top: 8px;
+    width: min(100%, 300px);
+    padding: 12px 18px;
+    font-size: 15px;
+    border-radius: 8px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -1623,40 +1690,107 @@ body {
     box-shadow: 0 1px 3px rgba(46, 42, 36, 0.15);
   }
 
+  /* ── Stats Bar ──────────────────────── */
+  .amt-stats-bar {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    gap: 8px;
+  }
+
+  .amt-stat {
+    font-size: 0.8rem;
+  }
+
+  .amt-stat-icon {
+    font-size: 1rem;
+  }
+
+  .amt-stat-value {
+    font-size: 0.95rem;
+  }
+
+  .amt-stat-label {
+    font-size: 0.72rem;
+  }
+
+  .amt-stat-action-btn {
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 0.72rem;
+  }
+
+  .amt-stat-action-label {
+    font-size: 0.68rem;
+  }
+
+  /* ── Workflow Bar ───────────────────── */
+  .amt-workflow-bar {
+    margin: 16px 0 12px;
+    padding: 6px;
+    border-radius: 14px;
+    gap: 5px;
+  }
+
+  .amt-workflow-guide {
+    font-size: 8px;
+    top: -18px;
+  }
+
+  .amt-workflow-step {
+    padding: 7px 4px 6px;
+    gap: 2px;
+    border-radius: 10px;
+  }
+
+  .amt-workflow-icon {
+    font-size: 16px;
+  }
+
+  .amt-workflow-label {
+    font-size: clamp(9px, 2.4vw, 10px);
+    min-height: 1.8em;
+    line-height: 1.05;
+  }
+
+  .amt-workflow-hint {
+    font-size: clamp(7px, 2vw, 8px);
+  }
+
   /* ── Question of the Day ────────────── */
   .amt-qotd-inner {
-    padding: 14px 14px 16px;
-    border-radius: 12px;
+    padding: 12px 12px 14px;
+    border-radius: 10px;
   }
 
   .amt-qotd-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
-    margin-bottom: 8px;
+    gap: 3px;
+    margin-bottom: 6px;
   }
 
   .amt-qotd-badge {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .amt-qotd-theme {
-    font-size: 10px;
-    padding: 2px 8px;
+    font-size: 9px;
+    padding: 2px 7px;
   }
 
   .amt-qotd-text {
-    font-size: 16px;
-    line-height: 1.45;
-    margin-bottom: 12px;
+    font-size: 15px;
+    line-height: 1.42;
+    margin-bottom: 10px;
   }
 
   .amt-qotd-ask {
     width: 100%;
     text-align: center;
-    padding: 12px 20px;
-    font-size: 15px;
-    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px;
+    border-radius: 8px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -1670,25 +1804,25 @@ body {
 
   /* ── Browse by Topic ────────────────── */
   .amt-topics {
-    margin-bottom: 14px;
+    margin-bottom: 10px;
   }
 
   .amt-topics-label {
-    font-size: 13px;
-    margin-bottom: 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
   }
 
   .amt-topics-list {
-    gap: 6px;
+    gap: 5px;
     /* Horizontally scrollable on narrow screens */
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x proximity;
-    padding-bottom: 4px;
+    padding-bottom: 3px;
     margin: 0;
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 10px;
+    padding-right: 10px;
     scrollbar-width: none;     /* Firefox */
   }
 
@@ -1714,9 +1848,9 @@ body {
   .amt-topic-btn {
     flex-shrink: 0;
     scroll-snap-align: start;
-    padding: 8px 14px;
-    font-size: 13px;
-    border-radius: 20px;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 16px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -1730,33 +1864,33 @@ body {
   }
 
   .amt-topic-icon {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   /* ── Suggested Questions ────────────── */
   .amt-suggestions {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 
   .amt-suggestions-label,
   .amt-followups-label {
-    font-size: 13px;
-    margin-bottom: 6px;
+    font-size: 12px;
+    margin-bottom: 5px;
   }
 
   .amt-suggestions-list,
   .amt-followups-list {
-    gap: 6px;
+    gap: 5px;
   }
 
   .amt-suggestion-btn,
   .amt-followup-btn {
-    font-size: 13px;
-    padding: 8px 14px;
-    border-radius: 18px;
+    font-size: 12px;
+    padding: 7px 12px;
+    border-radius: 16px;
     -webkit-tap-highlight-color: transparent;
     /* full-width on very narrow screens for easy tapping */
-    flex: 1 1 calc(50% - 6px);
+    flex: 1 1 calc(50% - 5px);
     min-width: 0;
     text-align: center;
   }
@@ -1773,17 +1907,17 @@ body {
 
   /* ── Explore Expander ───────────────── */
   .amt-explore-toggle {
-    padding: 10px 14px;
-    border-radius: 20px;
+    padding: 8px 12px;
+    border-radius: 16px;
     -webkit-tap-highlight-color: transparent;
   }
 
   .amt-explore-toggle[aria-expanded="true"] {
-    border-radius: 16px 16px 0 0;
+    border-radius: 14px 14px 0 0;
   }
 
   .amt-explore-panel--open {
-    padding: 12px 12px 6px;
+    padding: 10px 10px 4px;
   }
 
   /* Neutralise edge-bleed negative margins on the inner topics list */
@@ -1801,50 +1935,59 @@ body {
 
   /* ── Response Section ───────────────── */
   .ask-mirror-talk-response {
-    margin-top: 16px;
-    padding: 16px 14px;
-    border-radius: 10px;
-    font-size: 15px;
-    line-height: 1.75;
+    margin-top: 12px;
+    padding: 12px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.7;
   }
 
   #ask-mirror-talk-output p {
-    margin: 0 0 12px 0;
+    margin: 0 0 10px 0;
   }
 
   .ask-mirror-talk-response ol,
   .ask-mirror-talk-response ul {
-    padding-left: 20px;
-    margin: 12px 0;
+    padding-left: 18px;
+    margin: 10px 0;
   }
 
   .ask-mirror-talk-response li {
-    margin: 6px 0;
-    line-height: 1.65;
+    margin: 5px 0;
+    line-height: 1.6;
   }
 
   /* ── Loading ────────────────────────── */
   .amt-loading {
-    padding: 28px 12px;
+    padding: 20px 10px;
   }
 
   .amt-loading-text {
-    font-size: 14px;
+    font-size: 12px;
+  }
+
+  .amt-shimmer-group {
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .amt-shimmer {
+    height: 11px;
   }
 
   /* ── Citations ──────────────────────── */
   .ask-mirror-talk-citations {
-    margin-top: 18px;
+    margin-top: 14px;
   }
 
   .ask-mirror-talk-citations h3 {
-    font-size: 12px;
-    margin-bottom: 10px;
+    font-size: 11px;
+    margin-bottom: 8px;
   }
 
   .citation-item {
-    margin-bottom: 6px;
-    border-radius: 10px;
+    margin-bottom: 5px;
+    border-radius: 8px;
   }
 
   /* Remove hover lift on touch */
@@ -1856,26 +1999,26 @@ body {
   .citation-link {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
-    padding: 12px 14px;
+    gap: 6px;
+    padding: 10px 12px;
     -webkit-tap-highlight-color: transparent;
   }
 
   .citation-title {
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: 13px;
+    line-height: 1.35;
   }
 
   .citation-quote {
-    font-size: 12.5px;
+    font-size: 12px;
     -webkit-line-clamp: 2;
     line-clamp: 2;
-    padding: 3px 0 3px 8px;
+    padding: 2px 0 2px 7px;
   }
 
   .citation-time {
-    font-size: 12px;
-    padding: 4px 10px;
+    font-size: 11px;
+    padding: 3px 9px;
     align-self: flex-start;
   }
 
@@ -1883,32 +2026,50 @@ body {
     transform: none;            /* no hover scale on touch */
   }
 
+  .amt-citation-trust-note {
+    margin-bottom: 10px;
+    padding: 10px 11px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+
+  .citation-preview-btn {
+    margin: 0 12px 10px;
+    padding: 6px 0;
+    font-size: 10px;
+  }
+
+  .citation-match-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
   /* ── Inline Audio Player ────────────── */
   .amt-inline-player {
-    padding: 12px 14px;
+    padding: 10px 12px;
   }
 
   .amt-player-episode {
-    font-size: 13px;
-    margin-bottom: 10px;
+    font-size: 12px;
+    margin-bottom: 8px;
   }
 
   .amt-inline-player .amt-audio {
-    height: 36px;
-    margin-bottom: 8px;
+    height: 34px;
+    margin-bottom: 6px;
   }
 
   .amt-player-actions {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
   }
 
   .amt-player-skip-back,
   .amt-player-skip-fwd {
     flex: 1;
     text-align: center;
-    padding: 8px 10px;
-    font-size: 11px;
+    padding: 7px 8px;
+    font-size: 10px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -1921,8 +2082,8 @@ body {
     margin-left: 0;
     flex: 1 1 100%;
     text-align: center;
-    padding: 8px 0 4px;
-    font-size: 11px;
+    padding: 7px 0 3px;
+    font-size: 10px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -1930,21 +2091,36 @@ body {
     transform: none;
   }
 
+  .amt-player-title {
+    font-size: 11px;
+  }
+
+  .amt-player-close {
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+  }
+
   /* ── Feedback Section ───────────────── */
   .amt-feedback-section {
-    margin-top: 16px !important;
-    padding: 14px !important;
-    border-radius: 10px !important;
+    margin-top: 12px !important;
+    padding: 12px !important;
+    border-radius: 8px !important;
   }
 
   .amt-feedback-question {
-    font-size: 14px !important;
-    margin-bottom: 10px !important;
+    font-size: 13px !important;
+    margin-bottom: 8px !important;
   }
 
   .amt-feedback-buttons {
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .amt-feedback-buttons .amt-feedback-btn {
+    padding: 10px 16px;
+    font-size: 14px;
   }
 
   .amt-feedback-positive:hover,
@@ -1966,14 +2142,68 @@ body {
   }
 
   .amt-feedback-thanks {
-    font-size: 14px !important;
-    padding: 12px !important;
+    font-size: 13px !important;
+    padding: 10px !important;
+  }
+
+  .amt-chip {
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+
+  .amt-feedback-comment {
+    font-size: 13px;
+    padding: 7px 9px;
   }
 
   /* ── Follow-ups ─────────────────────── */
   .amt-followups {
-    margin-top: 14px;
-    padding-top: 12px;
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  /* ── Response Header ────────────────── */
+  .amt-response-header h3 {
+    font-size: 15px;
+  }
+
+  .amt-copy-answer-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  /* ── Question Coach ─────────────────── */
+  .amt-question-coach-inner {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .amt-question-coach-kicker {
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+
+  .amt-question-coach-text {
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .amt-question-coach-btn {
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+
+  .amt-question-coach-btn-label {
+    font-size: 10px;
+  }
+
+  .amt-question-coach-btn-text {
+    font-size: 12px;
+  }
+
+  /* ── Char Counter ───────────────────── */
+  .amt-char-counter {
+    font-size: 11px;
   }
 }
 
@@ -3116,6 +3346,10 @@ body {
   padding: 16px 20px;
   animation: amtSlideDown 0.2s ease-out;
 }
+
+.ask-mirror-talk > .amt-notif-manage-panel {
+  margin: 12px 0 16px;
+}
 .amt-notif-manage-panel .amt-nmp-heading {
   font-size: 14px;
   font-weight: 600;
@@ -3706,8 +3940,7 @@ body {
 .amt-workflow-panel-progress .amt-weekly-recap,
 .amt-workflow-panel-progress .amt-badge-shelf,
 .amt-workflow-panel-progress .amt-streak-protect-banner,
-.amt-workflow-panel-progress .amt-streak-revival-card,
-.amt-workflow-panel-progress .amt-notif-manage-panel {
+.amt-workflow-panel-progress .amt-streak-revival-card {
   margin-top: 16px;
 }
 
@@ -4492,6 +4725,7 @@ body.amt-light-mode .amt-suggestions-label {
 
 .amt-text-size-btn,
 .amt-journal-btn,
+.amt-note-btn,
 .amt-about-btn {
   background: rgba(255,255,255,0.72);
   border: 1px solid #e6e2dc;
@@ -4514,6 +4748,7 @@ body.amt-light-mode .amt-suggestions-label {
 
 .amt-text-size-btn:hover,
 .amt-journal-btn:hover,
+.amt-note-btn:hover,
 .amt-about-btn:hover {
   border-color: #2e2a24;
   color: #2e2a24;
@@ -4521,6 +4756,7 @@ body.amt-light-mode .amt-suggestions-label {
 }
 
 .amt-journal-btn,
+.amt-note-btn,
 .amt-about-btn {
   font-size: 16px;
   font-weight: 400;
@@ -5661,6 +5897,7 @@ body.amt-light-mode .amt-suggestions-label {
 
   .amt-text-size-btn,
   .amt-journal-btn,
+  .amt-note-btn,
   .amt-about-btn {
     width: 30px;
     height: 30px;
@@ -6464,5 +6701,318 @@ body.amt-light-mode .amt-suggestions-label {
   .amt-journal-entry-actions {
     width: 100%;
     flex-direction: column;
+  }
+}
+
+/* ========================================
+   Mobile Premium Rebalance
+   Keep the PWA compact, calm, and proportional after the workflow refactor.
+   ======================================== */
+@media (max-width: 640px) {
+  .ask-mirror-talk {
+    width: min(100%, calc(100vw - 18px));
+    max-width: calc(100vw - 18px);
+    margin: 8px auto 18px;
+    padding: 14px 12px 18px;
+    border-radius: 18px;
+  }
+
+  .amt-heading-row {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .amt-heading-kicker {
+    font-size: 9px;
+    letter-spacing: 0.13em;
+  }
+
+  .ask-mirror-talk h2,
+  .amt-heading-row h2 {
+    font-size: clamp(19px, 6vw, 22px);
+    line-height: 1.08;
+  }
+
+  .amt-heading-subtitle {
+    max-width: 30ch;
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  .amt-heading-controls {
+    width: min(100%, 224px);
+    max-width: 224px;
+    gap: 5px;
+    padding: 6px 9px 7px;
+    border-radius: 16px;
+  }
+
+  .amt-text-size-btn,
+  .amt-journal-btn,
+  .amt-note-btn,
+  .amt-about-btn {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    font-size: 12px;
+  }
+
+  .amt-journal-btn,
+  .amt-note-btn,
+  .amt-about-btn {
+    font-size: 15px;
+  }
+
+  .amt-heading-controls-note {
+    font-size: 9.5px;
+    line-height: 1.25;
+  }
+
+  .amt-stats-bar {
+    gap: 6px;
+    margin: 10px 0 8px;
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .amt-stat,
+  .amt-stat-action-btn,
+  .amt-badges-btn,
+  .amt-insights-btn,
+  .amt-notif-manage-btn {
+    min-height: 30px;
+    padding: 5px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+
+  .amt-stat-icon {
+    font-size: 14px;
+  }
+
+  .amt-stat-value {
+    font-size: 13px;
+  }
+
+  .amt-stat-label,
+  .amt-stat-action-label {
+    font-size: 9.5px;
+  }
+
+  .amt-workflow-bar {
+    gap: 4px;
+    margin: 22px 0 12px;
+    padding: 5px;
+    border-radius: 16px;
+  }
+
+  .amt-workflow-guide {
+    top: -17px;
+    font-size: 7.5px;
+    letter-spacing: 0.09em;
+  }
+
+  .amt-workflow-step {
+    gap: 2px;
+    padding: 7px 3px 6px;
+    border-radius: 12px;
+  }
+
+  .amt-workflow-icon {
+    font-size: 15px;
+  }
+
+  .amt-workflow-label {
+    min-height: 0;
+    font-size: clamp(8.5px, 2.35vw, 10px);
+    line-height: 1.05;
+  }
+
+  .amt-workflow-hint {
+    font-size: clamp(7px, 1.95vw, 8px);
+    line-height: 1.05;
+  }
+
+  .amt-workflow-panel-header,
+  .amt-save-share-hub-card {
+    margin-bottom: 10px;
+    padding: 13px 14px;
+    border-radius: 16px;
+  }
+
+  .amt-workflow-panel-kicker,
+  .amt-save-share-kicker,
+  .amt-momentum-kicker,
+  .amt-weekly-recap-kicker,
+  .amt-journey-kicker,
+  .amt-continuation-kicker {
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+  }
+
+  .amt-workflow-panel-header h3,
+  .amt-save-share-hub-card h3 {
+    font-size: clamp(17px, 5vw, 20px);
+    line-height: 1.18;
+  }
+
+  .amt-workflow-panel-header p,
+  .amt-save-share-hub-card p {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  #ask-mirror-talk-form {
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .amt-form-intro {
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .amt-form-kicker {
+    font-size: 9.5px;
+  }
+
+  .ask-mirror-talk label {
+    font-size: 12.5px;
+  }
+
+  #ask-mirror-talk-input {
+    min-height: 104px;
+    margin: 6px 0 10px;
+    padding: 11px 12px;
+    border-width: 1px;
+    border-radius: 12px;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .ask-mirror-talk button[type="submit"] {
+    width: min(100%, 260px);
+    margin-top: 10px;
+    padding: 12px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+  }
+
+  .ask-mirror-talk-response {
+    padding: 14px 13px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  #ask-mirror-talk-output,
+  #ask-mirror-talk-output p,
+  #ask-mirror-talk-output li {
+    font-size: 14px;
+    line-height: 1.72;
+  }
+
+  .amt-continuation-strip-inner,
+  .amt-question-coach-inner,
+  .amt-reflect-inner,
+  .amt-answer-context,
+  .amt-momentum-card-inner,
+  .amt-weekly-recap-inner,
+  .amt-journey-card-inner,
+  .amt-insight-item {
+    padding: 12px;
+    border-radius: 15px;
+  }
+
+  .amt-continuation-strip,
+  .amt-followups,
+  .amt-qotd,
+  .amt-explore-expander,
+  .amt-reflect-section,
+  .amt-answer-utilities,
+  .amt-insights-panel,
+  .amt-momentum-card,
+  .amt-weekly-recap,
+  .amt-badge-shelf,
+  .amt-streak-protect-banner,
+  .amt-streak-revival-card {
+    margin-top: 10px;
+  }
+
+  .amt-momentum-title,
+  .amt-weekly-recap-title,
+  .amt-journey-title {
+    font-size: clamp(16px, 4.7vw, 18px);
+    line-height: 1.22;
+  }
+
+  .amt-momentum-text,
+  .amt-weekly-recap-text,
+  .amt-weekly-recap-subtext,
+  .amt-journey-text,
+  .amt-continuation-text,
+  .amt-reflect-question,
+  .amt-question-coach-text {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .amt-followup-btn,
+  .amt-suggestion-btn,
+  .amt-topic-starter-btn,
+  .amt-continuation-btn,
+  .amt-momentum-ask-btn,
+  .amt-weekly-recap-btn,
+  .amt-save-share-hub-btn,
+  .amt-share-btn,
+  .amt-reflect-toggle,
+  .amt-reflect-save-btn {
+    min-height: 36px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+
+  .amt-workflow-nudge {
+    margin: 12px auto 12px;
+    padding: 9px 10px;
+    border-radius: 16px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .amt-workflow-nudge-text {
+    margin-bottom: 7px;
+  }
+
+  .amt-workflow-nudge-btn {
+    min-width: 104px;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 390px) {
+  .ask-mirror-talk {
+    width: min(100%, calc(100vw - 12px));
+    max-width: calc(100vw - 12px);
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .amt-workflow-label {
+    font-size: 8.5px;
+  }
+
+  .amt-workflow-hint {
+    display: none;
+  }
+
+  .amt-heading-controls {
+    max-width: 212px;
   }
 }

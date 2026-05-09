@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.5.18';
+const CACHE_VERSION = 'amt-v5.5.20';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -19,8 +19,10 @@ const API_CACHE = `${CACHE_VERSION}-api`;
 const APP_SHELL = [
   '/wp-content/themes/astra-child/ask-mirror-talk.css',
   '/wp-content/themes/astra-child/ask-mirror-talk-enhanced.css',
+  '/wp-content/themes/astra-child/ask-mirror-talk-premium.css',
   '/wp-content/themes/astra-child/ask-mirror-talk.js',
   '/wp-content/themes/astra-child/ask-mirror-talk-enhanced.js',
+  '/wp-content/themes/astra-child/ask-mirror-talk-premium.js',
   '/wp-content/themes/astra-child/analytics-addon.js',
 ];
 

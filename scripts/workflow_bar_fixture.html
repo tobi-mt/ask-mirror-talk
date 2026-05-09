@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ask Mirror Talk Workflow Bar Fixture</title>
+  <title>Ask Mirror Talk Workflow Bar Fixture + Premium Features</title>
   <link rel="stylesheet" href="../wordpress/astra-child/ask-mirror-talk.css">
+  <link rel="stylesheet" href="../wordpress/astra-child/ask-mirror-talk-premium.css">
   <style>
     body {
       min-height: 100vh;
@@ -158,6 +159,10 @@
       line-height: 1.55;
     }
 
+    .fixture-action-panel {
+      margin: 14px 0 16px;
+    }
+
     .fixture-tool-note {
       display: none;
       margin: 10px 0 0;
@@ -174,8 +179,8 @@
     }
 
     #ask-mirror-talk-form-mobile {
-      margin-top: 18px;
-      padding: 18px 16px;
+      margin-top: 8px;
+      padding: 12px;
       border: 1px solid rgba(212, 206, 198, 0.9);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.68);
@@ -184,13 +189,13 @@
 
     #ask-mirror-talk-input-mobile {
       width: 100%;
-      min-height: 150px;
-      padding: 14px 16px;
+      min-height: 104px;
+      padding: 11px 12px;
       font-size: 16px;
-      line-height: 1.6;
-      margin: 8px 0 12px;
-      border: 2px solid #d4cec6;
-      border-radius: 10px;
+      line-height: 1.45;
+      margin: 6px 0 10px;
+      border: 1px solid #d4cec6;
+      border-radius: 12px;
       font-family: inherit;
       background: #fff;
       color: #2e2a24;
@@ -199,7 +204,9 @@
     }
 
     #ask-mirror-talk-form-mobile button[type="submit"] {
-      width: 100%;
+      width: min(100%, 260px);
+      margin-left: auto;
+      margin-right: auto;
     }
 
     @media (max-width: 920px) {
@@ -219,23 +226,23 @@
     }
 
     body[data-fixture-scope="mobile"] {
-      padding: 0;
+      padding: 8px 0 18px;
       overflow-x: hidden;
     }
 
     body[data-fixture-scope="mobile"] .fixture-frame {
-      width: 100%;
-      max-width: min(390px, 100vw);
+      width: min(100%, 390px);
+      max-width: calc(100vw - 12px);
+      margin: 0 auto;
       padding: 0;
-      border-left: 0;
-      border-right: 0;
-      border-radius: 0;
+      border: 0;
+      border-radius: 18px;
       box-sizing: border-box;
       box-shadow: none;
     }
 
     body[data-fixture-scope="mobile"] .ask-mirror-talk {
-      border-radius: 0;
+      border-radius: 18px;
       box-sizing: border-box;
     }
 
@@ -259,8 +266,9 @@
           <div class="amt-heading-controls">
             <button type="button" id="amt-text-size-btn" class="amt-text-size-btn">Aa</button>
             <button type="button" id="amt-journal-btn" class="amt-journal-btn">📓</button>
+            <button type="button" class="amt-note-btn" title="Jot a private note" aria-label="Jot a private note">✍️</button>
             <button type="button" id="amt-about-btn" class="amt-about-btn">ⓘ</button>
-            <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
+            <div class="amt-heading-controls-note">Jot with <strong>✍️</strong>. Saved notes live in <strong>📓</strong></div>
           </div>
           <div class="fixture-tool-note" aria-live="polite"></div>
         </div>
@@ -271,6 +279,14 @@
           <button type="button" class="amt-badges-btn amt-stat-action-btn" title="Your badges" aria-label="Your badges"><span aria-hidden="true">🏆</span><span>5</span><span class="amt-stat-action-label">badges</span></button>
           <button type="button" class="amt-insights-btn amt-stat-action-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="amt-stat-action-label">saved</span></button>
           <button type="button" class="amt-notif-manage-btn amt-stat-action-btn" title="Notification settings" aria-expanded="false" aria-label="Notification settings"><span aria-hidden="true">🔔</span><span class="amt-stat-action-label">alerts</span></button>
+        </div>
+        <div class="amt-notif-manage-panel fixture-notif-panel fixture-action-panel" style="display:none;" aria-label="Notification settings">
+          <p class="amt-nmp-heading">🔔 Notification settings</p>
+          <div class="amt-nmp-prefs">
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>Question of the Day <em class="amt-nmp-pref-desc">Daily morning nudge at 8 AM</em></span></label>
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>Reflection nudges <em class="amt-nmp-pref-desc">Midday encouragement and a calm nightly reflection</em></span></label>
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>New podcast episodes <em class="amt-nmp-pref-desc">Only when a fresh Mirror Talk episode is published</em></span></label>
+          </div>
         </div>
         <nav class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
           <span class="amt-workflow-guide" aria-hidden="true">Choose your next step</span>
@@ -288,8 +304,8 @@
                   <label for="ask-mirror-talk-input">What’s on your heart?</label>
                 </div>
               </div>
-              <textarea id="ask-mirror-talk-input" rows="4">How do I move forward after a major life change?</textarea>
-              <button type="submit">Ask Mirror Talk</button>
+              <textarea id="ask-mirror-talk-input" rows="4">How do I move forward after a major life change?</textarea>              <!-- Premium: Question Coaching Panel -->
+              <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>              <button type="submit">Ask Mirror Talk</button>
             </form>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-explore" id="desktop-explore" data-fixture-panel="explore" hidden>
@@ -311,6 +327,22 @@
                 <button type="button" class="amt-followup-btn">How can I carry this insight into one conversation?</button>
               </div>
             </div>
+            <div class="amt-explore-expander" style="display:block;">
+              <button type="button" class="amt-explore-toggle" aria-expanded="false">
+                <span class="amt-explore-icons" aria-hidden="true">💛 🌱 ✨</span>
+                <span class="amt-explore-label">Explore topics &amp; questions</span>
+                <span class="amt-explore-chevron" aria-hidden="true">&rsaquo;</span>
+              </button>
+              <div class="amt-explore-panel" role="region" aria-label="Topics and suggested questions">
+                <div class="amt-suggestions" style="display:block;">
+                  <p class="amt-suggestions-label">Try asking about:</p>
+                  <div class="amt-suggestions-list">
+                    <button type="button" class="amt-suggestion-btn">What helps me return to courage today?</button>
+                    <button type="button" class="amt-suggestion-btn">How can I notice what I am avoiding?</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-save-share" id="desktop-save" data-fixture-panel="save_share" hidden>
             <div class="amt-workflow-panel-header">
@@ -323,12 +355,48 @@
               <h3>Your last insight is ready when you return.</h3>
               <p class="amt-save-share-excerpt">“Small steady steps can help you move through change without losing yourself.”</p>
             </div>
+            <div class="amt-insights-panel fixture-insights-panel fixture-action-panel" style="display:none;" role="region" aria-label="My saved insights">
+              <div class="amt-insights-header"><span class="amt-insights-title">🔖 My Insights <span class="amt-insights-count">(2)</span></span></div>
+              <div class="amt-insights-list">
+                <div class="amt-insight-item">
+                  <div class="amt-insight-topline"><span class="amt-insight-theme">Change</span><span class="amt-insight-date">Today</span></div>
+                  <p class="amt-insight-question">How do I move forward after a major life change?</p>
+                  <p class="amt-insight-answer">“Small steady steps can help you move through change without losing yourself.”</p>
+                </div>
+              </div>
+            </div>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-progress" id="desktop-progress" data-fixture-panel="progress" hidden>
             <div class="amt-workflow-panel-header">
               <p class="amt-workflow-panel-kicker">Rhythm</p>
               <h3>Your Momentum lives here.</h3>
               <p>Weekly Recap, streaks, badges, Reflection Pass, and notification rhythm belong here so progress feels gentle and visible.</p>
+            </div>
+            <div class="amt-momentum-card fixture-action-panel" style="display:block;">
+              <div class="amt-momentum-card-inner">
+                <div class="amt-momentum-copy">
+                  <span class="amt-momentum-kicker">Your Momentum</span>
+                  <h3 class="amt-momentum-title">4 days of returning.</h3>
+                  <p class="amt-momentum-text">Rhythm actions that become questions should return to Ask and submit there.</p>
+                </div>
+                <div class="amt-momentum-next">
+                  <span>1 reflection today.</span>
+                  <button type="button" class="amt-momentum-ask-btn amt-rhythm-question-btn" data-q="What do I need to notice before today ends?">Ask today’s reflection</button>
+                </div>
+              </div>
+            </div>
+            <div class="amt-weekly-recap fixture-action-panel" style="display:block;">
+              <div class="amt-weekly-recap-inner">
+                <div class="amt-weekly-recap-copy">
+                  <span class="amt-weekly-recap-kicker">Weekly recap</span>
+                  <h3 class="amt-weekly-recap-title">You kept returning to Courage.</h3>
+                  <p class="amt-weekly-recap-text">Continue from the recap without making users scroll back to Ask manually.</p>
+                </div>
+                <div class="amt-weekly-recap-actions">
+                  <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-primary amt-rhythm-question-btn" data-q="What does courage look like in everyday life?">Continue with Courage</button>
+                  <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-secondary">Open saved insights</button>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -351,8 +419,9 @@
           <div class="amt-heading-controls">
             <button type="button" class="amt-text-size-btn">Aa</button>
             <button type="button" class="amt-journal-btn">📓</button>
+            <button type="button" class="amt-note-btn" title="Jot a private note" aria-label="Jot a private note">✍️</button>
             <button type="button" class="amt-about-btn">ⓘ</button>
-            <div class="amt-heading-controls-note">Saved notes live in <strong>📓</strong></div>
+            <div class="amt-heading-controls-note">Jot with <strong>✍️</strong>. Saved notes live in <strong>📓</strong></div>
           </div>
           <div class="fixture-tool-note" aria-live="polite"></div>
         </div>
@@ -363,6 +432,14 @@
           <button type="button" class="amt-badges-btn amt-stat-action-btn" title="Your badges" aria-label="Your badges"><span aria-hidden="true">🏆</span><span>5</span><span class="amt-stat-action-label">badges</span></button>
           <button type="button" class="amt-insights-btn amt-stat-action-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="amt-stat-action-label">saved</span></button>
           <button type="button" class="amt-notif-manage-btn amt-stat-action-btn" title="Notification settings" aria-expanded="false" aria-label="Notification settings"><span aria-hidden="true">🔔</span><span class="amt-stat-action-label">alerts</span></button>
+        </div>
+        <div class="amt-notif-manage-panel fixture-notif-panel fixture-action-panel" style="display:none;" aria-label="Notification settings">
+          <p class="amt-nmp-heading">🔔 Notification settings</p>
+          <div class="amt-nmp-prefs">
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>Question of the Day <em class="amt-nmp-pref-desc">Daily morning nudge at 8 AM</em></span></label>
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>Reflection nudges <em class="amt-nmp-pref-desc">Midday encouragement and a calm nightly reflection</em></span></label>
+            <label class="amt-nmp-pref"><input type="checkbox" checked><span>New podcast episodes <em class="amt-nmp-pref-desc">Only when a fresh Mirror Talk episode is published</em></span></label>
+          </div>
         </div>
         <nav class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
           <span class="amt-workflow-guide" aria-hidden="true">Choose your next step</span>
@@ -380,8 +457,8 @@
                   <label for="ask-mirror-talk-input-mobile">What’s on your heart?</label>
                 </div>
               </div>
-              <textarea id="ask-mirror-talk-input-mobile" rows="4"></textarea>
-              <button type="submit">Ask Mirror Talk</button>
+              <textarea id="ask-mirror-talk-input-mobile" rows="4"></textarea>              <!-- Premium: Question Coaching Panel (Mobile) -->
+              <div id="amt-question-coach-mobile" class="amt-question-coach" style="display:none;" aria-live="polite"></div>              <button type="submit">Ask Mirror Talk</button>
             </form>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-explore" id="mobile-explore" data-fixture-panel="explore" hidden>
@@ -390,6 +467,36 @@
               <h3>Continue without losing the thread.</h3>
               <p>Follow-up questions, prompts, and topics live here.</p>
             </div>
+            <div class="amt-continuation-strip" style="display:block;">
+              <div class="amt-continuation-copy">
+                <span class="amt-continuation-kicker">Continue Your Reflection</span>
+                <p class="amt-continuation-text">Choose a next question, and we will bring you back to Ask automatically.</p>
+              </div>
+              <div class="amt-continuation-actions">
+                <button type="button" class="amt-continuation-btn amt-continuation-btn-primary" data-action="deeper">Go deeper on this</button>
+              </div>
+            </div>
+            <div class="amt-followups" style="display:block;">
+              <p class="amt-followups-label">You might also want to ask:</p>
+              <div class="amt-followups-list">
+                <button type="button" class="amt-followup-btn">What would one brave next step look like today?</button>
+              </div>
+            </div>
+            <div class="amt-explore-expander" style="display:block;">
+              <button type="button" class="amt-explore-toggle" aria-expanded="false">
+                <span class="amt-explore-icons" aria-hidden="true">💛 🌱 ✨</span>
+                <span class="amt-explore-label">Explore topics &amp; questions</span>
+                <span class="amt-explore-chevron" aria-hidden="true">&rsaquo;</span>
+              </button>
+              <div class="amt-explore-panel" role="region" aria-label="Topics and suggested questions">
+                <div class="amt-suggestions" style="display:block;">
+                  <p class="amt-suggestions-label">Try asking about:</p>
+                  <div class="amt-suggestions-list">
+                    <button type="button" class="amt-suggestion-btn">What helps me return to courage today?</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-save-share" id="mobile-save" data-fixture-panel="save_share" hidden>
             <div class="amt-workflow-panel-header">
@@ -397,12 +504,48 @@
               <h3>Keep what mattered, or pass it on.</h3>
               <p>Save, email, jot a private note, invite a friend, or share one polished card.</p>
             </div>
+            <div class="amt-insights-panel fixture-insights-panel fixture-action-panel" style="display:none;" role="region" aria-label="My saved insights">
+              <div class="amt-insights-header"><span class="amt-insights-title">🔖 My Insights <span class="amt-insights-count">(2)</span></span></div>
+              <div class="amt-insights-list">
+                <div class="amt-insight-item">
+                  <div class="amt-insight-topline"><span class="amt-insight-theme">Change</span><span class="amt-insight-date">Today</span></div>
+                  <p class="amt-insight-question">How do I move forward after a major life change?</p>
+                  <p class="amt-insight-answer">“Small steady steps can help you move through change without losing yourself.”</p>
+                </div>
+              </div>
+            </div>
           </section>
           <section class="amt-workflow-panel amt-workflow-panel-progress" id="mobile-progress" data-fixture-panel="progress" hidden>
             <div class="amt-workflow-panel-header">
               <p class="amt-workflow-panel-kicker">Rhythm</p>
               <h3>Your Momentum lives here.</h3>
               <p>Weekly Recap, streaks, badges, and Reflection Pass belong here.</p>
+            </div>
+            <div class="amt-momentum-card fixture-action-panel" style="display:block;">
+              <div class="amt-momentum-card-inner">
+                <div class="amt-momentum-copy">
+                  <span class="amt-momentum-kicker">Your Momentum</span>
+                  <h3 class="amt-momentum-title">4 days of returning.</h3>
+                  <p class="amt-momentum-text">Rhythm actions that become questions should return to Ask and submit there.</p>
+                </div>
+                <div class="amt-momentum-next">
+                  <span>1 reflection today.</span>
+                  <button type="button" class="amt-momentum-ask-btn amt-rhythm-question-btn" data-q="What do I need to notice before today ends?">Ask today’s reflection</button>
+                </div>
+              </div>
+            </div>
+            <div class="amt-weekly-recap fixture-action-panel" style="display:block;">
+              <div class="amt-weekly-recap-inner">
+                <div class="amt-weekly-recap-copy">
+                  <span class="amt-weekly-recap-kicker">Weekly recap</span>
+                  <h3 class="amt-weekly-recap-title">You kept returning to Courage.</h3>
+                  <p class="amt-weekly-recap-text">Continue from the recap without making users scroll back to Ask manually.</p>
+                </div>
+                <div class="amt-weekly-recap-actions">
+                  <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-primary amt-rhythm-question-btn" data-q="What does courage look like in everyday life?">Continue with Courage</button>
+                  <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-secondary">Open saved insights</button>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -500,6 +643,52 @@
         step.addEventListener('click', event => {
           event.preventDefault();
           activateWorkflowStep(event.currentTarget);
+          if (event.currentTarget.dataset.workflowAction === 'explore') {
+            widget.querySelectorAll('.amt-explore-toggle').forEach(toggle => {
+              toggle.setAttribute('aria-expanded', 'false');
+              const panel = toggle.parentElement?.querySelector('.amt-explore-panel');
+              if (panel) panel.classList.remove('amt-explore-panel--open');
+            });
+          }
+        });
+      });
+
+      widget.querySelectorAll('.amt-explore-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+          const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', String(!isOpen));
+          const panel = toggle.parentElement?.querySelector('.amt-explore-panel');
+          if (panel) panel.classList.toggle('amt-explore-panel--open', !isOpen);
+        });
+      });
+
+      widget.querySelectorAll('.amt-followup-btn, .amt-suggestion-btn, .amt-continuation-btn[data-action="deeper"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const askStep = widget.querySelector('.amt-workflow-step[data-workflow-action="ask"]');
+          const textarea = widget.querySelector('textarea');
+          if (textarea) {
+            textarea.value = btn.textContent.trim();
+          }
+          if (askStep) activateWorkflowStep(askStep);
+          if (note) {
+            note.textContent = 'Preview: the selected Explore question returns to Ask and auto-submits there.';
+            note.classList.add('fixture-tool-note-active');
+          }
+        });
+      });
+
+      widget.querySelectorAll('.amt-rhythm-question-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const askStep = widget.querySelector('.amt-workflow-step[data-workflow-action="ask"]');
+          const textarea = widget.querySelector('textarea');
+          if (textarea) {
+            textarea.value = btn.dataset.q || btn.textContent.trim();
+          }
+          if (askStep) activateWorkflowStep(askStep);
+          if (note) {
+            note.textContent = 'Preview: this Rhythm action returns to Ask and auto-submits when the real app has a question ready.';
+            note.classList.add('fixture-tool-note-active');
+          }
         });
       });
 
@@ -534,6 +723,15 @@
         }
       });
 
+      widget.querySelector('.amt-note-btn')?.addEventListener('click', () => {
+        const saveStep = widget.querySelector('.amt-workflow-step[data-workflow-action="save_share"]');
+        if (saveStep) activateWorkflowStep(saveStep);
+        if (note) {
+          note.textContent = 'Preview: the note button opens a private note composer after a response.';
+          note.classList.add('fixture-tool-note-active');
+        }
+      });
+
       widget.querySelector('.amt-about-btn')?.addEventListener('click', () => {
         if (note) {
           note.textContent = 'Preview: the info panel explains how Ask Mirror Talk works.';
@@ -549,11 +747,25 @@
       widget.querySelector('.amt-insights-btn')?.addEventListener('click', () => {
         const saveStep = widget.querySelector('.amt-workflow-step[data-workflow-action="save_share"]');
         if (saveStep) activateWorkflowStep(saveStep);
+        const insightsPanel = widget.querySelector('.fixture-insights-panel');
+        if (insightsPanel) {
+          insightsPanel.style.display = '';
+          insightsPanel.classList.add('amt-insights-panel-pulse');
+          setTimeout(() => insightsPanel.classList.remove('amt-insights-panel-pulse'), 900);
+          insightsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       });
 
       widget.querySelector('.amt-notif-manage-btn')?.addEventListener('click', () => {
+        const panel = widget.querySelector('.fixture-notif-panel');
+        const isOpen = panel && panel.style.display !== 'none';
+        if (panel) {
+          panel.style.display = isOpen ? 'none' : '';
+          panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        widget.querySelector('.amt-notif-manage-btn')?.setAttribute('aria-expanded', String(!isOpen));
         if (note) {
-          note.textContent = 'Preview: notification settings open here for daily questions, reflection nudges, and episode alerts.';
+          note.textContent = 'Preview: notification settings open directly from the alerts button.';
           note.classList.add('fixture-tool-note-active');
         }
       });
@@ -589,6 +801,76 @@
         }
       }
     });
+  </script>
+  
+  <!-- Load Premium Features for Live Testing -->
+  <script src="../wordpress/astra-child/ask-mirror-talk.js"></script>
+  <script src="../wordpress/astra-child/ask-mirror-talk-premium.js"></script>
+  
+  <!-- Testing Console -->
+  <script>
+    console.log('🧪 Workflow Bar Fixture + Premium Features Testing');
+    console.log('📝 Open DevTools → Console for premium API tests');
+    console.log('💾 Check DevTools → Application → IndexedDB for database');
+    
+    // Expose testing helpers
+    window.testPremiumFeatures = async function() {
+      console.group('🧪 Premium Features Test Suite');
+      
+      // 1. Check API exists
+      console.log('✓ window.AskMirrorTalkPremium:', !!window.AskMirrorTalkPremium);
+      
+      if (!window.AskMirrorTalkPremium) {
+        console.error('❌ Premium features not loaded!');
+        console.groupEnd();
+        return;
+      }
+      
+      // 2. Test question coaching
+      const coaching = window.AskMirrorTalkPremium.coachQuestion("Why am I broken?");
+      console.log('✓ Question coaching:', coaching.needsReframe ? 'Detected harsh language' : 'Question OK');
+      
+      // 3. Test database
+      try {
+        await window.AskMirrorTalkPremium.saveReflection({
+          question: 'Test question from fixture',
+          answer: 'Test answer',
+          citations: [],
+          metadata: {}
+        });
+        console.log('✓ Database write: Success');
+        
+        const history = await window.AskMirrorTalkPremium.getReflectionHistory(1);
+        console.log('✓ Database read:', history.length, 'reflections');
+      } catch (err) {
+        console.error('❌ Database error:', err.message);
+      }
+      
+      // 4. Test patterns
+      try {
+        const patterns = await window.AskMirrorTalkPremium.analyzePatterns();
+        console.log('✓ Pattern analysis:', patterns.totalReflections, 'reflections analyzed');
+      } catch (err) {
+        console.error('❌ Pattern analysis error:', err.message);
+      }
+      
+      // 5. Test export
+      try {
+        const exported = await window.AskMirrorTalkPremium.exportReflections();
+        console.log('✓ Export:', exported.reflections?.length || 0, 'reflections exported');
+      } catch (err) {
+        console.error('❌ Export error:', err.message);
+      }
+      
+      console.groupEnd();
+      return '✅ Test suite complete - check results above';
+    };
+    
+    // Auto-run after 2 seconds
+    setTimeout(() => {
+      console.log('🔄 Running auto-test in 2 seconds...');
+      setTimeout(() => window.testPremiumFeatures(), 2000);
+    }, 100);
   </script>
 </body>
 </html>

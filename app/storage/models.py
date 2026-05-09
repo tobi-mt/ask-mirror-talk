@@ -192,6 +192,16 @@ class PushQotdHistory(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class PushNotificationDelivery(Base):
+    """Track one-off push deliveries that do not have a dedicated history table."""
+    __tablename__ = "push_notification_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int] = mapped_column(Integer, index=True)
+    notification_type: Mapped[str] = mapped_column(String(60), index=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class PushQotdQuestion(Base):
     """Pool of QOTD questions — seeded from static list, expanded by AI generation.
 

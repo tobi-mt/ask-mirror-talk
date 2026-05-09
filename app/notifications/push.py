@@ -693,6 +693,7 @@ Return only the JSON array, no other text."""
 # before a fresh batch is generated. Keeps the pool comfortably ahead.
 _REFILL_THRESHOLD = 10
 _REFILL_BATCH_SIZE = 20
+_PUSH_CATCHUP_WINDOW_MINUTES = 120
 
 
 def send_qotd_notification(db: Session) -> dict:
@@ -712,8 +713,10 @@ def send_qotd_notification(db: Session) -> dict:
     # Ensure the DB pool is seeded (no-op if already populated)
     _ensure_pool_seeded(db)
 
-    # Fetch active QOTD subscribers whose local hour == preferred_qotd_hour
-    # AND who have NOT already received a QOTD today (in their own timezone).
+    # Fetch active QOTD subscribers whose local time is within the preferred
+    # delivery window. The catch-up window protects against delayed Railway cron
+    # starts without sending duplicates because push_qotd_history is checked per
+    # subscriber/local day.
     rows = db.execute(
         text("""
             SELECT id, endpoint, p256dh_key, auth_key,
@@ -722,22 +725,29 @@ def send_qotd_notification(db: Session) -> dict:
             FROM push_subscriptions w
             WHERE active = true
               AND notify_qotd = true
-              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
-                  = w.preferred_qotd_hour
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) >= (w.preferred_qotd_hour * 60)
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) < (w.preferred_qotd_hour * 60 + :window_minutes)
               AND NOT EXISTS (
                   SELECT 1 FROM push_qotd_history h
                   WHERE h.subscription_id = w.id
                     AND (h.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
                         = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
               )
-        """)
+        """),
+        {"window_minutes": _PUSH_CATCHUP_WINDOW_MINUTES},
     ).fetchall()
 
     if not rows:
         logger.info("No QOTD subscribers due for delivery at this hour")
         return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
 
-    logger.info("Sending individualised QOTD to %d subscribers (timezone-filtered)", len(rows))
+    logger.info("Sending individualised QOTD to %d subscribers (timezone-filtered catch-up window)", len(rows))
 
     # ── Proactive refill check ──────────────────────────────────────────────
     # Find the subscriber who has seen the most questions (furthest along), then
@@ -1148,14 +1158,22 @@ def send_midday_motivation_notification(db: Session) -> dict:
             FROM push_subscriptions w
             WHERE active = true
               AND notify_midday = true
-              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 12
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) >= (12 * 60)
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) < (12 * 60 + :window_minutes)
               AND NOT EXISTS (
                   SELECT 1 FROM push_motivation_history h
                   WHERE h.subscription_id = w.id
                     AND (h.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
                         = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
               )
-        """)
+        """),
+        {"window_minutes": _PUSH_CATCHUP_WINDOW_MINUTES},
     ).fetchall()
 
     if not rows:
@@ -1379,7 +1397,8 @@ def send_streak_protection_notification(db: Session) -> dict:
     """
     today = datetime.now(timezone.utc).date()
 
-    # Only target subscribers whose local clock is at 20:00 (8 PM)
+    # Target the local evening window, with a delivery ledger so delayed or
+    # repeated cron starts do not spam the same subscriber.
     rows = db.execute(
         text("""
             SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key,
@@ -1388,7 +1407,14 @@ def send_streak_protection_notification(db: Session) -> dict:
                    w.updated_at
             FROM push_subscriptions w
             WHERE w.active = true
-              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 20
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) >= (20 * 60)
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) < (20 * 60 + :window_minutes)
               AND (w.updated_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
                     < (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
               AND NOT EXISTS (
@@ -1398,7 +1424,16 @@ def send_streak_protection_notification(db: Session) -> dict:
                       AND (q.created_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
                           = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
               )
-        """)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM push_notification_deliveries d
+                    WHERE d.subscription_id = w.id
+                      AND d.notification_type = 'streak'
+                      AND (d.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                          = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+              )
+        """),
+        {"window_minutes": _PUSH_CATCHUP_WINDOW_MINUTES},
     ).fetchall()
 
     if not rows:
@@ -1442,6 +1477,14 @@ def send_streak_protection_notification(db: Session) -> dict:
         )
         if result == "sent":
             sent += 1
+            db.execute(
+                text(
+                    "INSERT INTO push_notification_deliveries "
+                    "(subscription_id, notification_type, sent_at) "
+                    "VALUES (:sid, 'streak', NOW())"
+                ),
+                {"sid": sub_id},
+            )
         elif result == "expired":
             expired_ids.append(sub_id)
             failed += 1
@@ -1453,8 +1496,9 @@ def send_streak_protection_notification(db: Session) -> dict:
             text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
             {"ids": expired_ids},
         )
-        db.commit()
         logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    db.commit()
 
     result_summary = {
         "sent": sent,
@@ -1480,12 +1524,29 @@ def send_nightly_reflection_notification(db: Session) -> dict:
     rows = db.execute(
         text("""
             SELECT w.id, w.endpoint, w.p256dh_key, w.auth_key,
-                   COALESCE(w.user_ip, '') AS user_ip
+                   COALESCE(w.user_ip, '') AS user_ip,
+                   COALESCE(w.timezone, 'UTC') AS timezone_name
             FROM push_subscriptions w
             WHERE w.active = true
               AND w.notify_midday = true
-              AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) = 21
-        """)
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) >= (21 * 60)
+              AND (
+                    EXTRACT(HOUR FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))) * 60
+                    + EXTRACT(MINUTE FROM (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC')))
+                  ) < (21 * 60 + :window_minutes)
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM push_notification_deliveries d
+                    WHERE d.subscription_id = w.id
+                      AND d.notification_type = 'night_reflection'
+                      AND (d.sent_at AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+                          = (NOW() AT TIME ZONE COALESCE(w.timezone, 'UTC'))::date
+              )
+        """),
+        {"window_minutes": _PUSH_CATCHUP_WINDOW_MINUTES},
     ).fetchall()
 
     if not rows:
@@ -1511,7 +1572,7 @@ def send_nightly_reflection_notification(db: Session) -> dict:
     expired_ids: list[int] = []
 
     for row in rows:
-        sub_id, endpoint, p256dh, auth, user_ip = row
+        sub_id, endpoint, p256dh, auth, user_ip, _timezone_name = row
         recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
         recent_theme = _primary_theme_from_questions(recent_questions)
         is_returning = bool(recent_questions)
@@ -1531,6 +1592,14 @@ def send_nightly_reflection_notification(db: Session) -> dict:
         )
         if result == "sent":
             sent += 1
+            db.execute(
+                text(
+                    "INSERT INTO push_notification_deliveries "
+                    "(subscription_id, notification_type, sent_at) "
+                    "VALUES (:sid, 'night_reflection', NOW())"
+                ),
+                {"sid": sub_id},
+            )
         elif result == "expired":
             expired_ids.append(sub_id)
             failed += 1
@@ -1542,8 +1611,9 @@ def send_nightly_reflection_notification(db: Session) -> dict:
             text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
             {"ids": expired_ids},
         )
-        db.commit()
         logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
+
+    db.commit()
 
     result_summary = {
         "sent": sent,

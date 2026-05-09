@@ -5,6 +5,7 @@ from app.notifications.push import (
     _night_reflection_copy,
     _qotd_copy,
     send_new_episode_notification,
+    send_nightly_reflection_notification,
     send_streak_protection_notification,
 )
 
@@ -23,6 +24,24 @@ def test_streak_protection_skips_users_active_today():
     assert "FROM qa_logs q" in sql_text
     assert "q.user_ip = w.user_ip" in sql_text
     assert "NOT EXISTS" in sql_text
+    assert "push_notification_deliveries" in sql_text
+    assert "window_minutes" in str(db.execute.call_args[0][1])
+
+
+def test_nightly_reflection_uses_delivery_ledger_to_prevent_duplicates():
+    db = MagicMock()
+    execute_result = MagicMock()
+    execute_result.fetchall.return_value = []
+    db.execute.return_value = execute_result
+
+    result = send_nightly_reflection_notification(db)
+
+    assert result["sent"] == 0
+    statement = db.execute.call_args[0][0]
+    sql_text = str(statement)
+    assert "push_notification_deliveries" in sql_text
+    assert "night_reflection" in sql_text
+    assert "window_minutes" in str(db.execute.call_args[0][1])
 
 
 def test_qotd_copy_is_human_complete_and_not_generic():

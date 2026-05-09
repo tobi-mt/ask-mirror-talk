@@ -422,8 +422,12 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             # Parse JSON array
             questions = json.loads(cleaned)
             if isinstance(questions, list) and len(questions) > 0:
-                # Coerce all items to strings and filter empties
-                str_questions = [str(q).strip() for q in questions if q]
+                # Coerce all items to complete, user-facing questions.
+                str_questions = [
+                    cleaned
+                    for q in questions
+                    if (cleaned := _polish_follow_up_question(str(q)))
+                ]
                 if str_questions:
                     logger.info("Generated %d OpenAI follow-up questions", len(str_questions))
                     return str_questions[:3]
@@ -432,23 +436,108 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
         except Exception as e:
             logger.warning("Follow-up generation failed: %s", e, exc_info=True)
 
-    # Fallback: topic-based suggestions from chunk metadata
-    fallback = []
-    seen = set()
-    for chunk in chunks[:5]:
-        episode = chunk.get("episode", {})
-        title = episode.get("title", "")
-        if title and title not in seen:
-            seen.add(title)
-            fallback.append(f"Tell me more about \"{title[:60]}\"")
-        if len(fallback) >= 3:
-            break
+    return _fallback_follow_up_questions(question, chunks)
 
-    return fallback or [
-        "How can I apply this in my daily life?",
-        "What other episodes cover this topic?",
-        "Can you go deeper on this?",
+
+def _infer_follow_up_theme(text: str) -> str:
+    normalized = (text or "").lower()
+    theme_keywords = [
+        ("relationships", ("relationship", "dating", "marriage", "love", "attachment", "trust", "partner", "spouse")),
+        ("healing", ("grief", "loss", "trauma", "heal", "healing", "pain", "forgive", "forgiveness")),
+        ("courage", ("fear", "courage", "brave", "bold", "risk", "confidence")),
+        ("purpose", ("purpose", "calling", "meaning", "identity", "soul", "direction")),
+        ("habits", ("habit", "addiction", "discipline", "routine", "change", "stuck")),
+        ("faith", ("faith", "doubt", "god", "prayer", "spiritual", "surrender")),
+        ("peace", ("peace", "rest", "stillness", "anxiety", "uncertain", "overwhelm")),
+        ("leadership", ("leader", "leadership", "work", "ambition", "success")),
     ]
+    for theme, keywords in theme_keywords:
+        if any(keyword in normalized for keyword in keywords):
+            return theme
+    return "reflection"
+
+
+def _polish_follow_up_question(raw: str) -> str:
+    """Keep follow-up buttons complete and user-centered, even for legacy/cached text."""
+    text = re.sub(r"\s+", " ", (raw or "").strip().strip('"“”'))
+    if not text:
+        return ""
+
+    legacy_title_match = re.match(r"(?i)^tell me more about\s+[\"“](.+?)[\"”]?$", text)
+    if legacy_title_match:
+        theme = _infer_follow_up_theme(legacy_title_match.group(1))
+        return _theme_follow_up_questions(theme)[0]
+
+    if len(text) > 118:
+        theme = _infer_follow_up_theme(text)
+        return _theme_follow_up_questions(theme)[0]
+
+    if not text.endswith("?"):
+        text = text.rstrip(".!,:;") + "?"
+    return text
+
+
+def _theme_follow_up_questions(theme: str) -> list[str]:
+    prompts = {
+        "relationships": [
+            "How can I understand my relationship patterns with more honesty?",
+            "What would love look like here without losing myself?",
+            "What is one healthier way to respond in this relationship?",
+        ],
+        "healing": [
+            "What would healing ask me to be gentle with today?",
+            "What part of this pain needs attention rather than pressure?",
+            "How can I take one honest step toward repair?",
+        ],
+        "courage": [
+            "What would courage look like in this part of my life?",
+            "Where is fear asking for reassurance instead of control?",
+            "What small brave step could I take today?",
+        ],
+        "purpose": [
+            "What is this reflection asking me to notice about my purpose?",
+            "What keeps calling me forward, even quietly?",
+            "What next step would feel aligned rather than forced?",
+        ],
+        "habits": [
+            "What is the smallest wise step I can take to interrupt this habit?",
+            "What environment change would make the better choice easier?",
+            "What support would help me stay honest with this change?",
+        ],
+        "faith": [
+            "How can I make room for faith without pretending doubt is not there?",
+            "What would trust look like in one small decision today?",
+            "Where might I need honesty before certainty?",
+        ],
+        "peace": [
+            "What would help me return to a steadier inner place today?",
+            "What noise can I set down so I can hear myself clearly?",
+            "What small practice would make peace more reachable?",
+        ],
+        "leadership": [
+            "How can I lead this situation with more clarity and humility?",
+            "What would responsibility look like without pressure or performance?",
+            "What is one aligned decision I can make today?",
+        ],
+        "reflection": [
+            "What is the next honest question this reflection invites me to ask?",
+            "How can I apply this insight in one small way today?",
+            "What part of this answer should I carry with me next?",
+        ],
+    }
+    return prompts.get(theme, prompts["reflection"])
+
+
+def _fallback_follow_up_questions(question: str, chunks: list[dict]) -> list[str]:
+    theme_votes: list[str] = [_infer_follow_up_theme(question)]
+    for chunk in chunks[:5]:
+        episode = chunk.get("episode", {}) if isinstance(chunk, dict) else {}
+        title = episode.get("title", "") if isinstance(episode, dict) else ""
+        if title:
+            theme_votes.append(_infer_follow_up_theme(title))
+
+    preferred_theme = next((theme for theme in theme_votes if theme != "reflection"), "reflection")
+    return _theme_follow_up_questions(preferred_theme)[:3]
 
 
 def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:

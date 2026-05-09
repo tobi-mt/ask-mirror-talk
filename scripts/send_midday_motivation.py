@@ -42,6 +42,7 @@ def _is_transient_db_error(exc: Exception) -> bool:
             "server closed the connection",
             "could not connect",
             "timeout expired",
+            "consuming input failed",
         )
     )
 

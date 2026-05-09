@@ -22,13 +22,21 @@ builder = "dockerfile"
 #   Settings > Deploy > Start Command: python scripts/bulk_ingest.py --max-episodes 20 --no-confirm
 #   Settings > Variables > WHISPER_MODEL: tiny
 #
-# mirror-talk-qotd-cron service (QOTD + midday motivation — runs every hour):
+# mirror-talk-push-cron service (preferred single hourly push runner):
+#   Settings > Build > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
+#   Settings > Deploy > Start Command: python3 scripts/send_due_push_notifications.py
+#   Settings > Variables: same DB + VAPID keys as the API service
+#   Note: This runs QOTD, midday motivation, streak protection, and nightly
+#         reflection in one process. Postgres filters each send by subscriber
+#         timezone, so every region is covered when the job runs hourly.
+#
+# Optional separate-service alternative:
+# mirror-talk-qotd-cron service (daily question — runs every hour):
 #   Settings > Build > Dockerfile Path: Dockerfile.worker
 #   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
 #   Settings > Deploy > Start Command: python3 scripts/send_daily_qotd.py
 #   Settings > Variables: same DB + VAPID keys as the API service
-#   Note: Postgres filters to subscribers whose local hour == preferred_qotd_hour
-#         (default 8 AM). Each subscriber receives at most one QOTD per day.
 #
 # mirror-talk-midday-cron service (midday motivation — runs every hour):
 #   Settings > Build > Dockerfile Path: Dockerfile.worker
@@ -44,3 +52,10 @@ builder = "dockerfile"
 #   Settings > Variables: same DB + VAPID keys as the API service
 #   Note: Sends to subscribers whose local hour is 20 (8 PM). Encourages users
 #         who haven't asked a question today to keep their streak alive.
+#
+# mirror-talk-nightly-cron service (nightly reflection — runs every hour):
+#   Settings > Build > Dockerfile Path: Dockerfile.worker
+#   Settings > Deploy > Cron Schedule: 0 * * * * (every hour)
+#   Settings > Deploy > Start Command: python3 scripts/send_nightly_reflection.py
+#   Settings > Variables: same DB + VAPID keys as the API service
+#   Note: Sends to subscribers whose local hour is 21 (9 PM).

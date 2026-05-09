@@ -13,22 +13,18 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.13';
+    return '5.5.18';
 }
 
 function ask_mirror_talk_shortcode() {
     ob_start();
     ?>
-    <div class="ask-mirror-talk">
+    <div class="ask-mirror-talk amt-workflow-mode-ask">
         <div class="amt-heading-row">
             <div class="amt-heading-copy">
-                <p class="amt-heading-kicker">Premium reflection, grounded in real episodes</p>
+                <p class="amt-heading-kicker">Premium reflection</p>
                 <h2>Ask Mirror Talk</h2>
                 <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
-                <div class="amt-heading-trust-strip" aria-label="Why people trust Ask Mirror Talk">
-                    <span class="amt-heading-trust-pill">Private by default</span>
-                    <span class="amt-heading-trust-pill">Real episode references</span>
-                </div>
             </div>
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
@@ -51,13 +47,24 @@ function ask_mirror_talk_shortcode() {
             <div class="amt-stat amt-stat-themes">
                 <span class="amt-stat-icon" aria-hidden="true">🗺️</span>
                 <span class="amt-stat-value" id="amt-themes-value">0</span>
-                <span class="amt-stat-label">/ 20 topics</span>
+                <span class="amt-stat-label">topics</span>
             </div>
-            <button type="button" class="amt-badges-btn" id="amt-badges-btn" title="Your badges"><span aria-hidden="true">🏆</span> <span id="amt-badge-count">0</span><span class="screen-reader-text"> badges earned</span></button>
-            <button type="button" class="amt-insights-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights"><span aria-hidden="true">🔖</span><span class="screen-reader-text"> Saved insights</span></button>                <button type="button" class="amt-notif-manage-btn" id="amt-notif-manage-btn" title="Notification settings" style="display:none;" aria-expanded="false"><span aria-hidden="true">🔔</span><span class="screen-reader-text"> Notification settings</span></button>
+            <button type="button" class="amt-badges-btn amt-stat-action-btn" id="amt-badges-btn" title="Your badges" aria-label="Your badges">
+                <span aria-hidden="true">🏆</span>
+                <span id="amt-badge-count">0</span>
+                <span class="amt-stat-action-label">badges</span>
+            </button>
+            <button type="button" class="amt-insights-btn amt-stat-action-btn" id="amt-insights-btn" title="My saved insights" aria-label="My saved insights">
+                <span aria-hidden="true">🔖</span>
+                <span class="amt-stat-action-label">saved</span>
+            </button>
+            <button type="button" class="amt-notif-manage-btn amt-stat-action-btn" id="amt-notif-manage-btn" title="Notification settings" aria-expanded="false" aria-label="Notification settings">
+                <span aria-hidden="true">🔔</span>
+                <span class="amt-stat-action-label">alerts</span>
+            </button>
         </div>
         <nav id="amt-workflow-bar" class="amt-workflow-bar" aria-label="Ask Mirror Talk reflection path">
-            <span class="amt-workflow-guide" aria-hidden="true">Tap a step to move through your reflection</span>
+            <span class="amt-workflow-guide" aria-hidden="true">Choose your next step</span>
             <button type="button" class="amt-workflow-step amt-workflow-step-active" data-workflow-action="ask" aria-current="step">
                 <span class="amt-workflow-icon" aria-hidden="true">✦</span>
                 <span class="amt-workflow-label">Ask</span>
@@ -68,15 +75,10 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-workflow-label">Explore</span>
                 <span class="amt-workflow-hint">Prompts</span>
             </button>
-            <button type="button" class="amt-workflow-step" data-workflow-action="save">
+            <button type="button" class="amt-workflow-step" data-workflow-action="save_share">
                 <span class="amt-workflow-icon" aria-hidden="true">◇</span>
-                <span class="amt-workflow-label">Save</span>
-                <span class="amt-workflow-hint">Keep it</span>
-            </button>
-            <button type="button" class="amt-workflow-step" data-workflow-action="share">
-                <span class="amt-workflow-icon" aria-hidden="true">↗</span>
-                <span class="amt-workflow-label">Share</span>
-                <span class="amt-workflow-hint">Pass on</span>
+                <span class="amt-workflow-label">Save &amp; Share</span>
+                <span class="amt-workflow-hint">Keep/share</span>
             </button>
             <button type="button" class="amt-workflow-step" data-workflow-action="progress">
                 <span class="amt-workflow-icon" aria-hidden="true">◷</span>
@@ -84,73 +86,107 @@ function ask_mirror_talk_shortcode() {
                 <span class="amt-workflow-hint">Streak</span>
             </button>
         </nav>
-        <p id="amt-workflow-nudge" class="amt-workflow-nudge" role="status" aria-live="polite">Start with one honest question. After the answer, the next steps will open naturally.</p>
-        <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
-        <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
-        <div id="amt-streak-revival-card" class="amt-streak-revival-card" style="display:none;" role="region" aria-label="Streak recovery"></div>
-        <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
-        <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
-        <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
-        <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
         <!-- Journal modal -->
         <div id="amt-journal-modal" class="amt-journal-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="My reflection notes"></div>
-        <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
-        <div id="amt-explore-expander" class="amt-explore-expander" style="display:none;">
-            <button type="button" id="amt-explore-toggle" class="amt-explore-toggle" aria-expanded="false" aria-controls="amt-explore-panel">
-                <span class="amt-explore-icons" id="amt-explore-icons" aria-hidden="true"></span>
-                <span class="amt-explore-label">Explore topics &amp; questions</span>
-                <span class="amt-explore-chevron" aria-hidden="true">&rsaquo;</span>
-            </button>
-            <div id="amt-explore-panel" class="amt-explore-panel" role="region" aria-label="Topics and suggested questions">
-                <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
-                    <p class="amt-topics-label">Browse by topic:</p>
-                    <div class="amt-topics-list"></div>
+
+        <div id="amt-workflow-panels" class="amt-workflow-panels">
+            <section id="amt-workflow-panel-ask" class="amt-workflow-panel amt-workflow-panel-ask" data-workflow-panel="ask" aria-label="Ask">
+                <form id="ask-mirror-talk-form">
+                    <div class="amt-form-intro">
+                        <div>
+                            <p class="amt-form-kicker">Start your reflection</p>
+                            <label for="ask-mirror-talk-input">What’s on your heart?</label>
+                        </div>
+                        <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find and show you where the answer came from.</p>
+                    </div>
+                    <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
+                    <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
+                    <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>
+                    <div class="amt-form-footer">
+                        <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
+                        <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
+                    </div>
+                </form>
+                <div class="ask-mirror-talk-response">
+                    <div class="amt-response-progress" id="amt-response-progress" aria-hidden="true"><div class="amt-response-progress-bar" id="amt-response-progress-bar"></div></div>
+                    <div class="amt-response-header">
+                        <h3>Your Reflection</h3>
+                        <button type="button" id="amt-copy-answer-btn" class="amt-copy-answer-btn" style="display:none;" title="Copy answer" aria-label="Copy answer">⎘ Copy</button>
+                    </div>
+                    <div id="amt-answer-context" class="amt-answer-context" style="display:none;"></div>
+                    <div id="ask-mirror-talk-output"></div>
+                    <div class="ask-mirror-talk-citations">
+                        <h3>Referenced Episodes</h3>
+                        <div id="amt-citation-trust-note" class="amt-citation-trust-note" style="display:none;"></div>
+                        <ul id="ask-mirror-talk-citations"></ul>
+                    </div>
+                    <div id="amt-mood-reactions" class="amt-mood-reactions" style="display:none;" aria-label="How did this land?"></div>
                 </div>
-                <div id="ask-mirror-talk-suggestions" class="amt-suggestions" style="display:none;">
-                    <p class="amt-suggestions-label">Try asking about:</p>
-                    <div class="amt-suggestions-list"></div>
+            </section>
+
+            <section id="amt-workflow-panel-explore" class="amt-workflow-panel amt-workflow-panel-explore" data-workflow-panel="explore" aria-label="Explore">
+                <div class="amt-workflow-panel-header">
+                    <p class="amt-workflow-panel-kicker">Explore</p>
+                    <h3>Continue without losing the thread.</h3>
+                    <p>Use follow-up questions, suggested prompts, and topics when you want to go deeper.</p>
                 </div>
-            </div>
-        </div>
-        <form id="ask-mirror-talk-form">
-            <div class="amt-form-intro">
-                <div>
-                    <p class="amt-form-kicker">Start your reflection</p>
-                    <label for="ask-mirror-talk-input">What’s on your heart?</label>
+                <div id="amt-continuation-strip" class="amt-continuation-strip" style="display:none;" aria-label="Next steps"></div>
+                <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
+                <div id="ask-mirror-talk-followups" class="amt-followups" style="display:none;">
+                    <p class="amt-followups-label">You might also want to ask:</p>
+                    <div class="amt-followups-list"></div>
                 </div>
-                <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find and show you where the answer came from.</p>
-            </div>
-            <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
-            <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>
-            <div class="amt-form-footer">
-                <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
-                <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
-            </div>
-        </form>
-        <div class="ask-mirror-talk-response">
-            <div class="amt-response-progress" id="amt-response-progress" aria-hidden="true"><div class="amt-response-progress-bar" id="amt-response-progress-bar"></div></div>
-            <div class="amt-response-header">
-                <h3>Your Reflection</h3>
-                <button type="button" id="amt-copy-answer-btn" class="amt-copy-answer-btn" style="display:none;" title="Copy answer" aria-label="Copy answer">⎘ Copy</button>
-            </div>
-            <div id="amt-answer-context" class="amt-answer-context" style="display:none;"></div>
-            <div id="ask-mirror-talk-output"></div>
-            <div id="amt-continuation-strip" class="amt-continuation-strip" style="display:none;" aria-label="Next steps"></div>
-            <div id="amt-answer-utilities" class="amt-answer-utilities"></div>
-            <div id="amt-mood-reactions" class="amt-mood-reactions" style="display:none;" aria-label="How did this land?"></div>
-            <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
+                <div id="amt-explore-expander" class="amt-explore-expander" style="display:none;">
+                    <button type="button" id="amt-explore-toggle" class="amt-explore-toggle" aria-expanded="false" aria-controls="amt-explore-panel">
+                        <span class="amt-explore-icons" id="amt-explore-icons" aria-hidden="true"></span>
+                        <span class="amt-explore-label">Explore topics &amp; questions</span>
+                        <span class="amt-explore-chevron" aria-hidden="true">&rsaquo;</span>
+                    </button>
+                    <div id="amt-explore-panel" class="amt-explore-panel" role="region" aria-label="Topics and suggested questions">
+                        <div id="ask-mirror-talk-topics" class="amt-topics" style="display:none;">
+                            <p class="amt-topics-label">Browse by topic:</p>
+                            <div class="amt-topics-list"></div>
+                        </div>
+                        <div id="ask-mirror-talk-suggestions" class="amt-suggestions" style="display:none;">
+                            <p class="amt-suggestions-label">Try asking about:</p>
+                            <div class="amt-suggestions-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="amt-workflow-panel-save-share" class="amt-workflow-panel amt-workflow-panel-save-share" data-workflow-panel="save_share" aria-label="Save and Share">
+                <div class="amt-workflow-panel-header">
+                    <p class="amt-workflow-panel-kicker">Save &amp; Share</p>
+                    <h3>Keep what mattered, or pass it on.</h3>
+                    <p>Save the insight, write a private note, email the reflection, or share a polished card.</p>
+                </div>
+                <div id="amt-save-share-hub" class="amt-save-share-hub" role="region" aria-label="Save and share guidance"></div>
+                <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
+                <div id="amt-answer-utilities" class="amt-answer-utilities"></div>
+                <div id="amt-insights-panel" class="amt-insights-panel" style="display:none;" role="region" aria-label="My saved insights"></div>
+            </section>
+
+            <section id="amt-workflow-panel-progress" class="amt-workflow-panel amt-workflow-panel-progress" data-workflow-panel="progress" aria-label="Rhythm">
+                <div class="amt-workflow-panel-header">
+                    <p class="amt-workflow-panel-kicker">Rhythm</p>
+                    <h3>Your Momentum lives here.</h3>
+                    <p>See your streak, badges, weekly recap, and the small signs that reflection is becoming a rhythm.</p>
+                </div>
+                <div id="amt-momentum-card" class="amt-momentum-card" style="display:none;" role="region" aria-label="Your Momentum"></div>
+                <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
+                <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
+                <div id="amt-streak-revival-card" class="amt-streak-revival-card" style="display:none;" role="region" aria-label="Streak recovery"></div>
+                <div id="amt-notif-manage-panel" class="amt-notif-manage-panel" style="display:none;" aria-label="Notification settings"></div>
+                <div id="amt-badge-shelf" class="amt-badge-shelf" style="display:none;"></div>
+            </section>
         </div>
-        <div class="ask-mirror-talk-citations">
-            <h3>Verify The Answer</h3>
-            <div id="amt-citation-trust-note" class="amt-citation-trust-note" style="display:none;"></div>
-            <ul id="ask-mirror-talk-citations"></ul>
-        </div>
-        <div id="ask-mirror-talk-followups" class="amt-followups" style="display:none;">
-            <p class="amt-followups-label">You might also want to ask:</p>
-            <div class="amt-followups-list"></div>
+        <div id="amt-workflow-nudge" class="amt-workflow-nudge amt-workflow-footer-nudge">
+            <span id="amt-workflow-nudge-text" class="amt-workflow-nudge-text" role="status" aria-live="polite">Choose the next gentle step when you are ready.</span>
+            <div id="amt-workflow-nudge-actions" class="amt-workflow-nudge-actions" aria-label="Suggested next steps"></div>
         </div>
     </div>
     <!-- Onboarding overlay (rendered by JS on first visit) -->
@@ -167,7 +203,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.13: workflow continuity polish and final release packaging
+    $version = ask_mirror_talk_theme_version(); // v5.5.18: mobile fit guardrails and release cache refresh
     
     // Core styles
     wp_enqueue_style(

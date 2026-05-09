@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.13 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.18 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -22,6 +22,7 @@
   const explorePanel = document.querySelector('#amt-explore-panel');
   const exploreIcons = document.querySelector('#amt-explore-icons');
   const journeyCard = document.querySelector('#amt-journey-card');
+  const momentumCard = document.querySelector('#amt-momentum-card');
   const weeklyRecapCard = document.querySelector('#amt-weekly-recap');
   const streakRevivalCard = document.querySelector('#amt-streak-revival-card');
   const answerContext = document.querySelector('#amt-answer-context');
@@ -31,6 +32,17 @@
   const questionCoach = document.querySelector('#amt-question-coach');
   const workflowBar = document.querySelector('#amt-workflow-bar');
   const workflowNudge = document.querySelector('#amt-workflow-nudge');
+  const workflowNudgeText = document.querySelector('#amt-workflow-nudge-text');
+  const workflowNudgeActions = document.querySelector('#amt-workflow-nudge-actions');
+  const widgetRoot = form ? form.closest('.ask-mirror-talk') : document.querySelector('.ask-mirror-talk');
+  const workflowPanelsRoot = document.querySelector('#amt-workflow-panels');
+  const workflowPanels = {
+    ask: document.querySelector('#amt-workflow-panel-ask'),
+    explore: document.querySelector('#amt-workflow-panel-explore'),
+    save_share: document.querySelector('#amt-workflow-panel-save-share'),
+    progress: document.querySelector('#amt-workflow-panel-progress')
+  };
+  const saveShareHub = document.querySelector('#amt-save-share-hub');
 
   if (!form) {
     console.warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -46,6 +58,8 @@
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
   const RECENT_EXPLORE_THEMES_KEY = 'amt_recent_explore_themes';
   const RECENT_NIGHT_THEMES_KEY = 'amt_recent_night_themes';
+  const WORKFLOW_SESSION_KEY = 'amt_active_workflow_step';
+  const AUTO_START_SESSION_KEY = 'amt_auto_start_processed';
   const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
   const TEST_FORCE_FAMILY = String(window.__AMT_TEST_FORCE_FAMILY__ || '').trim();
   let lastShownCitations = [];
@@ -193,6 +207,54 @@
   // Citations: CSS default is display:none so the h3 heading doesn't create blank space.
 
   // ─── Question of the Day ─────────────────────────────────────
+  function renderQuestionOfTheDay(data, options) {
+    if (!qotdContainer) return;
+    const source = data || {};
+    if (!source.question) {
+      qotdContainer.style.display = 'none';
+      return;
+    }
+
+    qotdContainer.innerHTML = `
+      <div class="amt-qotd-inner">
+        <div class="amt-qotd-header">
+          <span class="amt-qotd-badge">✨ Question of the Day</span>
+          <span class="amt-qotd-theme">${escapeHtml(source.theme || '')}</span>
+        </div>
+        <p class="amt-qotd-text">"${escapeHtml(source.question)}"</p>
+        <button type="button" class="amt-qotd-ask">Ask this →</button>
+      </div>
+    `;
+
+    qotdContainer.querySelector('.amt-qotd-ask').addEventListener('click', () => {
+      setQuestionOrigin('qotd', { theme: source.theme || null });
+      input.value = source.question;
+      input.focus();
+      qotdContainer.style.display = 'none';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
+
+    if (!options || options.persist !== false) {
+      try {
+        localStorage.setItem('amt_latest_qotd', JSON.stringify({
+          question: String(source.question || '').slice(0, 500),
+          theme: String(source.theme || '').slice(0, 80),
+          date: todayStr ? todayStr() : null,
+          savedAt: Date.now()
+        }));
+      } catch (e) {}
+    }
+
+    qotdContainer.style.display = '';
+  }
+
+  function renderCachedQuestionOfTheDay() {
+    const cached = loadLatestQotd();
+    if (!cached || !cached.question) return false;
+    renderQuestionOfTheDay(cached, { persist: false });
+    return true;
+  }
+
   function loadQuestionOfTheDay() {
     if (!qotdContainer) return;
 
@@ -200,43 +262,15 @@
       .then(res => res.json())
       .then(data => {
         if (!data.question) {
-          qotdContainer.style.display = 'none';
+          if (!renderCachedQuestionOfTheDay()) qotdContainer.style.display = 'none';
           return;
         }
 
-        qotdContainer.innerHTML = `
-          <div class="amt-qotd-inner">
-            <div class="amt-qotd-header">
-              <span class="amt-qotd-badge">✨ Question of the Day</span>
-              <span class="amt-qotd-theme">${escapeHtml(data.theme || '')}</span>
-            </div>
-            <p class="amt-qotd-text">"${escapeHtml(data.question)}"</p>
-            <button type="button" class="amt-qotd-ask">Ask this →</button>
-          </div>
-        `;
-
-        qotdContainer.querySelector('.amt-qotd-ask').addEventListener('click', () => {
-          setQuestionOrigin('qotd', { theme: data.theme || null });
-          input.value = data.question;
-          input.focus();
-          qotdContainer.style.display = 'none';
-          form.dispatchEvent(new Event('submit', { cancelable: true }));
-        });
-
-        try {
-          localStorage.setItem('amt_latest_qotd', JSON.stringify({
-            question: String(data.question || '').slice(0, 500),
-            theme: String(data.theme || '').slice(0, 80),
-            date: todayStr ? todayStr() : null,
-            savedAt: Date.now()
-          }));
-        } catch (e) {}
-
-        qotdContainer.style.display = '';
+        renderQuestionOfTheDay(data);
       })
       .catch(err => {
         console.warn('Could not load Question of the Day:', err);
-        qotdContainer.style.display = 'none';
+        if (!renderCachedQuestionOfTheDay()) qotdContainer.style.display = 'none';
       });
   }
 
@@ -596,6 +630,39 @@
     });
   }
 
+  function runWhenReady(callback, delay) {
+    const waitMs = typeof delay === 'number' ? delay : 120;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(callback, waitMs), { once: true });
+    } else {
+      setTimeout(callback, waitMs);
+    }
+  }
+
+  function markAutoStartProcessed(key) {
+    const clean = String(key || '').slice(0, 700);
+    if (!clean) return true;
+    try {
+      const previous = sessionStorage.getItem(AUTO_START_SESSION_KEY);
+      if (previous === clean) return false;
+      sessionStorage.setItem(AUTO_START_SESSION_KEY, clean);
+    } catch (e) {}
+    return true;
+  }
+
+  function removeAutoStartParams(keys) {
+    try {
+      const url = new URL(window.location.href);
+      keys.forEach(key => url.searchParams.delete(key));
+      const cleanUrl = `${url.pathname}${url.search}${url.hash}`;
+      history.replaceState(null, '', cleanUrl || window.location.pathname);
+    } catch (e) {
+      const params = new URLSearchParams(window.location.search);
+      keys.forEach(key => params.delete(key));
+      history.replaceState(null, '', `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`);
+    }
+  }
+
   // ─── Handle ?autoask= URL param (notification click → new tab) ─
   (function checkAutoAsk() {
     const params = new URLSearchParams(window.location.search);
@@ -603,77 +670,37 @@
     const nightReflection = params.get('night_reflection');
     const middayReflection = params.get('midday_reflection');
     const inviteReflection = params.get('invite_reflection');
-    const inviteSource = params.get('utm_source');
-    const inviteRef = params.get('ref');
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
-      // Remove the param from the browser URL so sharing/refreshing doesn't re-fire
-      const remainingParams = params.toString()
-        .replace(/autoask=[^&]*&?/, '')
-        .replace(/&$/, '');
-      const cleanUrl = window.location.pathname +
-        (remainingParams ? `?${remainingParams}` : '') +
-        window.location.hash;
-      history.replaceState(null, '', cleanUrl || window.location.pathname);
-
-      // Wait for DOM to be fully ready then auto-submit
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => autoSubmitQuestion(question));
-      } else {
-        // Tiny delay to let the widget's own init finish
-        setTimeout(() => autoSubmitQuestion(question), 100);
+      removeAutoStartParams(['autoask', 'midday_reflection']);
+      if (markAutoStartProcessed(`autoask:${question}`)) {
+        runWhenReady(() => autoSubmitQuestion(question, 'notification_autoask'), 100);
       }
       return;
     }
 
     if (nightReflection === '1') {
-      const remainingParams = params.toString()
-        .replace(/night_reflection=[^&]*&?/, '')
-        .replace(/&$/, '');
-      const cleanUrl = window.location.pathname +
-        (remainingParams ? `?${remainingParams}` : '') +
-        window.location.hash;
-      history.replaceState(null, '', cleanUrl || window.location.pathname);
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => autoStartNightReflection());
-      } else {
-        setTimeout(() => autoStartNightReflection(), 120);
+      removeAutoStartParams(['night_reflection']);
+      if (markAutoStartProcessed(`night_reflection:${todayStr()}`)) {
+        runWhenReady(() => autoStartNightReflection(), 120);
       }
       return;
     }
 
     if (middayReflection === '1') {
-      const remainingParams = params.toString()
-        .replace(/midday_reflection=[^&]*&?/, '')
-        .replace(/&$/, '');
-      const cleanUrl = window.location.pathname +
-        (remainingParams ? `?${remainingParams}` : '') +
-        window.location.hash;
-      history.replaceState(null, '', cleanUrl || window.location.pathname);
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => autoStartMiddayReflection());
-      } else {
-        setTimeout(() => autoStartMiddayReflection(), 120);
+      removeAutoStartParams(['midday_reflection']);
+      if (markAutoStartProcessed(`midday_reflection:${todayStr()}`)) {
+        runWhenReady(() => autoStartMiddayReflection(), 120);
       }
       return;
     }
 
-    if (inviteReflection === '1' || (inviteSource === 'invite_friend' && inviteRef === 'invite_button')) {
-      const remainingParams = params.toString()
-        .replace(/invite_reflection=[^&]*&?/, '')
-        .replace(/&$/, '');
-      const cleanUrl = window.location.pathname +
-        (remainingParams ? `?${remainingParams}` : '') +
-        window.location.hash;
-      history.replaceState(null, '', cleanUrl || window.location.pathname);
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => autoStartInviteFriendReflection());
-      } else {
-        setTimeout(() => autoStartInviteFriendReflection(), 120);
+    if (inviteReflection === '1') {
+      removeAutoStartParams(['invite_reflection']);
+      const inviteKey = `invite_reflection:${params.get('q') || params.get('theme') || todayStr()}`;
+      if (markAutoStartProcessed(inviteKey)) {
+        runWhenReady(() => autoStartInviteFriendReflection(), 120);
       }
     }
   })();
@@ -704,9 +731,10 @@
       } else if (event.data && event.data.type === 'AUTO_START_NIGHT_REFLECTION') {
         autoStartNightReflection();
       } else if (event.data && event.data.type === 'NAVIGATE_TO_FORM') {
-        // Legacy service-worker fallback path: prefer a smart midday auto-start
-        // instead of just opening the form with an empty state.
-        autoStartMiddayReflection();
+        // Legacy service-worker fallback path: focus the asking surface only.
+        // Auto-starting here made normal PWA launches feel like the app was
+        // forcing a reflection without a clear notification intent.
+        runWorkflowAction('ask', { persist: true, scroll: true });
       } else if (event.data && event.data.type === 'SW_UPDATED') {
         // New service worker just activated and claimed this tab.
         // Reload so the page picks up freshly-cached JS/CSS instead of old
@@ -879,6 +907,88 @@
   }
 
   // ─── Follow-up Questions ────────────────────────────────────
+  function inferFollowUpTheme(text) {
+    const value = String(text || '').toLowerCase();
+    const checks = [
+      ['relationships', ['relationship', 'dating', 'marriage', 'love', 'attachment', 'trust', 'partner', 'spouse']],
+      ['healing', ['grief', 'loss', 'trauma', 'heal', 'healing', 'pain', 'forgive', 'forgiveness']],
+      ['courage', ['fear', 'courage', 'brave', 'bold', 'risk', 'confidence']],
+      ['purpose', ['purpose', 'calling', 'meaning', 'identity', 'soul', 'direction']],
+      ['habits', ['habit', 'addiction', 'discipline', 'routine', 'change', 'stuck']],
+      ['faith', ['faith', 'doubt', 'god', 'prayer', 'spiritual', 'surrender']],
+      ['peace', ['peace', 'rest', 'stillness', 'anxiety', 'uncertain', 'overwhelm']],
+      ['leadership', ['leader', 'leadership', 'work', 'ambition', 'success']]
+    ];
+
+    const match = checks.find(([, keywords]) => keywords.some(keyword => value.includes(keyword)));
+    return match ? match[0] : 'reflection';
+  }
+
+  function followUpPromptsForTheme(theme) {
+    const prompts = {
+      relationships: [
+        'How can I understand my relationship patterns with more honesty?',
+        'What would love look like here without losing myself?',
+        'What is one healthier way to respond in this relationship?'
+      ],
+      healing: [
+        'What would healing ask me to be gentle with today?',
+        'What part of this pain needs attention rather than pressure?',
+        'How can I take one honest step toward repair?'
+      ],
+      courage: [
+        'What would courage look like in this part of my life?',
+        'Where is fear asking for reassurance instead of control?',
+        'What small brave step could I take today?'
+      ],
+      purpose: [
+        'What is this reflection asking me to notice about my purpose?',
+        'What keeps calling me forward, even quietly?',
+        'What next step would feel aligned rather than forced?'
+      ],
+      habits: [
+        'What is the smallest wise step I can take to interrupt this habit?',
+        'What environment change would make the better choice easier?',
+        'What support would help me stay honest with this change?'
+      ],
+      faith: [
+        'How can I make room for faith without pretending doubt is not there?',
+        'What would trust look like in one small decision today?',
+        'Where might I need honesty before certainty?'
+      ],
+      peace: [
+        'What would help me return to a steadier inner place today?',
+        'What noise can I set down so I can hear myself clearly?',
+        'What small practice would make peace more reachable?'
+      ],
+      leadership: [
+        'How can I lead this situation with more clarity and humility?',
+        'What would responsibility look like without pressure or performance?',
+        'What is one aligned decision I can make today?'
+      ],
+      reflection: [
+        'What is the next honest question this reflection invites me to ask?',
+        'How can I apply this insight in one small way today?',
+        'What part of this answer should I carry with me next?'
+      ]
+    };
+    return prompts[theme] || prompts.reflection;
+  }
+
+  function polishFollowUpQuestion(raw, index) {
+    const original = String(raw || '').replace(/\s+/g, ' ').trim().replace(/^["“”]+|["“”]+$/g, '');
+    if (!original) return '';
+
+    const legacyTitle = original.match(/^tell me more about\s+["“](.+?)["”]?$/i);
+    if (legacyTitle || original.length > 118) {
+      const theme = inferFollowUpTheme(legacyTitle ? legacyTitle[1] : original);
+      const themedPrompts = followUpPromptsForTheme(theme);
+      return themedPrompts[index % themedPrompts.length];
+    }
+
+    return /[?]$/.test(original) ? original : `${original.replace(/[.!,:;]+$/g, '')}?`;
+  }
+
   function showFollowUpQuestions(questions, options) {
     if (!followupsContainer || !followupsList || !questions || questions.length === 0) {
       if (followupsContainer) followupsContainer.style.display = 'none';
@@ -892,7 +1002,7 @@
     }
 
     followupsList.innerHTML = '';
-    questions.forEach(q => {
+    questions.map(polishFollowUpQuestion).filter(Boolean).slice(0, 3).forEach(q => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'amt-followup-btn';
@@ -2525,6 +2635,17 @@
 
   function setWorkflowActive(action) {
     if (!workflowBar) return;
+    if (widgetRoot) {
+      ['ask', 'explore', 'save_share', 'progress'].forEach(mode => {
+        widgetRoot.classList.toggle(`amt-workflow-mode-${mode}`, mode === action);
+      });
+    }
+    Object.entries(workflowPanels).forEach(([mode, panel]) => {
+      if (!panel) return;
+      const isActive = mode === action;
+      panel.toggleAttribute('hidden', !isActive);
+      panel.setAttribute('aria-hidden', String(!isActive));
+    });
     workflowBar.querySelectorAll('.amt-workflow-step').forEach(step => {
       const isActive = step.dataset.workflowAction === action;
       step.classList.toggle('amt-workflow-step-active', isActive);
@@ -2544,79 +2665,252 @@
 
   function setWorkflowNudge(text) {
     if (!workflowNudge || !text) return;
-    workflowNudge.textContent = text;
+    const textTarget = workflowNudgeText || workflowNudge;
+    textTarget.textContent = text;
   }
 
   function getWorkflowNudge(action, state) {
     const current = state || {};
     if (action === 'explore') {
+      if (current.hasContinuation) return 'Continue your reflection here, then choose a follow-up when you want to go deeper.';
       if (current.hasFollowups) return 'Choose a follow-up when you want to keep the reflection close.';
       if (current.hasCitations) return 'Open the referenced episodes when you want to hear where the answer came from.';
       return 'Explore prompts and themes when you want help finding the next honest question.';
     }
-    if (action === 'save') {
-      if (current.hasReflectPrompt) return 'Pause here to write what landed before the moment passes.';
+    if (action === 'save_share') {
+      if (current.hasShareSection) return 'Keep what mattered, email it to yourself, or pass the reflection on.';
+      if (current.hasReflectPrompt) return 'Pause here to write what landed, then keep or pass on what mattered.';
       if (current.insightCount > 0) return 'Your saved insights stay here, ready to revisit or turn into a card.';
-      return 'After an answer, save the line you may want to return to later.';
-    }
-    if (action === 'share') {
-      if (current.hasShareSection) return 'If the reflection helped, pass on the card or invite someone into the same path.';
-      return 'Sharing unlocks after a complete answer, so the card carries something worth passing on.';
+      if (current.hasLastSession) return 'Your last reflection is ready to revisit, save, or share when you return.';
+      return 'After an answer, this becomes the place to save, email, or share the reflection.';
     }
     if (action === 'progress') {
-      if (current.hasProgress) return 'Your rhythm, badges, Reflection Pass, and weekly recap live here.';
-      return 'Return here as your reflection rhythm starts to grow.';
+      if (current.hasProgress) return 'Your Momentum, badges, Reflection Pass, and weekly recap live here.';
+      return 'Your reflection rhythm begins here, even before the first question today.';
     }
     if (current.hasAnswer) {
-      return 'Next, explore the sources, save what landed, or share the reflection when it feels ready.';
+      return 'Explore the thread when you want to go deeper, then keep or share what mattered.';
     }
-    return 'Start with one honest question. After the answer, the next steps will open naturally.';
+    return 'Move through the path at your pace: ask, explore, keep what matters, and build a rhythm.';
   }
 
-  function updateWorkflowBarState() {
-    if (!workflowBar) return;
+  function getWorkflowNudgeActions(action, state) {
+    const current = state || {};
+    const hasSomethingToKeep = !!(current.hasAnswer || current.hasLastSession || current.insightCount > 0);
+
+    if (action === 'explore') {
+      return hasSomethingToKeep
+        ? [
+            { action: 'save_share', label: 'Keep or share', primary: true },
+            { action: 'ask', label: 'Back to answer' },
+            { action: 'progress', label: 'View rhythm' }
+          ]
+        : [
+            { action: 'ask', label: 'Ask a question', primary: true },
+            { action: 'progress', label: 'View rhythm' }
+          ];
+    }
+
+    if (action === 'save_share') {
+      return [
+        { action: 'progress', label: 'View rhythm', primary: true },
+        { action: 'explore', label: 'Explore next' },
+        { action: 'ask', label: current.hasAnswer ? 'Ask another' : 'Ask first' }
+      ];
+    }
+
+    if (action === 'progress') {
+      return current.hasAnswer
+        ? [
+            { action: 'save_share', label: 'Keep or share', primary: true },
+            { action: 'explore', label: 'Explore next' },
+            { action: 'ask', label: 'Ask another' }
+          ]
+        : [
+            { action: 'ask', label: 'Ask today', primary: true },
+            { action: 'explore', label: 'Explore prompts' }
+          ];
+    }
+
+    if (current.hasAnswer) {
+      return [
+        { action: 'explore', label: 'Explore next', primary: true },
+        { action: 'save_share', label: 'Keep or share' },
+        { action: 'progress', label: 'View rhythm' }
+      ];
+    }
+
+    return [
+      { action: 'explore', label: 'Explore prompts', primary: true },
+      { action: 'progress', label: 'View rhythm' }
+    ];
+  }
+
+  function renderWorkflowNudgeActions(action, state) {
+    if (!workflowNudgeActions) return;
+    const actions = getWorkflowNudgeActions(action, state);
+    workflowNudgeActions.innerHTML = actions.map(item => `
+      <button type="button" class="amt-workflow-nudge-btn${item.primary ? ' amt-workflow-nudge-btn-primary' : ''}" data-workflow-nudge-action="${item.action}">
+        ${escapeHtml(item.label)}
+      </button>
+    `).join('');
+    workflowNudgeActions.querySelectorAll('[data-workflow-nudge-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        runWorkflowAction(btn.dataset.workflowNudgeAction, { persist: true, scroll: true });
+      });
+    });
+  }
+
+  function getWorkflowState() {
     const answerText = normalizeReflectionText(output ? (output.innerText || output.textContent || '') : '');
     const hasAnswer = answerText.length > 24 && responseContainer && responseContainer.style.display !== 'none';
     const shareSection = document.getElementById('amt-share-section');
     const insights = typeof loadInsights === 'function' ? loadInsights() : [];
     const stats = typeof loadStats === 'function' ? loadStats() : null;
     const hasExplore = !!(exploreExpander && exploreExpander.style.display !== 'none');
+    const hasContinuation = !!(continuationStrip && continuationStrip.style.display !== 'none');
     const hasFollowups = !!(followupsContainer && followupsContainer.style.display !== 'none');
     const hasCitations = !!(citationsContainer && citationsContainer.style.display !== 'none');
     const hasReflectPrompt = !!(document.getElementById('amt-reflect-section')?.style.display !== 'none');
+    const hasLastSession = !!(loadLastSession && loadLastSession());
     const hasProgress = !!(stats && (stats.totalQuestions > 0 || stats.currentStreak > 0 || stats.earnedBadges.size > 0));
-    const state = {
+    return {
       hasAnswer,
       hasShareSection: !!shareSection,
       hasExplore,
+      hasContinuation,
       hasFollowups,
       hasCitations,
       hasReflectPrompt,
       hasProgress,
+      hasLastSession,
       insightCount: insights.length
     };
+  }
 
-    workflowBar.classList.toggle('amt-workflow-has-answer', !!hasAnswer);
-    workflowBar.querySelector('[data-workflow-action="explore"]')?.classList.toggle('amt-workflow-step-available', hasExplore || hasFollowups || hasCitations);
-    workflowBar.querySelector('[data-workflow-action="save"]')?.classList.toggle('amt-workflow-step-available', hasAnswer || insights.length > 0);
-    workflowBar.querySelector('[data-workflow-action="share"]')?.classList.toggle('amt-workflow-step-available', !!shareSection);
-    workflowBar.querySelector('[data-workflow-action="progress"]')?.classList.toggle('amt-workflow-step-available', hasProgress);
+  function getActiveWorkflowPanel(action) {
+    return workflowPanels[action] || workflowPanels.ask || workflowPanelsRoot || widgetRoot;
+  }
 
-    setWorkflowHint('explore', hasFollowups ? 'Follow-up' : (hasCitations ? 'Episodes' : (hasExplore ? 'Prompts' : 'Soon')));
-    setWorkflowHint('save', hasReflectPrompt ? 'Reflect' : (insights.length ? `${insights.length} kept` : (hasAnswer ? 'Keep it' : 'After')));
-    setWorkflowHint('share', shareSection ? 'Ready' : 'After answer');
-    setWorkflowHint('progress', stats && stats.currentStreak > 0 ? `${stats.currentStreak}-day` : 'Streak');
+  function scrollToWorkflowPanel(action) {
+    const target = getActiveWorkflowPanel(action);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
-    if (shareSection) {
-      setWorkflowActive('share');
-      setWorkflowNudge(getWorkflowNudge('share', state));
-    } else if (hasAnswer) {
-      setWorkflowActive('save');
-      setWorkflowNudge(getWorkflowNudge('ask', state));
-    } else {
-      setWorkflowActive('ask');
-      setWorkflowNudge(getWorkflowNudge('ask', state));
+  function renderSaveShareHub(state) {
+    if (!saveShareHub) return;
+    const current = state || getWorkflowState();
+    const lastSession = loadLastSession ? loadLastSession() : null;
+    const insights = typeof loadInsights === 'function' ? loadInsights().map(normalizeInsightRecord) : [];
+    const answerText = normalizeReflectionText(output ? (output.innerText || output.textContent || '') : '');
+    const hasCurrentAnswer = current.hasAnswer && answerText.length > 24;
+    const lastQuestion = lastSession && lastSession.question ? String(lastSession.question) : '';
+    const lastTheme = lastSession && lastSession.theme ? String(lastSession.theme) : inferTheme(lastQuestion, lastSession && lastSession.answer ? lastSession.answer : '') || 'Reflection';
+    const lastExcerpt = lastSession
+      ? ensureReflectionSentence(lastSession.excerpt || extractInsightExcerpt(lastSession.answer || '', lastTheme) || '')
+      : '';
+
+    if (hasCurrentAnswer) {
+      saveShareHub.innerHTML = `
+        <div class="amt-save-share-hub-card">
+          <span class="amt-save-share-kicker">This reflection is ready to keep.</span>
+          <h3>Choose what should happen next.</h3>
+          <p>Write a private note, save the insight, email it to yourself, or pass on a card when the line is complete enough to share.</p>
+        </div>
+      `;
+      return;
     }
+
+    if (lastSession && lastQuestion) {
+      saveShareHub.innerHTML = `
+        <div class="amt-save-share-hub-card">
+          <span class="amt-save-share-kicker">${escapeHtml(lastTheme || 'Last reflection')}</span>
+          <h3>Return to your last reflection.</h3>
+          <p class="amt-save-share-question">${escapeHtml(lastQuestion)}</p>
+          ${lastExcerpt ? `<p class="amt-save-share-excerpt">“${escapeHtml(lastExcerpt)}”</p>` : ''}
+          <div class="amt-save-share-hub-actions">
+            <button type="button" class="amt-save-share-hub-btn" data-save-share-action="revisit">Revisit this reflection</button>
+            <button type="button" class="amt-save-share-hub-btn amt-save-share-hub-btn-secondary" data-save-share-action="insights">Open saved insights</button>
+          </div>
+        </div>
+      `;
+    } else {
+      saveShareHub.innerHTML = `
+        <div class="amt-save-share-hub-card">
+          <span class="amt-save-share-kicker">Nothing to keep yet.</span>
+          <h3>Ask first, then keep what matters.</h3>
+          <p>After your first answer, this section becomes your calm place for private notes, saved insights, email, cards, and invitations.</p>
+          <div class="amt-save-share-hub-actions">
+            <button type="button" class="amt-save-share-hub-btn" data-save-share-action="ask">Ask a reflection</button>
+            ${insights.length ? '<button type="button" class="amt-save-share-hub-btn amt-save-share-hub-btn-secondary" data-save-share-action="insights">Open saved insights</button>' : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    saveShareHub.querySelectorAll('[data-save-share-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.saveShareAction;
+        if (action === 'revisit' && lastQuestion) {
+          input.value = lastQuestion;
+          runWorkflowAction('ask', { persist: true, scroll: true });
+          setTimeout(() => form.dispatchEvent(new Event('submit', { cancelable: true })), 150);
+          return;
+        }
+        if (action === 'insights') {
+          renderInsightsPanel();
+          return;
+        }
+        runWorkflowAction('ask', { persist: true, scroll: true });
+      });
+    });
+  }
+
+  function getSavedWorkflowAction() {
+    try {
+      const action = sessionStorage.getItem(WORKFLOW_SESSION_KEY);
+      return ['ask', 'explore', 'save_share', 'progress'].includes(action) ? action : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function persistWorkflowAction(action) {
+    try {
+      if (action) sessionStorage.setItem(WORKFLOW_SESSION_KEY, action);
+    } catch (e) {}
+  }
+
+  function isWorkflowActionAvailable(action, state) {
+    if (action === 'ask') return true;
+    if (action === 'explore') return true;
+    if (action === 'save_share') return true;
+    if (action === 'progress') return true;
+    return false;
+  }
+
+  function updateWorkflowBarState() {
+    if (!workflowBar) return;
+    const state = getWorkflowState();
+    const savedAction = getSavedWorkflowAction();
+
+    workflowBar.classList.toggle('amt-workflow-has-answer', !!state.hasAnswer);
+    workflowBar.querySelector('[data-workflow-action="explore"]')?.classList.toggle('amt-workflow-step-available', isWorkflowActionAvailable('explore', state));
+    workflowBar.querySelector('[data-workflow-action="save_share"]')?.classList.toggle('amt-workflow-step-available', isWorkflowActionAvailable('save_share', state));
+    workflowBar.querySelector('[data-workflow-action="progress"]')?.classList.toggle('amt-workflow-step-available', isWorkflowActionAvailable('progress', state));
+
+    setWorkflowHint('explore', state.hasContinuation ? 'Continue' : (state.hasFollowups ? 'Follow-up' : (state.hasAnswer ? 'Next' : 'Prompts')));
+    setWorkflowHint('save_share', state.hasShareSection ? 'Ready' : (state.insightCount ? `${state.insightCount} kept` : (state.hasAnswer ? 'Keep it' : 'Ready')));
+    const progressStats = typeof loadStats === 'function' ? loadStats() : null;
+    setWorkflowHint('progress', progressStats && progressStats.totalQuestions > 0 ? 'Momentum' : 'Recap');
+
+    renderSaveShareHub(state);
+
+    const activeAction = savedAction && isWorkflowActionAvailable(savedAction, state) ? savedAction : 'ask';
+    setWorkflowActive(activeAction);
+    setWorkflowNudge(getWorkflowNudge(activeAction, state));
+    renderWorkflowNudgeActions(activeAction, state);
   }
 
   function scrollToElementSafely(element, block) {
@@ -2624,102 +2918,87 @@
     element.scrollIntoView({ behavior: 'smooth', block: block || 'center' });
   }
 
+  function runWorkflowAction(action, options) {
+    const opts = options || {};
+    const shouldPersist = opts.persist !== false;
+    const shouldScroll = opts.scroll !== false;
+    const state = getWorkflowState();
+
+    if (shouldPersist) persistWorkflowAction(action);
+    setWorkflowActive(action);
+    setWorkflowNudge(getWorkflowNudge(action, state));
+    renderWorkflowNudgeActions(action, state);
+
+    if (action === 'ask') {
+      if (state.hasAnswer && responseContainer && responseContainer.style.display !== 'none') {
+        if (shouldScroll) scrollToWorkflowPanel('ask');
+        return;
+      }
+      if (shouldScroll) focusFormWithQuestion(input ? input.value : '');
+      if (shouldScroll && input) input.focus();
+      return;
+    }
+
+    if (action === 'explore') {
+      restoreExploreContent();
+      if (exploreToggle && explorePanel) {
+        exploreToggle.setAttribute('aria-expanded', 'true');
+        explorePanel.classList.add('amt-explore-panel--open');
+      }
+      if (shouldScroll) scrollToWorkflowPanel('explore');
+      return;
+    }
+
+    if (action === 'save_share') {
+      renderSaveShareHub(state);
+      const shareSection = document.getElementById('amt-share-section');
+      const insightsBtn = document.getElementById('amt-insights-btn');
+      const insights = typeof loadInsights === 'function' ? loadInsights() : [];
+      const emailSection = document.getElementById('amt-email-section');
+      const saveInsightSection = document.getElementById('amt-save-insight-section');
+      const reflectSection = document.getElementById('amt-reflect-section');
+      if (shouldScroll) scrollToWorkflowPanel('save_share');
+      if (shareSection) {
+        shareSection.classList.add('amt-workflow-focus-pulse');
+        setTimeout(() => shareSection.classList.remove('amt-workflow-focus-pulse'), 900);
+        return;
+      }
+      if (saveInsightSection || emailSection) {
+        return;
+      }
+      if (reflectSection && reflectSection.style.display !== 'none') {
+        return;
+      }
+      if (insights.length && insightsBtn) {
+        renderInsightsPanel();
+        return;
+      }
+      return;
+    }
+
+    if (action === 'progress') {
+      const stats = loadStats();
+      renderStatsBar(stats);
+      renderBadgeShelf(stats);
+      renderMomentumCard(stats);
+      renderWeeklyRecap();
+      renderStreakRevivalCard(stats);
+      const shelf = document.getElementById('amt-badge-shelf');
+      const momentum = document.getElementById('amt-momentum-card');
+      const recap = document.getElementById('amt-weekly-recap-card');
+      const revival = document.getElementById('amt-streak-revival-card');
+      const badgesBtn = document.getElementById('amt-badges-btn');
+      if (shelf) shelf.style.display = '';
+      if (badgesBtn) badgesBtn.setAttribute('aria-expanded', 'true');
+      if (shouldScroll) scrollToWorkflowPanel('progress');
+    }
+  }
+
   function initWorkflowBar() {
     if (!workflowBar) return;
     workflowBar.querySelectorAll('.amt-workflow-step').forEach(step => {
       step.addEventListener('click', () => {
-        const action = step.dataset.workflowAction;
-        setWorkflowActive(action);
-        setWorkflowNudge(getWorkflowNudge(action, {
-          hasAnswer: normalizeReflectionText(output ? (output.innerText || output.textContent || '') : '').length > 24,
-          hasShareSection: !!document.getElementById('amt-share-section'),
-          hasExplore: !!(exploreExpander && exploreExpander.style.display !== 'none'),
-          hasFollowups: !!(followupsContainer && followupsContainer.style.display !== 'none'),
-          hasCitations: !!(citationsContainer && citationsContainer.style.display !== 'none'),
-          hasReflectPrompt: !!(document.getElementById('amt-reflect-section')?.style.display !== 'none'),
-          hasProgress: !!(typeof loadStats === 'function' && (() => {
-            const s = loadStats();
-            return s && (s.totalQuestions > 0 || s.currentStreak > 0 || (s.earnedBadges && s.earnedBadges.size > 0));
-          })()),
-          insightCount: typeof loadInsights === 'function' ? loadInsights().length : 0
-        }));
-
-        if (action === 'ask') {
-          focusFormWithQuestion(input ? input.value : '');
-          if (input) input.focus();
-          return;
-        }
-
-        if (action === 'explore') {
-          restoreExploreContent();
-          if (exploreToggle && explorePanel) {
-            exploreToggle.setAttribute('aria-expanded', 'true');
-            explorePanel.classList.add('amt-explore-panel--open');
-          }
-          const followupsVisible = followupsContainer && followupsContainer.style.display !== 'none';
-          const citationsVisible = citationsContainer && citationsContainer.style.display !== 'none';
-          if (followupsVisible) {
-            scrollToElementSafely(followupsContainer, 'center');
-            return;
-          }
-          if (citationsVisible) {
-            scrollToElementSafely(citationsContainer, 'center');
-            return;
-          }
-          scrollToElementSafely(questionCoach || exploreExpander || qotdContainer || form, 'center');
-          return;
-        }
-
-        if (action === 'save') {
-          const insightsBtn = document.getElementById('amt-insights-btn');
-          const insights = typeof loadInsights === 'function' ? loadInsights() : [];
-          const reflectSection = document.getElementById('amt-reflect-section');
-          if (reflectSection && reflectSection.style.display !== 'none') {
-            scrollToElementSafely(reflectSection, 'center');
-            return;
-          }
-          if (insights.length && insightsBtn) {
-            insightsBtn.click();
-            scrollToElementSafely(document.getElementById('amt-insights-panel'), 'start');
-            return;
-          }
-          const journalBtn = document.getElementById('amt-journal-btn');
-          if (journalBtn) journalBtn.click();
-          return;
-        }
-
-        if (action === 'share') {
-          const shareSection = document.getElementById('amt-share-section');
-          if (shareSection) {
-            scrollToElementSafely(shareSection, 'center');
-            shareSection.classList.add('amt-workflow-focus-pulse');
-            setTimeout(() => shareSection.classList.remove('amt-workflow-focus-pulse'), 900);
-            return;
-          }
-          scrollToElementSafely(responseContainer || form, 'center');
-          return;
-        }
-
-        if (action === 'progress') {
-          const stats = loadStats();
-          renderStatsBar(stats);
-          renderBadgeShelf(stats);
-          renderWeeklyRecap();
-          renderStreakRevivalCard(stats);
-          const shelf = document.getElementById('amt-badge-shelf');
-          const recap = document.getElementById('amt-weekly-recap-card');
-          const revival = document.getElementById('amt-streak-revival-card');
-          const badgesBtn = document.getElementById('amt-badges-btn');
-          if (shelf) shelf.style.display = '';
-          if (badgesBtn) badgesBtn.setAttribute('aria-expanded', 'true');
-          scrollToElementSafely(
-            (revival && revival.style.display !== 'none' && revival) ||
-            (recap && recap.style.display !== 'none' && recap) ||
-            shelf ||
-            document.getElementById('amt-stats-bar'),
-            'start'
-          );
-        }
+        runWorkflowAction(step.dataset.workflowAction, { persist: true, scroll: true });
       });
     });
 
@@ -2728,6 +3007,13 @@
     if (answerUtilities) workflowObserver.observe(answerUtilities, { childList: true, subtree: true });
     if (exploreExpander) workflowObserver.observe(exploreExpander, { attributes: true, attributeFilter: ['style', 'class'] });
     updateWorkflowBarState();
+    setTimeout(() => {
+      const savedAction = getSavedWorkflowAction();
+      const state = getWorkflowState();
+      if (savedAction && savedAction !== 'ask' && isWorkflowActionAvailable(savedAction, state)) {
+        runWorkflowAction(savedAction, { persist: false, scroll: false });
+      }
+    }, 150);
   }
 
   function updateCitationTrustNote(citationsList) {
@@ -3731,11 +4017,11 @@
         <p class="amt-notif-prefs-intro">Pick the reminders that would actually be helpful. You can change these later.</p>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-qotd" checked>
-          <span>✨ Daily reflection question</span>
+          <span>Daily reflection question</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-midday" checked>
-          <span>💡 Midday and nightly reflections</span>
+          <span>Midday and nightly reflections</span>
         </label>
         <label class="amt-notif-pref">
           <input type="checkbox" id="amt-notif-episodes" checked>
@@ -3914,11 +4200,21 @@
       // Get the service worker registration
       const registration = await navigator.serviceWorker.ready;
 
-      // Subscribe to push
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey,
-      });
+      // Reuse an existing browser subscription when it still belongs to the
+      // current VAPID key. If the VAPID key changed, old subscriptions receive
+      // server-side 401/403 failures forever until the browser resubscribes.
+      let subscription = await registration.pushManager.getSubscription();
+      if (subscription && !pushSubscriptionMatchesVapidKey(subscription, applicationServerKey, public_key)) {
+        console.warn('[Push] Existing subscription uses an older VAPID key; resubscribing');
+        try { await subscription.unsubscribe(); } catch (e) {}
+        subscription = null;
+        _writeStorage(PUSH_HEARTBEAT_DAY_KEY, '');
+      }
+
+      subscription = subscription || await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey,
+        });
 
       const subJson = subscription.toJSON();
 
@@ -3945,6 +4241,7 @@
         console.log('[Push] Subscription registered successfully');
         try {
           _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, true, 365);
+          _writeStorage(PUSH_VAPID_KEY_STORAGE_KEY, public_key);
           _writeStorage(PUSH_HEARTBEAT_DAY_KEY, '');
           // Bell is already shown by initNotifManageBtn, just ensure it's visible
           const bellBtn = document.getElementById('amt-notif-manage-btn');
@@ -3981,6 +4278,73 @@
     return outputArray;
   }
 
+  function pushSubscriptionMatchesVapidKey(subscription, applicationServerKey, publicKey) {
+    try {
+      const storedPublicKey = _readStorage(PUSH_VAPID_KEY_STORAGE_KEY);
+      if (storedPublicKey && storedPublicKey !== publicKey) return false;
+
+      const existingKey = subscription?.options?.applicationServerKey;
+      if (!existingKey) return true;
+
+      const current = new Uint8Array(applicationServerKey);
+      const existing = new Uint8Array(existingKey);
+      if (current.length !== existing.length) return false;
+      for (let i = 0; i < current.length; i += 1) {
+        if (current[i] !== existing[i]) return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[Push] Could not verify VAPID key for existing subscription:', err);
+      return true;
+    }
+  }
+
+  async function ensurePushSubscriptionHealthy() {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return false;
+      if (Notification.permission !== 'granted') return false;
+
+      const vapidRes = await fetch(`${API_BASE}/api/push/vapid-key`);
+      if (!vapidRes.ok) return false;
+      const { public_key } = await vapidRes.json();
+      const applicationServerKey = urlBase64ToUint8Array(public_key);
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      const hasLocalSubscription = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
+
+      if (!subscription) {
+        if (hasLocalSubscription) {
+          _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, false, 365);
+          _writeStorage(PUSH_HEARTBEAT_DAY_KEY, '');
+          return !!(await subscribeToPush(true, true, true)).success;
+        }
+        return false;
+      }
+
+      if (!pushSubscriptionMatchesVapidKey(subscription, applicationServerKey, public_key)) {
+        try { await subscription.unsubscribe(); } catch (e) {}
+        _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, false, 365);
+        _writeStorage(PUSH_HEARTBEAT_DAY_KEY, '');
+        return !!(await subscribeToPush(true, true, true)).success;
+      }
+
+      const heartbeatOk = await refreshPushHeartbeat(true);
+      if (heartbeatOk) {
+        _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, true, 365);
+        _writeStorage(PUSH_VAPID_KEY_STORAGE_KEY, public_key);
+        return true;
+      }
+
+      // The browser still has permission/subscription, but the server row was
+      // lost or deactivated. Re-register it without asking the user again.
+      return !!(await subscribeToPush(true, true, true)).success;
+    } catch (err) {
+      console.warn('[Push] Subscription health check failed:', err);
+      return false;
+    }
+  }
+
   /**
    * Unsubscribe the current browser from push notifications.
    * Calls the backend and clears the local subscription flag.
@@ -4003,6 +4367,7 @@
       try {
         _saveMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY, false, 365);
         localStorage.removeItem(PUSH_HEARTBEAT_DAY_KEY);
+        localStorage.removeItem(PUSH_VAPID_KEY_STORAGE_KEY);
         localStorage.removeItem('amt_notif_dismiss_count');
         localStorage.removeItem('amt_notif_dismissed_permanent');
       } catch (e) {}
@@ -4017,7 +4382,10 @@
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
-      if (!subscription) return false;
+      if (!subscription) {
+        const created = await subscribeToPush(qotd, episodes, midday);
+        return !!created.success;
+      }
       const res = await fetch(`${API_BASE}/api/push/preferences`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -4031,6 +4399,10 @@
       if (res.ok) {
         refreshPushHeartbeat(true);
         return true;
+      }
+      if (res.status === 404) {
+        const recreated = await subscribeToPush(qotd, episodes, midday);
+        return !!recreated.success;
       }
       return false;
     } catch (err) {
@@ -4065,15 +4437,15 @@
       <div class="amt-nmp-prefs">
         <label class="amt-nmp-pref">
           <input type="checkbox" id="amt-nmp-qotd" checked>
-          <span>☀️ Question of the Day <em class="amt-nmp-pref-desc">Daily morning nudge at 8 AM</em></span>
+          <span>Question of the Day <em class="amt-nmp-pref-desc">Daily morning nudge at 8 AM</em></span>
         </label>
         <label class="amt-nmp-pref">
           <input type="checkbox" id="amt-nmp-midday" checked>
-          <span>🌤 Reflection nudges <em class="amt-nmp-pref-desc">Midday encouragement and a calm nightly reflection</em></span>
+          <span>Reflection nudges <em class="amt-nmp-pref-desc">Midday encouragement and a calm nightly reflection</em></span>
         </label>
         <label class="amt-nmp-pref">
           <input type="checkbox" id="amt-nmp-episodes" checked>
-          <span>🎙️ New podcast episodes <em class="amt-nmp-pref-desc">Only when a fresh Mirror Talk episode is published</em></span>
+          <span>New podcast episodes <em class="amt-nmp-pref-desc">Only when a fresh Mirror Talk episode is published</em></span>
         </label>
       </div>
       <div class="amt-nmp-actions">
@@ -4102,7 +4474,9 @@
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save preferences';
         const actions = panel.querySelector('.amt-nmp-actions');
+        actions.querySelector('.amt-nmp-error')?.remove();
         const err = document.createElement('span');
+        err.className = 'amt-nmp-error';
         err.style.cssText = 'font-size:13px;color:#c0392b;';
         err.textContent = 'Could not save — please try again.';
         actions.appendChild(err);
@@ -4200,11 +4574,9 @@
     try {
       const alreadySubscribed = _loadMirroredFlag('amt_push_subscribed', PUSH_SUBSCRIBED_COOKIE_KEY);
 
-      if (!alreadySubscribed) {
-        showNotificationOptIn();
-      } else {
-        refreshPushHeartbeat(false);
-      }
+      ensurePushSubscriptionHealthy().then((healthy) => {
+        if (!healthy && !alreadySubscribed) showNotificationOptIn();
+      });
     } catch (e) {}
   }, (() => {
     try {
@@ -4254,6 +4626,7 @@
   const ACTIVITY_LOG_COOKIE_KEY = 'amt_ax';
   const PUSH_SUBSCRIBED_COOKIE_KEY = 'amt_ps';
   const PUSH_HEARTBEAT_DAY_KEY = 'amt_push_heartbeat_day';
+  const PUSH_VAPID_KEY_STORAGE_KEY = 'amt_push_vapid_public_key';
 
   // ── Cookie helpers for cross-PWA-reinstall backup ────────────────────────
   // localStorage is wiped on iOS when the user deletes the PWA from homescreen.
@@ -4662,6 +5035,7 @@
       const newBadges = checkAndAwardBadges(s);
       saveStats(s);
       renderStatsBar(s);
+      renderMomentumCard(s);
       renderWeeklyRecap();
       newBadges.forEach(badge => showMilestoneToast(badge.emoji, `Badge unlocked: ${badge.name}`, badge.desc, badge));
     } catch (e) {}
@@ -4936,20 +5310,83 @@
     }
   }
 
+  function renderMomentumCard(stats) {
+    if (!momentumCard) return;
+    const s = stats || loadStats();
+    const themesCount = s.themesExplored && typeof s.themesExplored.size === 'number' ? s.themesExplored.size : 0;
+    const badgesCount = s.earnedBadges && typeof s.earnedBadges.size === 'number' ? s.earnedBadges.size : 0;
+    const savedCount = Number(s.insightsSaved || 0);
+    const sharedCount = Number(s.sharesCount || 0);
+    const questions = Number(s.totalQuestions || 0);
+    const streak = Number(s.currentStreak || 0);
+    const askedToday = s.lastSessionDate === todayStr() ? Number(s.dailyQuestions || 0) : 0;
+    const title = streak >= 3
+      ? `${streak} days of returning.`
+      : questions > 0
+        ? 'Your rhythm is beginning to take shape.'
+        : 'Your reflection rhythm can begin today.';
+    const text = questions > 0
+      ? `You have asked ${questions} question${questions === 1 ? '' : 's'}, explored ${themesCount} topic${themesCount === 1 ? '' : 's'}, saved ${savedCount} insight${savedCount === 1 ? '' : 's'}, and shared ${sharedCount} reflection${sharedCount === 1 ? '' : 's'}.`
+      : 'Start with one honest question, then let your rhythm grow through small, steady returns.';
+    const todayText = askedToday > 0
+      ? `${askedToday} reflection${askedToday === 1 ? '' : 's'} today.`
+      : 'No question asked yet today.';
+
+    momentumCard.innerHTML = `
+      <div class="amt-momentum-card-inner">
+        <div class="amt-momentum-copy">
+          <span class="amt-momentum-kicker">Your Momentum</span>
+          <h3 class="amt-momentum-title">${escapeHtml(title)}</h3>
+          <p class="amt-momentum-text">${escapeHtml(text)}</p>
+        </div>
+        <div class="amt-momentum-grid" aria-label="Reflection progress">
+          <span class="amt-momentum-pill"><strong>${streak}</strong><em>day streak</em></span>
+          <span class="amt-momentum-pill"><strong>${questions}</strong><em>questions</em></span>
+          <span class="amt-momentum-pill"><strong>${themesCount}</strong><em>topics</em></span>
+          <span class="amt-momentum-pill"><strong>${badgesCount}</strong><em>badges</em></span>
+        </div>
+        <div class="amt-momentum-next">
+          <span>${escapeHtml(todayText)}</span>
+          <button type="button" class="amt-momentum-ask-btn">${askedToday > 0 ? 'Ask another reflection' : 'Ask today’s reflection'}</button>
+        </div>
+      </div>
+    `;
+    momentumCard.style.display = '';
+
+    const askBtn = momentumCard.querySelector('.amt-momentum-ask-btn');
+    if (askBtn) {
+      askBtn.addEventListener('click', () => {
+        runWorkflowAction('ask', { persist: true, scroll: true });
+      });
+    }
+  }
+
   function renderStatsBar(stats) {
     const bar = document.getElementById('amt-stats-bar');
     if (!bar) return;
+    const safeStats = stats || loadStats();
+    const themesExplored = safeStats.themesExplored && typeof safeStats.themesExplored.size === 'number'
+      ? safeStats.themesExplored
+      : new Set(safeStats.themesExplored || []);
+    const earnedBadges = safeStats.earnedBadges && typeof safeStats.earnedBadges.size === 'number'
+      ? safeStats.earnedBadges
+      : new Set(safeStats.earnedBadges || []);
+    const hasProgress = Number(safeStats.totalQuestions || 0) > 0 ||
+                        Number(safeStats.currentStreak || 0) > 0 ||
+                        themesExplored.size > 0 ||
+                        earnedBadges.size > 0;
 
-    document.getElementById('amt-streak-value').textContent   = stats.currentStreak;
-    document.getElementById('amt-questions-value').textContent = stats.totalQuestions;
-    document.getElementById('amt-themes-value').textContent   = stats.themesExplored.size;
-    document.getElementById('amt-badge-count').textContent    = stats.earnedBadges.size;
+    bar.classList.toggle('amt-stats-bar-empty', !hasProgress);
+    document.getElementById('amt-streak-value').textContent   = Number(safeStats.currentStreak || 0);
+    document.getElementById('amt-questions-value').textContent = Number(safeStats.totalQuestions || 0);
+    document.getElementById('amt-themes-value').textContent   = themesExplored.size;
+    document.getElementById('amt-badge-count').textContent    = earnedBadges.size;
 
     // Update streak count inside the dark-mode toggle pill
     const toggleStreak = document.getElementById('amt-toggle-streak');
     if (toggleStreak) {
-      if (stats.currentStreak >= 1) {
-        toggleStreak.textContent = '\uD83D\uDD25' + stats.currentStreak;
+      if (safeStats.currentStreak >= 1) {
+        toggleStreak.textContent = '\uD83D\uDD25' + safeStats.currentStreak;
         toggleStreak.style.display = '';
       } else {
         toggleStreak.style.display = 'none';
@@ -4959,7 +5396,7 @@
     // Pulse the streak icon when streak > 0
     const streakIcon = bar.querySelector('.amt-stat-streak .amt-stat-icon');
     if (streakIcon) {
-      streakIcon.classList.toggle('amt-streak-active', stats.currentStreak >= 3);
+      streakIcon.classList.toggle('amt-streak-active', safeStats.currentStreak >= 3);
     }
 
     bar.style.display = '';
@@ -4979,9 +5416,9 @@
       bar.appendChild(prompt);
     }
     prompt.innerHTML = `
-      <span class="amt-stats-prompt-kicker">Next up</span>
-      <span class="amt-stats-prompt-text">${escapeHtml(getDailyMomentumText(stats))}</span>
-      <span class="amt-stats-prompt-subtext">${stats.currentStreak >= 3 ? 'Your streak is active and your return rhythm is building.' : 'Small consistent returns matter more than intensity.'}</span>
+      <span class="amt-stats-prompt-kicker">${hasProgress ? 'Next up' : 'Start here'}</span>
+      <span class="amt-stats-prompt-text">${escapeHtml(hasProgress ? getDailyMomentumText(safeStats) : 'Your reflection rhythm can begin with one honest question.')}</span>
+      <span class="amt-stats-prompt-subtext">${safeStats.currentStreak >= 3 ? 'Your streak is active and your return rhythm is building.' : 'Small consistent returns matter more than intensity.'}</span>
     `;
     updateWorkflowBarState();
   }
@@ -5153,6 +5590,7 @@
     const newBadges = checkAndAwardBadges(stats);
     saveStats(stats);
     renderStatsBar(stats);
+    renderMomentumCard(stats);
     renderStreakRevivalCard(stats);
     renderWeeklyRecap();
 
@@ -5377,21 +5815,19 @@
   // Initialise stats bar on page load
   try {
     const initStats = loadStats();
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                         window.navigator.standalone === true;
-    // Show stats bar if user has asked questions OR is in standalone/PWA mode
-    if (initStats.totalQuestions > 0 || isStandalone) {
-      renderStatsBar(initStats);
-      // Restore daily-depth glow if the user already hit ≥ 3 questions today
-      const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');
-      const isToday = initStats.lastSessionDate === todayStr();
-      if (questionsIcon && isToday && (initStats.dailyQuestions || 0) >= 3) {
-        questionsIcon.classList.add('amt-questions-active');
-      }
+    // Keep the progress summary stable above the workflow bar on every load.
+    // PWA display-mode detection can vary across refreshes, so the anchor should
+    // not depend on standalone mode or prior activity.
+    renderStatsBar(initStats);
+    renderMomentumCard(initStats);
+    // Restore daily-depth glow if the user already hit >= 3 questions today.
+    const questionsIcon = document.querySelector('.amt-stat-questions .amt-stat-value');
+    const isToday = initStats.lastSessionDate === todayStr();
+    if (questionsIcon && isToday && (initStats.dailyQuestions || 0) >= 3) {
+      questionsIcon.classList.add('amt-questions-active');
     }
     renderStreakRevivalCard(initStats);
     renderWeeklyRecap();
-    initWorkflowBar();
   } catch (e) {}
 
   // ========================================
@@ -8420,7 +8856,7 @@
 
     section.innerHTML = `
       <div class="amt-reflect-inner">
-        <p class="amt-reflect-label">✍️ Take a moment to reflect…</p>
+        <p class="amt-reflect-label">✍️ Pause before you keep it.</p>
         <p class="amt-reflect-question">${escapeHtml(prompt)}</p>
         <button type="button" class="amt-reflect-toggle">Jot a note ↓</button>
         <div class="amt-reflect-note-wrap" style="display:none;">
@@ -8688,7 +9124,7 @@
       const pageUrl = window.location.href;
 
       const noteItems = notes.length === 0
-        ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After asking a question, look for the <strong>✍️ Take a moment to reflect…</strong> section below the response.</p>`
+        ? `<p class="amt-journal-empty">You haven't saved any reflection notes yet.<br>After asking a question, look for the <strong>✍️ Pause before you keep it.</strong> section in Save &amp; Share.</p>`
         : notes.map((entry, i) => `
           <div class="amt-journal-entry" data-index="${i}">
             <div class="amt-insight-topline">
@@ -9077,6 +9513,12 @@
   });
   const toastEl = document.getElementById('amt-milestone-toast');
   if (toastEl) _toastObserver.observe(toastEl, { childList: true });
+
+  try {
+    initWorkflowBar();
+  } catch (e) {
+    console.warn('[Workflow] Could not initialize reflection workflow:', e);
+  }
 
   if (ENABLE_TEST_EXPORTS) {
     window.__AMT_TEST_EXPORTS__ = {

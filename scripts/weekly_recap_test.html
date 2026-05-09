@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly Recap Test - v5.5.23</title>
+  <link rel="stylesheet" href="../wordpress/astra-child/ask-mirror-talk.css?v=1778326369">
+  <style>
+    body { margin: 40px; font-family: sans-serif; background: #f5f5f5; }
+    h1 { color: #333; }
+    .test-info { background: #fff3cd; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    #weekly-recap-test { max-width: 600px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Weekly Recap Canvas Test - v5.5.23</h1>
+  
+  <div class="test-info">
+    <p><strong>This tests the new card template system</strong></p>
+    <p>Expected: Beautiful canvas card with gradients, glass panels, QR code</p>
+    <p>Check console for version numbers</p>
+  </div>
+
+  <div id="weekly-recap-test"></div>
+  
+  <button onclick="testRecap()" style="padding: 12px 24px; font-size: 16px; cursor: pointer;">Generate Weekly Recap Card</button>
+
+  <script src="../wordpress/astra-child/ask-mirror-talk.js?v=1778326369"></script>
+  
+  <script>
+    function testRecap() {
+      const mockData = {
+        topTheme: 'Community',
+        questionCount: 3,
+        savedCount: 0,
+        shareCount: 0,
+        strongestDayCount: 3,
+        recapPrompt: 'How has exploring Community shaped your week?',
+        latestSavedInsight: null
+      };
+      
+      console.log('🧪 Testing buildWeeklyRecapShareCard with mock data:', mockData);
+      
+      const dataUrl = buildWeeklyRecapShareCard(mockData, 1.0);
+      
+      if (dataUrl) {
+        const container = document.getElementById('weekly-recap-test');
+        container.innerHTML = `<img src="${dataUrl}" alt="Weekly Recap" style="max-width: 100%; border: 2px solid #ccc; border-radius: 12px;">`;
+        console.log('✅ Card generated successfully!');
+      } else {
+        console.error('❌ Card generation failed');
+        alert('Card generation failed - check console for errors');
+      }
+    }
+  </script>
+</body>
+</html>

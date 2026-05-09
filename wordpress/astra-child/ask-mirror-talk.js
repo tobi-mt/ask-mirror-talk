@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.20 loaded');
+  console.log('Ask Mirror Talk Widget v5.5.27 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -5194,110 +5194,184 @@
     };
   }
 
-  function buildWeeklyRecapShareCard(recap) {
+  function buildWeeklyRecapShareCard(recap, scale) {
     const data = recap || getWeeklyRecapData();
     if (!data) return null;
 
-    const W = 1200;
-    const H = 1500;
+    // Use standard reflection card dimensions (1080x1350) for consistency with our card template system
+    const scaleFactor = scale || 1.0;
+    const W = Math.round(1080 * scaleFactor);
+    const H = Math.round(1350 * scaleFactor);
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    const grad = ctx.createLinearGradient(0, 0, W, H);
-    grad.addColorStop(0, '#eef8f5');
-    grad.addColorStop(0.55, '#e4f1ed');
-    grad.addColorStop(1, '#dbe8e4');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = 'rgba(48,84,77,0.03)';
-    for (let i = 0; i < 3200; i++) {
-      ctx.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
+    // Scale all drawing operations
+    if (scaleFactor !== 1.0) {
+      ctx.scale(scaleFactor, scaleFactor);
     }
 
-    ctx.strokeStyle = 'rgba(72,119,111,0.24)';
-    ctx.lineWidth = 4;
-    _roundRect(ctx, 44, 44, W - 88, H - 88, 30);
-    ctx.stroke();
+    // Use the sophisticated card shell with gradients (similar to editorial_serene style)
+    const style = {
+      bg: ['#e8f5f2', '#d9ebe7', '#c8dfd9'],
+      orbA: 'rgba(78,205,196,0.28)',
+      orbB: 'rgba(112,162,153,0.22)',
+      accent: '#4a7b74',
+      text: '#1a2f2a',
+      textSoft: 'rgba(26,47,42,0.72)',
+      cardText: '#2e3a38',
+      panelEdge: 'rgba(255,255,255,0.32)'
+    };
+    
+    const variant = {
+      orbA: { x: 0.18, y: 0.14, inner: 28, outer: 520 },
+      orbB: { x: 0.84, y: 0.72, inner: 32, outer: 590 },
+      glossCurve: { lineX: 78, bendX: 46, bendY: 324, tailY: 490 }
+    };
 
-    ctx.fillStyle = '#48776f';
-    ctx.font = '600 30px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('ASK MIRROR TALK', W / 2, 126);
+    // Draw the beautiful card shell with gradients, orbs, and gloss
+    drawShareCardShell(ctx, style, 1080, 1350, variant);
 
-    ctx.fillStyle = '#2e2a24';
-    ctx.font = '700 68px Georgia, serif';
+    // Header
+    ctx.textAlign = 'left';
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 22px Georgia, serif';
+    ctx.fillText('ASK MIRROR TALK', 96, 114);
+
+    ctx.fillStyle = style.textSoft;
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('Your weekly reflection recap', 96, 156);
+
+    // Theme pill (if available)
+    if (data.topTheme) {
+      const themeLabel = truncateText(data.topTheme, 24);
+      ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      const pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
+      const pillX = 1080 - pillWidth - 96;
+      const pillY = 96;
+      const themeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillWidth, pillY + 54);
+      themeGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
+      themeGrad.addColorStop(1, 'rgba(255,255,255,0.10)');
+      ctx.fillStyle = themeGrad;
+      _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1.4;
+      _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
+      ctx.stroke();
+      ctx.fillStyle = style.accent;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(themeLabel, pillX + (pillWidth / 2), pillY + 27);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // Headline
+    ctx.fillStyle = style.text;
+    ctx.font = '700 64px Georgia, serif';
+    ctx.textAlign = 'left';
     const headline = data.topTheme
       ? `This week I kept returning to ${data.topTheme}.`
       : 'This week I kept returning to reflection.';
-    wrapCanvasText(ctx, headline, 150, 238, 900, 86, 4);
+    wrapCanvasText(ctx, headline, 110, 278, 860, 76, 3, 'left');
 
+    // Metrics panel
     const metrics = [
-      { label: 'Questions', value: data.questionCount },
-      { label: 'Saved', value: data.savedCount },
-      { label: 'Shared', value: data.shareCount }
+      { label: 'QUESTIONS', value: data.questionCount },
+      { label: 'SAVED', value: data.savedCount },
+      { label: 'SHARED', value: data.shareCount }
     ];
-    const cardY = 520;
-    const cardW = 250;
-    const gap = 28;
-    const startX = (W - (metrics.length * cardW + (metrics.length - 1) * gap)) / 2;
+    
+    const panelY = 520;
+    const panelWidth = 860;
+    const panelHeight = 190;
+    const panelX = 110;
+    
+    // Glass panel background with shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 34;
+    ctx.shadowOffsetY = 14;
+    const panelGrad = ctx.createLinearGradient(panelX, panelY, panelX + panelWidth, panelY + panelHeight);
+    panelGrad.addColorStop(0, 'rgba(255,255,255,0.93)');
+    panelGrad.addColorStop(1, 'rgba(255,255,255,0.88)');
+    ctx.fillStyle = panelGrad;
+    _roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 30);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = style.panelEdge;
+    ctx.lineWidth = 1.2;
+    _roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 30);
+    ctx.stroke();
+    
+    // Metrics grid
+    const metricWidth = panelWidth / 3;
     metrics.forEach((metric, index) => {
-      const x = startX + index * (cardW + gap);
-      ctx.fillStyle = 'rgba(255,255,255,0.72)';
-      _roundRect(ctx, x, cardY, cardW, 150, 24);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(72,119,111,0.18)';
-      ctx.lineWidth = 2;
-      _roundRect(ctx, x, cardY, cardW, 150, 24);
-      ctx.stroke();
-
-      ctx.fillStyle = '#48776f';
-      ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      const x = panelX + (index * metricWidth) + (metricWidth / 2);
+      
+      ctx.fillStyle = style.accent;
+      ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(metric.label.toUpperCase(), x + (cardW / 2), cardY + 42);
-
-      ctx.fillStyle = '#2e2a24';
-      ctx.font = '700 62px Georgia, serif';
-      ctx.fillText(String(metric.value), x + (cardW / 2), cardY + 106);
+      ctx.fillText(metric.label, x, panelY + 62);
+      
+      ctx.fillStyle = style.text;
+      ctx.font = '700 54px Georgia, serif';
+      ctx.fillText(String(metric.value), x, panelY + 128);
     });
 
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    _roundRect(ctx, 108, 758, W - 216, 458, 34);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(72,119,111,0.18)';
-    ctx.lineWidth = 2;
-    _roundRect(ctx, 108, 758, W - 216, 458, 34);
-    ctx.stroke();
-
+    // Supporting text
+    const subtextY = panelY + panelHeight + 52;
     const subline = data.strongestDayCount >= 3
       ? `Strongest day: ${data.strongestDayCount} moments of reflection`
       : 'Small consistent returns are building momentum';
-    ctx.fillStyle = '#48776f';
-    ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    
+    ctx.fillStyle = style.textSoft;
+    ctx.font = '600 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(subline, W / 2, 826);
+    ctx.fillText(subline, 1080 / 2, subtextY);
 
-    if (data.latestSavedInsight) {
-      ctx.fillStyle = '#355750';
-      ctx.font = '82px Georgia, serif';
+    // Optional saved insight quote
+    if (data.latestSavedInsight && data.latestSavedInsight.excerpt) {
+      const quoteY = subtextY + 70;
+      const quotePanel = {
+        x: 110,
+        y: quoteY,
+        width: 860,
+        height: 170
+      };
+      
+      // Quote panel background
+      ctx.shadowColor = 'rgba(0,0,0,0.12)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 10;
+      const quoteGrad = ctx.createLinearGradient(quotePanel.x, quotePanel.y, quotePanel.x + quotePanel.width, quotePanel.y + quotePanel.height);
+      quoteGrad.addColorStop(0, 'rgba(255,255,255,0.86)');
+      quoteGrad.addColorStop(1, 'rgba(255,255,255,0.82)');
+      ctx.fillStyle = quoteGrad;
+      _roundRect(ctx, quotePanel.x, quotePanel.y, quotePanel.width, quotePanel.height, 24);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      
+      // Opening quote mark
+      ctx.fillStyle = style.accent;
+      ctx.font = '72px Georgia, serif';
       ctx.textAlign = 'left';
-      ctx.fillText('“', 160, 920);
-
-      ctx.fillStyle = '#2e2a24';
-      ctx.font = '500 40px Georgia, serif';
-      wrapCanvasText(ctx, data.latestSavedInsight.excerpt, 160, 970, W - 320, 58, 5);
+      ctx.fillText('"', quotePanel.x + 32, quotePanel.y + 76);
+      
+      // Quote text
+      ctx.fillStyle = style.cardText;
+      ctx.font = '400 30px Georgia, serif';
+      wrapCanvasText(ctx, data.latestSavedInsight.excerpt, quotePanel.x + 78, quotePanel.y + 94, quotePanel.width - 110, 44, 3, 'left');
     }
 
-    ctx.fillStyle = '#2e2a24';
-    ctx.font = '600 30px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('mirrortalkpodcast.com/ask-mirror-talk', W / 2, 1328);
-
-    ctx.fillStyle = '#48776f';
-    ctx.font = '500 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('A week of reflection, saved and shared through Mirror Talk.', W / 2, 1372);
+    // Footer with QR code and "Scan to reflect" (uses our new card template system)
+    const footerY = 1350 - 188;
+    drawShareFooter(ctx, style, 1080, footerY, 'center', {
+      qrModuleSize: 4,
+      qrQuiet: 4,
+      chipWidth: 484,
+      chipHeight: 188
+    });
 
     return canvas.toDataURL('image/png');
   }
@@ -5306,7 +5380,8 @@
     const data = recap || getWeeklyRecapData();
     if (!data) return;
 
-    const dataUrl = buildWeeklyRecapShareCard(data);
+    // Use full size (scale=1.0) for sharing
+    const dataUrl = buildWeeklyRecapShareCard(data, 1.0);
     const caption = data.topTheme
       ? `My Ask Mirror Talk weekly recap: ${data.questionCount} questions, ${data.savedCount} saved insights, and a week centered on ${data.topTheme}.`
       : `My Ask Mirror Talk weekly recap: ${data.questionCount} questions, ${data.savedCount} saved insights, and a stronger reflection rhythm.`;
@@ -5327,19 +5402,13 @@
       return;
     }
 
+    // Generate smaller preview version (0.35 scale) for inline display using card templates
+    const cardImageUrl = buildWeeklyRecapShareCard(recap, 0.35);
+
     weeklyRecapCard.innerHTML = `
       <div class="amt-weekly-recap-inner">
-        <div class="amt-weekly-recap-copy">
-          <span class="amt-weekly-recap-kicker">Weekly recap</span>
-          <h3 class="amt-weekly-recap-title">${recap.topTheme ? `You kept returning to ${escapeHtml(recap.topTheme)}.` : 'Your reflection rhythm is taking shape.'}</h3>
-          <div class="amt-weekly-recap-metrics">
-            <span class="amt-weekly-recap-pill">${recap.questionCount} question${recap.questionCount === 1 ? '' : 's'}</span>
-            <span class="amt-weekly-recap-pill">${recap.savedCount} saved</span>
-            <span class="amt-weekly-recap-pill">${recap.shareCount} shared</span>
-          </div>
-          <p class="amt-weekly-recap-text">${recap.questionCount} question${recap.questionCount === 1 ? '' : 's'} asked, ${recap.savedCount} insight${recap.savedCount === 1 ? '' : 's'} saved, ${recap.shareCount} reflection${recap.shareCount === 1 ? '' : 's'} shared in the last 7 days.</p>
-          <p class="amt-weekly-recap-subtext">${recap.strongestDayCount >= 3 ? `Your strongest day held ${recap.strongestDayCount} moments of reflection.` : 'Small consistent returns are building momentum.'}</p>
-          ${recap.latestSavedInsight ? `<p class="amt-weekly-recap-quote">“${escapeHtml(recap.latestSavedInsight.excerpt)}”</p>` : ''}
+        <div class="amt-weekly-recap-card-container">
+          <img src="${cardImageUrl}" alt="Weekly Recap Card" class="amt-weekly-recap-card-image" />
         </div>
         <div class="amt-weekly-recap-actions">
           <button type="button" class="amt-weekly-recap-btn amt-weekly-recap-btn-primary" data-q="${escapeHtml(recap.recapPrompt)}">${recap.topTheme ? `Continue with ${escapeHtml(recap.topTheme)}` : 'Continue reflecting'}</button>

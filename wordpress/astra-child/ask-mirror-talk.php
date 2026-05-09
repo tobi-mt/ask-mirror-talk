@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.20';
+    return '5.5.27';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -204,8 +204,8 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.20: premium features - question coaching, memory, patterns, offline, export, notifications
-    
+    $version = ask_mirror_talk_theme_version(); // v5.5.27: reduced workflow panel headers to 14px (matches momentum text)
+
     // Core styles
     wp_enqueue_style(
         'ask-mirror-talk',

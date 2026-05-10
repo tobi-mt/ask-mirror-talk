@@ -1,7 +1,16 @@
 (function() {
   'use strict';
 
-  console.log('Ask Mirror Talk Widget v5.5.27 loaded');
+  // ─── Debug Logging ──────────────────────────────────────────
+  const DEBUG = window.location.hostname === 'localhost' || window.location.search.includes('debug=1');
+  const log = DEBUG ? console.log.bind(console, '[AMT]') : () => {};
+  const warn = DEBUG ? console.warn.bind(console, '[AMT]') : () => {};
+  const error = console.error.bind(console, '[AMT Error]'); // Always log errors
+
+  // Track when the page loaded (for service worker update detection)
+  window.amtLoadTime = Date.now();
+
+  log('Ask Mirror Talk Widget v5.5.27 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -45,7 +54,7 @@
   const saveShareHub = document.querySelector('#amt-save-share-hub');
 
   if (!form) {
-    console.warn('⚠️ Ask Mirror Talk form not found on this page');
+    warn('⚠️ Ask Mirror Talk form not found on this page');
     return;
   }
 
@@ -181,11 +190,11 @@
       const json = await res.json();
       if (json.success && json.data && json.data.nonce) {
         currentNonce = json.data.nonce;
-        console.log('✓ Nonce refreshed');
+        log('✓ Nonce refreshed');
         return true;
       }
     } catch (e) {
-      console.warn('Nonce refresh error:', e);
+      warn('Nonce refresh error:', e);
     }
     return false;
   }
@@ -267,9 +276,50 @@
         renderQuestionOfTheDay(data);
       })
       .catch(err => {
-        console.warn('Could not load Question of the Day:', err);
+        warn('Could not load Question of the Day:', err);
         if (!renderCachedQuestionOfTheDay()) qotdContainer.style.display = 'none';
       });
+    
+    // ─── Predictive Loading: Preload QOTD answer ──────────────────────────
+    // Prefetch the QOTD answer in background for instant response
+    setTimeout(preloadQOTDAnswer, 2000);
+  }
+  
+  function preloadQOTDAnswer() {
+    const qotd = _readStorage('amt_qotd_cache');
+    if (!qotd) return;
+    
+    try {
+      const data = JSON.parse(qotd);
+      if (!data.question) return;
+      
+      // Check if we already have a cached answer
+      const cached = _readStorage('amt_qotd_answer_cache');
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        if (cachedData.timestamp && (Date.now() - cachedData.timestamp < 3600000)) {
+          log('QOTD answer already cached');
+          return;
+        }
+      }
+      
+      // Prefetch answer in background
+      fetch(`${API_BASE}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: data.question })
+      })
+        .then(res => res.json())
+        .then(answer => {
+          _writeStorage('amt_qotd_answer_cache', JSON.stringify({
+            question: data.question,
+            answer,
+            timestamp: Date.now()
+          }));
+          log('QOTD answer preloaded');
+        })
+        .catch(() => {}); // Silent fail
+    } catch (e) {}
   }
 
   // ─── Auto-submit helper ──────────────────────────────────────
@@ -704,6 +754,23 @@
     }
   })();
 
+  // ─── Visual Viewport Stabilization (prevents PWA resize on keyboard) ────────
+  // Handle visual viewport changes when mobile keyboard appears/disappears
+  // This prevents unnecessary resizing of the PWA container
+  if (window.visualViewport) {
+    const viewportHandler = () => {
+      const viewport = window.visualViewport;
+      // Store viewport height as CSS variable for flexible layouts
+      document.documentElement.style.setProperty('--viewport-height', `${viewport.height}px`);
+    };
+    
+    window.visualViewport.addEventListener('resize', viewportHandler);
+    window.visualViewport.addEventListener('scroll', viewportHandler);
+    viewportHandler(); // Initialize
+    
+    log('Visual viewport stabilization enabled');
+  }
+
   // ─── Handle messages from service worker (already-open tab) ───
   if ('serviceWorker' in navigator) {
     // controllerchange fires natively when a new SW takes control — works on
@@ -713,6 +780,18 @@
     var _hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', function() {
       if (!_hadController) { _hadController = true; return; }
+      
+      // Check if user is actively working before forcing reload
+      const hasResults = document.querySelector('.amt-result-card');
+      const hasTextInProgress = input && input.value.trim().length > 0;
+      const timeSinceLoad = Date.now() - (window.amtLoadTime || Date.now());
+      const justOpened = timeSinceLoad < 30000;
+      
+      if (hasResults || hasTextInProgress || justOpened) {
+        console.log('[AMT] Controller changed, but deferring reload (user active)');
+        return;
+      }
+      
       try {
         if (!sessionStorage.getItem('amt_sw_reloaded')) {
           sessionStorage.setItem('amt_sw_reloaded', '1');
@@ -735,15 +814,50 @@
         // forcing a reflection without a clear notification intent.
         runWorkflowAction('ask', { persist: true, scroll: true });
       } else if (event.data && event.data.type === 'SW_UPDATED') {
-        // New service worker just activated and claimed this tab.
-        // Reload so the page picks up freshly-cached JS/CSS instead of old
-        // in-memory assets. Guard with sessionStorage to prevent reload loops.
+        // New service worker activated. Instead of forcing immediate reload,
+        // check if the user is actively using the app. Only reload if idle.
+        
+        // Skip reload if user has results displayed or text in progress
+        const hasResults = document.querySelector('.amt-result-card');
+        const hasTextInProgress = askInput && askInput.value.trim().length > 0;
+        const hasUnsavedWork = hasResults || hasTextInProgress;
+        
+        // Skip reload if it's been less than 30 seconds since page load (user just opened app)
+        const timeSinceLoad = Date.now() - (window.amtLoadTime || Date.now());
+        const justOpened = timeSinceLoad < 30000;
+        
+        if (hasUnsavedWork || justOpened) {
+          console.log('[AMT] Service worker updated, but deferring reload (user active)');
+          // Show a subtle notification that update is available
+          // The update will apply on next page load naturally
+          return;
+        }
+        
+        // Only reload if page appears idle and we haven't already reloaded
         try {
           if (!sessionStorage.getItem('amt_sw_reloaded')) {
             sessionStorage.setItem('amt_sw_reloaded', '1');
+            console.log('[AMT] Reloading to apply service worker update');
             window.location.reload();
           }
-        } catch (e) { window.location.reload(); }
+        } catch (e) { 
+          // If sessionStorage fails, reload anyway (likely private mode)
+          window.location.reload(); 
+        }
+      }
+    });
+    
+    // Clear the reload flag when page becomes visible again
+    // This allows future SW updates to reload after user has seen the current version
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) {
+        // Page is now visible - clear reload flag after a delay
+        // This ensures user has seen the current version
+        setTimeout(function() {
+          try {
+            sessionStorage.removeItem('amt_sw_reloaded');
+          } catch (e) {}
+        }, 5000); // 5 second delay before allowing next reload
       }
     });
   }
@@ -778,7 +892,7 @@
         updateExploreExpander();
       })
       .catch(err => {
-        console.warn('Could not load suggested questions:', err);
+        warn('Could not load suggested questions:', err);
         suggestionsContainer.style.display = 'none';
       });
   }
@@ -854,7 +968,7 @@
         updateExploreExpander();
       })
       .catch(err => {
-        console.warn('Could not load topics:', err);
+        warn('Could not load topics:', err);
         topicsContainer.style.display = 'none';
       });
   }
@@ -1197,11 +1311,13 @@
 
       output.innerHTML = `
         <div class="amt-loading">
-          <div class="amt-shimmer-group">
-            <div class="amt-shimmer"></div>
-            <div class="amt-shimmer"></div>
-            <div class="amt-shimmer"></div>
-            <div class="amt-shimmer"></div>
+          <div class="amt-skeleton-answer">
+            <div class="amt-skeleton-line" style="width: 92%"></div>
+            <div class="amt-skeleton-line" style="width: 96%"></div>
+            <div class="amt-skeleton-line" style="width: 89%"></div>
+            <div class="amt-skeleton-line" style="width: 94%"></div>
+            <div class="amt-skeleton-line" style="width: 85%"></div>
+            <div class="amt-skeleton-line" style="width: 78%"></div>
           </div>
           <div class="amt-loading-text">${loadingMessages[0]}</div>
         </div>
@@ -1239,13 +1355,31 @@
     }
   }
 
-  // Show error message with shake animation
-  function showError(message) {
+  // Show smart, contextual error messages
+  function showError(message, errorType = 'generic') {
+    const smartMessages = {
+      'network': '📡 Can\'t reach the server. Check your internet connection and try again.',
+      'timeout': '⏱️ This is taking longer than usual. The answer will arrive soon—keep waiting or try a shorter question.',
+      'rate_limit': '🌊 You\'re asking questions quickly! Take a breath and try again in 30 seconds.',
+      'server_error': '🔧 Our servers are having a moment. We\'ve been notified and are fixing it.',
+      'empty_response': '💭 Hmm, we couldn\'t find a strong answer. Try rephrasing your question or exploring a different theme.',
+      'generic': message || '⚠️ Something unexpected happened. Please try again.'
+    };
+    
+    const errorMessage = smartMessages[errorType] || smartMessages.generic;
+    
     responseContainer.style.display = '';
     requestAnimationFrame(() => responseContainer.classList.add('amt-visible'));
     responseContainer.classList.remove('amt-streaming', 'amt-loading-state');
     responseContainer.classList.add('error');
-    output.innerHTML = `<p><strong>⚠️ ${message}</strong></p>`;
+    output.innerHTML = `
+      <div class="amt-error-message">
+        <p><strong>${errorMessage}</strong></p>
+        <button onclick="document.querySelector('#ask-mirror-talk-form').dispatchEvent(new Event('submit'))" class="amt-retry-btn" style="margin-top: 1rem; padding: 0.5rem 1.5rem; background: var(--amt-accent, #943e08); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          Try Again
+        </button>
+      </div>
+    `;
     citations.innerHTML = "";
     citationsContainer.style.display = "none";
     if (followupsContainer) followupsContainer.style.display = 'none';
@@ -1750,7 +1884,7 @@
             }, 100);
           }
         } catch (parseErr) {
-          console.warn('SSE parse error:', parseErr, jsonStr);
+          warn('SSE parse error:', parseErr, jsonStr);
         }
       }
     }
@@ -1803,7 +1937,7 @@
         answer: answer,
         citations: citationsList,
         metadata: meta
-      }).catch(err => console.warn('Failed to save reflection:', err));
+      }).catch(err => warn('Failed to save reflection:', err));
       
       // Show follow-up suggestions from history
       window.AskMirrorTalkPremium.suggestFollowUps().then(suggestions => {
@@ -1827,7 +1961,7 @@
           
           followupsContainer.style.display = 'block';
         }
-      }).catch(err => console.warn('Failed to suggest follow-ups:', err));
+      }).catch(err => warn('Failed to suggest follow-ups:', err));
       
       // Show pattern insights periodically (every 5th question)
       window.AskMirrorTalkPremium.getCachedPatterns().then(patterns => {
@@ -1836,7 +1970,7 @@
             showPatternInsight(patterns);
           }
         }
-      }).catch(err => console.warn('Failed to get patterns:', err));
+      }).catch(err => warn('Failed to get patterns:', err));
     }
 
     responseContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1955,6 +2089,34 @@
     if (/…|\.\.\./.test(clean)) return false;
     if (/\b[a-z]{1,2}\s+[A-Z][a-z]/.test(clean)) return false;
     
+    // Check for unbalanced quotes and parentheses (critical for shareability)
+    const openParens = (clean.match(/\(/g) || []).length;
+    const closeParens = (clean.match(/\)/g) || []).length;
+    if (openParens !== closeParens) return false;
+    
+    const openBrackets = (clean.match(/\[/g) || []).length;
+    const closeBrackets = (clean.match(/\]/g) || []).length;
+    if (openBrackets !== closeBrackets) return false;
+    
+    // Check for unbalanced quotes (straight and curly)
+    const straightDoubleQuotes = (clean.match(/"/g) || []).length;
+    if (straightDoubleQuotes % 2 !== 0) return false;
+    
+    const curlyOpenQuotes = (clean.match(/[""]/g) || []).length;
+    const curlyCloseQuotes = (clean.match(/[""]/g) || []).length;
+    if (curlyOpenQuotes !== curlyCloseQuotes) return false;
+    
+    const singleQuotes = (clean.match(/'/g) || []).length;
+    const curlyOpenSingle = (clean.match(/'/g) || []).length;
+    const curlyCloseSingle = (clean.match(/'/g) || []).length;
+    // Only check unbalanced single quotes if they're not used as apostrophes
+    if (singleQuotes >= 2 && singleQuotes % 2 !== 0) {
+      // Allow single quotes that are likely apostrophes (preceded/followed by letters)
+      const apostrophes = (clean.match(/[a-z]'[a-z]/gi) || []).length;
+      if ((singleQuotes - apostrophes) % 2 !== 0) return false;
+    }
+    if (curlyOpenSingle !== curlyCloseSingle) return false;
+    
     // Can't be a question
     if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
     if (isWeakShareHeadlineCandidate(clean)) return false;
@@ -2062,6 +2224,20 @@
     if (!text || words.length < 5) return -100;
 
     let score = 0;
+
+    
+    // Heavily penalize unbalanced quotes and parentheses (critical for shareability)
+    const openParens = (text.match(/\(/g) || []).length;
+    const closeParens = (text.match(/\)/g) || []).length;
+    if (openParens !== closeParens) score -= 50; // Massive penalty
+    
+    const straightDoubleQuotes = (text.match(/"/g) || []).length;
+    if (straightDoubleQuotes % 2 !== 0) score -= 50;
+    
+    const curlyOpenQuotes = (text.match(/[""]/g) || []).length;
+    const curlyCloseQuotes = (text.match(/[""]/g) || []).length;
+    if (curlyOpenQuotes !== curlyCloseQuotes) score -= 50;
+    
     const length = text.length;
     if (length >= 58 && length <= 150) score += 5;
     else if (length >= 42 && length <= 175) score += 3;
@@ -2636,9 +2812,25 @@
 
   function trimDanglingHeadlineTail(text) {
     let cleaned = String(text || '')
-      .replace(/^["'“”]+|["'“”]+$/g, '')
+      .replace(/^["'""]+|["'""]+$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+
+    // Remove incomplete quoted sections (opening quote/paren without closing)
+    // Remove from last opening quote/paren to end if not balanced
+    const openParenIndex = cleaned.lastIndexOf('(');
+    const closeParenIndex = cleaned.lastIndexOf(')');
+    if (openParenIndex > closeParenIndex) {
+      cleaned = cleaned.substring(0, openParenIndex).trim();
+    }
+    
+    // Check for unbalanced double quotes and truncate at last unmatched opening quote
+    const quoteMatches = [...cleaned.matchAll(/["""]/g)];
+    if (quoteMatches.length % 2 !== 0) {
+      // Find the last opening quote
+      const lastQuoteIndex = quoteMatches[quoteMatches.length - 1].index;
+      cleaned = cleaned.substring(0, lastQuoteIndex).trim();
+    }
 
     cleaned = cleaned
       .replace(/[,:;]\s*(and|or|but)$/i, '')
@@ -2894,6 +3086,9 @@
       : '';
 
     if (hasCurrentAnswer) {
+      const currentQuestion = session.question || 'your reflection';
+      const currentTheme = session.theme || inferTheme(currentQuestion, session.answer || '') || 'Reflection';
+      
       saveShareHub.innerHTML = `
         <div class="amt-save-share-hub-card">
           <span class="amt-save-share-kicker">This reflection is ready to keep.</span>
@@ -3401,11 +3596,11 @@
     const question = input.value.trim();
     emitProductEvent('question_submitted', { origin: pendingQuestionOrigin, length: question.length });
     if (!question) {
-      showError("Please enter a question.");
+      showError("Please enter a question.", 'generic');
       return;
     }
     if (question.length < 3) {
-      showError("Please enter a more detailed question.");
+      showError("Please enter a more detailed question.", 'generic');
       return;
     }
 
@@ -3420,7 +3615,7 @@
       // Try SSE streaming first
       await askStreaming(question);
     } catch (streamError) {
-      console.warn('SSE streaming failed, falling back to /ask:', streamError);
+      warn('SSE streaming failed, falling back to /ask:', streamError);
       responseContainer.classList.remove('amt-streaming');
 
       // Fallback: non-streaming via WordPress AJAX or direct API
@@ -3526,6 +3721,15 @@
       this.setAttribute('placeholder', 'e.g. How do I deal with grief? What does the Bible say about forgiveness?');
     }
     renderQuestionCoach(this.value);
+    
+    // Prevent unwanted scroll on mobile when keyboard appears
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // Small delay to let browser handle focus first
+      setTimeout(() => {
+        // Scroll to ensure input is visible without triggering resize
+        this.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      }, 100);
+    }
   });
 
   input.addEventListener('blur', function() {
@@ -3679,7 +3883,7 @@
 
   // Listen for successful install
   window.addEventListener('appinstalled', () => {
-    console.log('[PWA] App installed successfully');
+    log('[PWA] App installed successfully');
     deferredInstallPrompt = null;
     const banner = document.getElementById('amt-install-banner');
     if (banner) banner.remove();
@@ -9946,10 +10150,227 @@
   const toastEl = document.getElementById('amt-milestone-toast');
   if (toastEl) _toastObserver.observe(toastEl, { childList: true });
 
+  // ─── Keyboard Shortcuts ─────────────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    // Don't interfere with typing in input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    const shortcuts = {
+      '/': () => { input.focus(); e.preventDefault(); },
+      'n': () => { loadQuestionOfTheDay(); e.preventDefault(); },
+      's': () => { document.querySelector('.amt-share-btn')?.click(); e.preventDefault(); },
+      'c': () => { document.querySelector('.amt-copy-btn')?.click(); e.preventDefault(); },
+      'b': () => { exploreToggle?.click(); e.preventDefault(); },
+      '?': () => { showKeyboardHelp(); e.preventDefault(); }
+    };
+    
+    // Cmd/Ctrl + K for quick focus
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+    
+    if (shortcuts[e.key]) {
+      shortcuts[e.key]();
+    }
+  });
+  
+  function showKeyboardHelp() {
+    const helpModal = document.createElement('div');
+    helpModal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:2rem;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.3);z-index:10000;max-width:400px;';
+    helpModal.innerHTML = `
+      <h3 style="margin:0 0 1rem;font-size:1.5rem;">Keyboard Shortcuts</h3>
+      <div style="display:grid;gap:0.5rem;font-size:0.95rem;">
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">/</kbd> Focus question input</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">n</kbd> Load new QOTD</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">s</kbd> Share answer</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">c</kbd> Copy answer</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">b</kbd> Browse topics</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">Cmd/Ctrl + K</kbd> Quick ask</div>
+        <div><kbd style="padding:0.2rem 0.5rem;background:#f0f0f0;border-radius:4px;font-family:monospace;">?</kbd> Show this help</div>
+      </div>
+      <button onclick="this.parentElement.remove()" style="margin-top:1.5rem;padding:0.5rem 1.5rem;background:#943e08;color:white;border:none;border-radius:6px;cursor:pointer;width:100%;font-weight:600;">Got it</button>
+    `;
+    document.body.appendChild(helpModal);
+    
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;';
+    overlay.onclick = () => { helpModal.remove(); overlay.remove(); };
+    document.body.appendChild(overlay);
+  }
+  
+  // ─── Voice Input ───────────────────────────────────────────────
+  function enableVoiceInput() {
+    if (!('webkitSpeechRecognition' in window)) {
+      log('Speech recognition not supported');
+      return;
+    }
+    
+    const recognition = new webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    
+    const voiceBtn = document.createElement('button');
+    voiceBtn.type = 'button';
+    voiceBtn.className = 'amt-voice-btn';
+    voiceBtn.innerHTML = '🎤';
+    voiceBtn.title = 'Ask with voice';
+    voiceBtn.style.cssText = 'position:absolute;right:60px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.5rem;cursor:pointer;padding:0.5rem;opacity:0.6;transition:opacity 0.2s;';
+    voiceBtn.onmouseenter = () => voiceBtn.style.opacity = '1';
+    voiceBtn.onmouseleave = () => voiceBtn.style.opacity = '0.6';
+    
+    voiceBtn.onclick = () => {
+      try {
+        recognition.start();
+        voiceBtn.style.opacity = '1';
+        voiceBtn.innerHTML = '🔴';
+        input.placeholder = 'Listening...';
+      } catch (e) {
+        warn('Voice recognition error:', e);
+      }
+    };
+    
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0].transcript)
+        .join('');
+      input.value = transcript;
+    };
+    
+    recognition.onend = () => {
+      voiceBtn.innerHTML = '🎤';
+      voiceBtn.style.opacity = '0.6';
+      input.placeholder = 'Ask a question...';
+    };
+    
+    recognition.onerror = () => {
+      voiceBtn.innerHTML = '🎤';
+      voiceBtn.style.opacity = '0.6';
+      input.placeholder = 'Ask a question...';
+    };
+    
+    // Add button to form
+    if (input && input.parentElement && input.parentElement.style.position !== 'relative') {
+      input.parentElement.style.position = 'relative';
+    }
+    input.parentElement.appendChild(voiceBtn);
+    log('Voice input enabled');
+  }
+  
+  // Enable voice input on mobile devices
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
+    setTimeout(enableVoiceInput, 1000);
+  }
+  
+  // ─── Social Proof ──────────────────────────────────────────────
+  function showSocialProof() {
+    fetch(`${API_BASE}/api/stats/questions-today`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.count || data.count < 10) return; // Only show if meaningful
+        
+        const badge = document.createElement('div');
+        badge.className = 'amt-social-proof';
+        badge.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:0.75rem 1.25rem;background:rgba(148,62,8,0.95);color:white;border-radius:24px;font-size:0.85rem;font-weight:600;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.15);display:flex;align-items:center;gap:0.5rem;animation:slideInRight 0.5s ease;';
+        badge.innerHTML = `
+          <span style="display:inline-block;width:8px;height:8px;background:#4ade80;border-radius:50%;animation:pulse 2s infinite;"></span>
+          <span>${data.count} questions asked today</span>
+        `;
+        
+        // Add CSS animation
+        if (!document.getElementById('amt-social-proof-styles')) {
+          const style = document.createElement('style');
+          style.id = 'amt-social-proof-styles';
+          style.textContent = `
+            @keyframes slideInRight {
+              from { transform: translateX(120%); opacity: 0; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.5; transform: scale(1.2); }
+            }
+            @media (max-width: 640px) {
+              .amt-social-proof {
+                bottom: 80px !important;
+                right: 10px !important;
+                font-size: 0.8rem !important;
+              }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+        
+        widgetRoot.appendChild(badge);
+        
+        // Auto-hide after 8 seconds
+        setTimeout(() => {
+          badge.style.animation = 'slideInRight 0.5s ease reverse';
+          setTimeout(() => badge.remove(), 500);
+        }, 8000);
+      })
+      .catch(() => {}); // Silent fail
+  }
+  
+  // Show social proof after a delay
+  setTimeout(showSocialProof, 3000);
+  
+  // ─── Pull-to-Refresh ───────────────────────────────────────────
+  let pullStartY = 0;
+  let pullDistance = 0;
+  let refreshIndicator = null;
+  
+  function showRefreshIndicator() {
+    if (refreshIndicator) return;
+    refreshIndicator = document.createElement('div');
+    refreshIndicator.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);padding:1rem;background:rgba(148,62,8,0.95);color:white;border-radius:0 0 12px 12px;font-weight:600;z-index:1000;transition:transform 0.3s;';
+    refreshIndicator.innerHTML = '⬆️ Release to refresh';
+    document.body.appendChild(refreshIndicator);
+  }
+  
+  function hideRefreshIndicator() {
+    if (refreshIndicator) {
+      refreshIndicator.style.transform = 'translateX(-50%) translateY(-100%)';
+      setTimeout(() => {
+        refreshIndicator?.remove();
+        refreshIndicator = null;
+      }, 300);
+    }
+  }
+  
+  document.addEventListener('touchstart', (e) => {
+    if (window.scrollY === 0 && !submitBtn.disabled) {
+      pullStartY = e.touches[0].clientY;
+    }
+  });
+  
+  document.addEventListener('touchmove', (e) => {
+    if (pullStartY === 0) return;
+    pullDistance = e.touches[0].clientY - pullStartY;
+    if (pullDistance > 80 && !refreshIndicator) {
+      showRefreshIndicator();
+    } else if (pullDistance < 80 && refreshIndicator) {
+      hideRefreshIndicator();
+    }
+  });
+  
+  document.addEventListener('touchend', () => {
+    if (pullDistance > 80) {
+      loadQuestionOfTheDay();
+      // Haptic feedback if available
+      if (navigator.vibrate) navigator.vibrate(10);
+    }
+    pullStartY = 0;
+    pullDistance = 0;
+    hideRefreshIndicator();
+  });
+
   try {
     initWorkflowBar();
   } catch (e) {
-    console.warn('[Workflow] Could not initialize reflection workflow:', e);
+    warn('[Workflow] Could not initialize reflection workflow:', e);
   }
 
   if (ENABLE_TEST_EXPORTS) {

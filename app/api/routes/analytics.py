@@ -14,6 +14,29 @@ router = APIRouter()
 INTERNAL_USER_IP = "cache-prewarm"
 
 
+@router.get("/api/stats/questions-today")
+def get_questions_today(db: Session = Depends(get_db)):
+    """
+    Public endpoint for social proof - returns count of questions asked today.
+    No authentication required to support client-side widget.
+    """
+    try:
+        # Get midnight today in UTC
+        now = datetime.now(timezone.utc)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        count = db.execute(
+            text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :midnight AND COALESCE(user_ip, '') != :internal_user_ip"),
+            {"midnight": midnight, "internal_user_ip": INTERNAL_USER_IP},
+        ).scalar()
+        
+        return {"count": count or 0, "date": midnight.isoformat()}
+    except Exception as e:
+        logger.error(f"Error fetching questions-today count: {e}")
+        # Return a fallback value rather than error to avoid breaking widget
+        return {"count": 0, "error": "unavailable"}
+
+
 @router.get("/api/analytics/summary")
 def get_analytics_summary(
     days: int = 7,

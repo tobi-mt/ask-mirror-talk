@@ -8,7 +8,7 @@
  *   - Audio: network-only (too large to cache)
  */
 
-const CACHE_VERSION = 'amt-v5.5.27';
+const CACHE_VERSION = 'amt-v5.5.30';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -43,7 +43,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// ── Activate: clean up old caches, then tell open pages to reload ──
+// ── Activate: clean up old caches, then notify visible pages ──
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating', CACHE_VERSION);
   event.waitUntil(
@@ -58,17 +58,23 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
       .then(() => {
-        // Force-navigate every visible open tab so the new SW takes over
-        // immediately — no JS listener needed in the old page (which may be
-        // running a version that predates the SW_UPDATED postMessage handler).
+        // Only notify VISIBLE tabs about the update - don't force reload
+        // This prevents disruptive reloads when users resume from background
         return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
           .then((windowClients) => {
             windowClients.forEach((client) => {
-              // navigate() reloads the page under the new SW
-              client.navigate(client.url).catch(() => {
-                // Fallback: postMessage for browsers that don't support navigate()
-                client.postMessage({ type: 'SW_UPDATED' });
-              });
+              // Check if the client is focused/visible before notifying
+              // This prevents reload spam when user just minimized/resumed
+              if (client.visibilityState === 'visible' || client.focused) {
+                // Send a gentle notification instead of forcing reload
+                client.postMessage({ 
+                  type: 'SW_UPDATED',
+                  version: CACHE_VERSION,
+                  timestamp: Date.now()
+                });
+              } else {
+                console.log('[SW] Skipping hidden/unfocused tab - update will apply on next visit');
+              }
             });
           });
       })

@@ -211,6 +211,9 @@ body {
   transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
   box-sizing: border-box;
   resize: vertical;
+  /* Prevent iOS zoom on focus (font-size >= 16px prevents auto-zoom) */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #ask-mirror-talk-input:focus {
@@ -467,6 +470,24 @@ body {
 @keyframes shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* Enhanced Skeleton Loading Lines */
+.amt-skeleton-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 0;
+}
+
+.amt-skeleton-line {
+  height: 18px;
+  background: linear-gradient(90deg, #e8e4de 25%, #d8d2c8 50%, #e8e4de 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 4px;
+  opacity: 0.6;
 }
 
 .amt-loading-text {

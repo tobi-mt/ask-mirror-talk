@@ -130,11 +130,6 @@ function ask_mirror_talk_shortcode() {
             </section>
 
             <section id="amt-workflow-panel-explore" class="amt-workflow-panel amt-workflow-panel-explore" data-workflow-panel="explore" aria-label="Explore">
-                <div class="amt-workflow-panel-header">
-                    <p class="amt-workflow-panel-kicker">Explore</p>
-                    <h3>Continue without losing the thread.</h3>
-                    <p>Use follow-up questions, suggested prompts, and topics when you want to go deeper.</p>
-                </div>
                 <div id="amt-continuation-strip" class="amt-continuation-strip" style="display:none;" aria-label="Next steps"></div>
                 <div id="amt-journey-card" class="amt-journey-card" style="display:none;" role="region" aria-label="Continue your reflection"></div>
                 <div id="ask-mirror-talk-followups" class="amt-followups" style="display:none;">
@@ -161,11 +156,6 @@ function ask_mirror_talk_shortcode() {
             </section>
 
             <section id="amt-workflow-panel-save-share" class="amt-workflow-panel amt-workflow-panel-save-share" data-workflow-panel="save_share" aria-label="Save and Share">
-                <div class="amt-workflow-panel-header">
-                    <p class="amt-workflow-panel-kicker">Save &amp; Share</p>
-                    <h3>Keep what mattered, or pass it on.</h3>
-                    <p>Save the insight, write a private note, email the reflection, or share a polished card.</p>
-                </div>
                 <div id="amt-save-share-hub" class="amt-save-share-hub" role="region" aria-label="Save and share guidance"></div>
                 <div id="amt-reflect-section" class="amt-reflect-section" style="display:none;"></div>
                 <div id="amt-answer-utilities" class="amt-answer-utilities"></div>
@@ -173,11 +163,6 @@ function ask_mirror_talk_shortcode() {
             </section>
 
             <section id="amt-workflow-panel-progress" class="amt-workflow-panel amt-workflow-panel-progress" data-workflow-panel="progress" aria-label="Rhythm">
-                <div class="amt-workflow-panel-header">
-                    <p class="amt-workflow-panel-kicker">Rhythm</p>
-                    <h3>Your Momentum lives here.</h3>
-                    <p>See your streak, badges, weekly recap, and the small signs that reflection is becoming a rhythm.</p>
-                </div>
                 <div id="amt-momentum-card" class="amt-momentum-card" style="display:none;" role="region" aria-label="Your Momentum"></div>
                 <div id="amt-weekly-recap" class="amt-weekly-recap" style="display:none;" role="region" aria-label="Weekly reflection recap"></div>
                 <div id="amt-streak-protect-banner" class="amt-streak-protect-banner" style="display:none;" role="status"></div>
@@ -300,7 +285,8 @@ function ask_mirror_talk_pwa_head() {
     <link rel="manifest" href="/manifest.json">
 
     <!-- Explicit viewport keeps iOS standalone/PWA rendering pinned to device width -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- maximum-scale=1 prevents unwanted zoom when focusing inputs (prevents PWA resize) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 
     <!-- Standard PWA meta tag (Android / Chrome) -->
     <meta name="theme-color" content="#943e08">

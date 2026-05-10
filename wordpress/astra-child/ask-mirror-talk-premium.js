@@ -1,6 +1,6 @@
 /**
  * Ask Mirror Talk — Premium Features
- * v5.5.27
+ * v5.5.30
  * 
  * Implements:
  * - Track A: User Experience (Question coaching, Onboarding, Response formatting)
@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  console.log('✨ Ask Mirror Talk Premium Features v5.5.27 loaded');
+  console.log('✨ Ask Mirror Talk Premium Features v5.5.30 loaded');
 
   // ═══════════════════════════════════════════════════════════════
   // ██ TRACK C: TECHNICAL FOUNDATION - DATA LAYER (IndexedDB)
@@ -722,7 +722,7 @@
       const patterns = await getCachedPatterns();
 
       const exportData = {
-        version: '5.5.27',
+        version: '5.5.30',
         exportedAt: new Date().toISOString(),
         reflections: history,
         patterns: patterns,

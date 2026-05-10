@@ -3000,6 +3000,12 @@
             { action: 'explore', label: 'Explore next' },
             { action: 'ask', label: 'Ask another' }
           ]
+        : hasSomethingToKeep
+        ? [
+            { action: 'save_share', label: 'Keep or share', primary: true },
+            { action: 'explore', label: 'Explore prompts' },
+            { action: 'ask', label: 'Ask today' }
+          ]
         : [
             { action: 'ask', label: 'Ask today', primary: true },
             { action: 'explore', label: 'Explore prompts' }
@@ -3010,6 +3016,14 @@
       return [
         { action: 'explore', label: 'Explore next', primary: true },
         { action: 'save_share', label: 'Keep or share' },
+        { action: 'progress', label: 'View rhythm' }
+      ];
+    }
+
+    if (hasSomethingToKeep) {
+      return [
+        { action: 'save_share', label: 'Keep or share', primary: true },
+        { action: 'explore', label: 'Explore prompts' },
         { action: 'progress', label: 'View rhythm' }
       ];
     }
@@ -3086,8 +3100,8 @@
       : '';
 
     if (hasCurrentAnswer) {
-      const currentQuestion = session.question || 'your reflection';
-      const currentTheme = session.theme || inferTheme(currentQuestion, session.answer || '') || 'Reflection';
+      const currentQuestion = input ? (input.value || 'your reflection') : 'your reflection';
+      const currentTheme = window._amtLastTheme || inferTheme(currentQuestion, answerText) || 'Reflection';
       
       saveShareHub.innerHTML = `
         <div class="amt-save-share-hub-card">
@@ -3218,7 +3232,10 @@
     if (action === 'explore') {
       restoreExploreContent();
       collapseExploreExpander();
-      if (shouldScroll) scrollToWorkflowPanel('explore');
+      if (shouldScroll) {
+        // Scroll after content is restored
+        setTimeout(() => scrollToWorkflowPanel('explore'), 50);
+      }
       return;
     }
 
@@ -3230,7 +3247,12 @@
       const emailSection = document.getElementById('amt-email-section');
       const saveInsightSection = document.getElementById('amt-save-insight-section');
       const reflectSection = document.getElementById('amt-reflect-section');
-      if (shouldScroll) scrollToWorkflowPanel('save_share');
+      
+      // Scroll to the save/share panel first, then highlight specific section
+      if (shouldScroll) {
+        setTimeout(() => scrollToWorkflowPanel('save_share'), 50);
+      }
+      
       if (shareSection) {
         shareSection.classList.add('amt-workflow-focus-pulse');
         setTimeout(() => shareSection.classList.remove('amt-workflow-focus-pulse'), 900);
@@ -3263,7 +3285,11 @@
       const badgesBtn = document.getElementById('amt-badges-btn');
       if (shelf) shelf.style.display = '';
       if (badgesBtn) badgesBtn.setAttribute('aria-expanded', 'true');
-      if (shouldScroll) scrollToWorkflowPanel('progress');
+      
+      // Scroll after all rhythm content is rendered
+      if (shouldScroll) {
+        setTimeout(() => scrollToWorkflowPanel('progress'), 50);
+      }
     }
   }
 

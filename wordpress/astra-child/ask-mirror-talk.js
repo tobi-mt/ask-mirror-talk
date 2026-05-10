@@ -3030,6 +3030,7 @@
 
     return [
       { action: 'explore', label: 'Explore prompts', primary: true },
+      { action: 'save_share', label: 'Keep or share' },
       { action: 'progress', label: 'View rhythm' }
     ];
   }

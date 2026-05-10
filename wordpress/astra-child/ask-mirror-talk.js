@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.5.27 loaded');
+  log('Ask Mirror Talk Widget v5.6.3 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -10300,11 +10300,11 @@
           // Already stopped, ignore
         }
         isRecognitionActive = false;
-        voiceBtn.innerHTML = '🎤';7';
+        voiceBtn.innerHTML = '🎤';
+        voiceBtn.title = 'Ask with voice (click to start/stop)';
+        voiceBtn.style.opacity = '0.7';
         voiceBtn.style.background = 'rgba(255,255,255,0.9)';
-        input.placeholder = 'Ask what you are carrying, questioning, or trying to understandlick to start/stop)';
-        voiceBtn.style.opacity = '0.6';
-        input.placeholder = 'Ask a question...';
+        input.placeholder = 'Ask what you are carrying, questioning, or trying to understand...';
       }
     };
     
@@ -10318,16 +10318,16 @@
         try {
           voiceRecognition.start();
           isRecognitionActive = true;
+          voiceBtn.innerHTML = '🔴';
+          voiceBtn.title = 'Recording... (click to stop)';
+          voiceBtn.style.opacity = '1';
           voiceBtn.style.background = 'rgba(255,255,255,1)';
           input.placeholder = '🎤 Listening...';
         } catch (e) {
           warn('Voice recognition error:', e);
           isRecognitionActive = false;
           voiceBtn.innerHTML = '🎤';
-          voiceBtn.style.opacity = '0.7:', e);
-          isRecognitionActive = false;
-          voiceBtn.innerHTML = '🎤';
-          voiceBtn.style.opacity = '0.6';
+          voiceBtn.style.opacity = '0.7';
         }
       }
     };
@@ -10352,7 +10352,11 @@
       input.value = transcript;
     };
     
-    voiceRecognition.onend = () =>7';
+    voiceRecognition.onend = () => {
+      isRecognitionActive = false;
+      voiceBtn.innerHTML = '🎤';
+      voiceBtn.title = 'Ask with voice (click to start/stop)';
+      voiceBtn.style.opacity = '0.7';
       voiceBtn.style.background = 'rgba(255,255,255,0.9)';
       input.placeholder = 'Ask what you are carrying, questioning, or trying to understand...';
     };
@@ -10375,11 +10379,7 @@
     // Insert wrapper before textarea, then move textarea into it
     input.parentNode.insertBefore(textareaWrapper, input);
     textareaWrapper.appendChild(input);
-    textareaWrapper.appendChild(voiceBtn); if (parentStyle.position === 'static') {
-        inputParent.style.position = 'relative';
-      }
-      inputParent.appendChild(voiceBtn);
-    }
+    textareaWrapper.appendChild(voiceBtn);
     
     // Monitor submitBtn disabled state to control voice button
     if (submitBtn) {

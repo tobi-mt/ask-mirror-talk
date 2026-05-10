@@ -607,11 +607,17 @@ def _generate_shareable_headline(question: str, answer: str, chunks: list[dict])
                             "- Is grounded in what was actually said (reference concrete ideas)\n"
                             "- Is memorable and deep (not surface-level or vague)\n"
                             "- Is 8-22 words (50-140 characters)\n"
+                            "- Is a complete, standalone sentence (not a fragment)\n"
+                            "- Does NOT start with: But, And, Or, So, Because, If, When, Where, What, How, Why\n"
+                            "- Is NOT a question (no ? at end)\n"
                             "- Sounds natural, not scripted or forced\n"
-                            "- Avoids phrases like 'this reflection,' 'the key is,' 'remember to'\n"
-                            "- Does NOT start with a question word\n\n"
-                            "Good example: \"What you have in this relationship right now is already worth protecting.\"\n"
-                            "Bad example: \"Return to the kind of connection you want to build and protect.\"\n\n"
+                            "- Avoids phrases like 'this reflection,' 'the key is,' 'remember to'\n\n"
+                            "Good examples:\n"
+                            "- \"What you have in this relationship right now is already worth protecting.\"\n"
+                            "- \"Grief asks for space, not solutions—permission to feel whatever comes.\"\n\n"
+                            "Bad examples:\n"
+                            "- \"But where do I feel even the tiniest spark of quiet joy?\" (fragment + question)\n"
+                            "- \"Return to the kind of connection you want to build.\" (vague)\n\n"
                             "Return ONLY the headline text, nothing else."
                         ),
                     },
@@ -646,9 +652,21 @@ def _generate_shareable_headline(question: str, answer: str, chunks: list[dict])
             
             # Validate the headline meets quality criteria
             words = headline.split()
-            # Check if it's actually a question (ends with ?) vs declarative sentence starting with "what"
-            is_actual_question = headline.endswith("?") or any(
-                headline.lower().startswith(q) for q in ("how do", "how can", "why ", "when should", "where ", "who ")
+            lower = headline.lower()
+            
+            # Check for sentence fragments (starting with coordinating conjunctions)
+            is_fragment = any(
+                lower.startswith(frag) for frag in ("but ", "and ", "or ", "so ", "because ", "if ", "when ")
+            )
+            
+            # Check if it's actually a question
+            # Allow declarative sentences like "What you have..." but reject "What is..." questions
+            is_actual_question = (
+                headline.endswith("?") 
+                or lower.startswith(("how do", "how can", "how should", "how would"))
+                or lower.startswith(("what is", "what are", "what should", "what would", "what can"))
+                or lower.startswith(("why ", "when should", "when do", "when can"))
+                or lower.startswith(("where ", "who ", "which ", "whose "))
             )
             
             if (
@@ -657,6 +675,7 @@ def _generate_shareable_headline(question: str, answer: str, chunks: list[dict])
                 and len(words) >= 6
                 and len(words) <= 26
                 and not is_actual_question
+                and not is_fragment
                 and headline[-1] in ".!?"
             ):
                 logger.info("Generated shareable headline: %s", headline[:100])
@@ -681,8 +700,13 @@ def _extract_best_sentence_headline(answer: str) -> str:
     # Score sentences for headline quality
     scored = []
     for sentence in sentences:
+        # Clean the sentence (remove leading/trailing quotes)
+        cleaned = sentence.strip().strip('"').strip("'").strip()
+        if not cleaned:
+            continue
+            
         score = 0
-        lower = sentence.lower()
+        lower = cleaned.lower()
         
         # Prefer sentences with concrete insight words
         if any(word in lower for word in ["notice", "trust", "allow", "honor", "protect", "choose", "create", "hold", "listen", "stay", "return", "carry", "means", "becomes", "invites", "asks"]):
@@ -692,26 +716,56 @@ def _extract_best_sentence_headline(answer: str) -> str:
         if "you" in lower or "your" in lower:
             score += 2
         
-        # Penalize sentences that start with weak phrases
-        if any(lower.startswith(phrase) for phrase in ["this reflection", "this is", "there is", "there are", "it is", "it can", "sometimes", "often"]):
-            score -= 3
+        # Strongly penalize sentences that start with weak phrases or fragments
+        if any(lower.startswith(phrase) for phrase in ["this reflection", "this is", "there is", "there are", "it is", "it can", "sometimes", "often", "but ", "and ", "or ", "so ", "because ", "if "]):
+            score -= 10
         
-        # Penalize questions
-        if lower.startswith(("how ", "what ", "why ", "when ", "where ", "who ")):
+        # Strongly penalize questions (both those ending with ? and those starting with question words)
+        if cleaned.endswith("?"):
+            score -= 15
+        
+        # Penalize question-like starts, but allow declarative "What you..." sentences
+        # Questions typically start with: "How do", "What is", "Why ", "When should", etc.
+        # Declarative sentences like "What you have..." are fine
+        is_question_start = (
+            lower.startswith(("how do", "how can", "how should", "how would"))
+            or lower.startswith(("what is", "what are", "what should", "what would", "what can"))
+            or lower.startswith(("why ", "when should", "when do", "when can"))
+            or lower.startswith(("where ", "who ", "which ", "whose "))
+        )
+        if is_question_start:
+            score -= 15
+        
+        # Penalize sentences with unclosed quotes or awkward punctuation
+        if cleaned.count('"') % 2 != 0 or cleaned.count("'") % 2 != 0:
             score -= 5
         
         # Prefer medium-length sentences
-        words = len(sentence.split())
+        words = len(cleaned.split())
         if 8 <= words <= 22:
-            score += 2
+            score += 3
         elif words < 6 or words > 28:
-            score -= 2
+            score -= 3
         
-        scored.append((score, sentence))
+        # Boost sentences that feel complete and authoritative
+        if lower.endswith(".") and not lower.endswith("..."):
+            score += 1
+        
+        scored.append((score, cleaned))
     
-    # Return the highest-scoring sentence
+    # Return the highest-scoring sentence, or empty if all are bad
     scored.sort(reverse=True, key=lambda x: x[0])
-    return scored[0][1] if scored else sentences[0]
+    
+    # Only return if the best sentence has a reasonable score
+    if scored and scored[0][0] > 0:
+        logger.info("Extracted headline (score %d): %s", scored[0][0], scored[0][1][:80])
+        return scored[0][1]
+    
+    # If all sentences are bad, log warning and return empty
+    # Frontend will handle this by using its own extraction
+    logger.warning("All sentences scored poorly (best score: %d), returning empty headline", 
+                   scored[0][0] if scored else 0)
+    return ""
 
 
 def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:

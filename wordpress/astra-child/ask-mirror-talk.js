@@ -10245,62 +10245,165 @@
   }
   
   // ─── Voice Input ───────────────────────────────────────────────
+  let voiceRecognition = null;
+  let isRecognitionActive = false;
+  let voiceBtn = null;
+
   function enableVoiceInput() {
     if (!('webkitSpeechRecognition' in window)) {
       log('Speech recognition not supported');
       return;
     }
     
-    const recognition = new webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    voiceRecognition = new webkitSpeechRecognition();
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = true;
+    voiceRecognition.lang = 'en-US';
     
-    const voiceBtn = document.createElement('button');
+    voiceBtn = document.createElement('button');
     voiceBtn.type = 'button';
     voiceBtn.className = 'amt-voice-btn';
     voiceBtn.innerHTML = '🎤';
-    voiceBtn.title = 'Ask with voice';
-    voiceBtn.style.cssText = 'position:absolute;right:60px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.5rem;cursor:pointer;padding:0.5rem;opacity:0.6;transition:opacity 0.2s;';
-    voiceBtn.onmouseenter = () => voiceBtn.style.opacity = '1';
-    voiceBtn.onmouseleave = () => voiceBtn.style.opacity = '0.6';
+    voiceBtn.title = 'Ask with voice (click to start/stop)';
+    voiceBtn.style.cssText = 'position:absolute;right:60px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.5rem;cursor:pointer;padding:0.5rem;opacity:0.6;transition:opacity 0.2s;z-index:10;';
     
-    voiceBtn.onclick = () => {
-      try {
-        recognition.start();
-        voiceBtn.style.opacity = '1';
-        voiceBtn.innerHTML = '🔴';
-        input.placeholder = 'Listening...';
-      } catch (e) {
-        warn('Voice recognition error:', e);
+    const updateButtonState = (disabled) => {
+      if (disabled) {
+        voiceBtn.style.opacity = '0.3';
+        voiceBtn.style.cursor = 'not-allowed';
+        voiceBtn.disabled = true;
+      } else {
+        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.6';
+        voiceBtn.style.cursor = 'pointer';
+        voiceBtn.disabled = false;
       }
     };
     
-    recognition.onresult = (event) => {
+    voiceBtn.onmouseenter = () => {
+      if (!voiceBtn.disabled) {
+        voiceBtn.style.opacity = '1';
+      }
+    };
+    voiceBtn.onmouseleave = () => {
+      if (!voiceBtn.disabled) {
+        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.6';
+      }
+    };
+    
+    const stopRecognition = () => {
+      if (isRecognitionActive && voiceRecognition) {
+        try {
+          voiceRecognition.stop();
+        } catch (e) {
+          // Already stopped, ignore
+        }
+        isRecognitionActive = false;
+        voiceBtn.innerHTML = '🎤';
+        voiceBtn.title = 'Ask with voice (click to start/stop)';
+        voiceBtn.style.opacity = '0.6';
+        input.placeholder = 'Ask a question...';
+      }
+    };
+    
+    const startRecognition = () => {
+      // Don't allow voice input during response generation
+      if (submitBtn && submitBtn.disabled) {
+        return;
+      }
+      
+      if (!isRecognitionActive && voiceRecognition) {
+        try {
+          voiceRecognition.start();
+          isRecognitionActive = true;
+          voiceBtn.innerHTML = '🔴';
+          voiceBtn.title = 'Recording... (click to stop)';
+          voiceBtn.style.opacity = '1';
+          input.placeholder = 'Listening...';
+        } catch (e) {
+          warn('Voice recognition error:', e);
+          isRecognitionActive = false;
+          voiceBtn.innerHTML = '🎤';
+          voiceBtn.style.opacity = '0.6';
+        }
+      }
+    };
+    
+    voiceBtn.onclick = () => {
+      // Don't allow voice input during response generation
+      if (submitBtn && submitBtn.disabled) {
+        return;
+      }
+      
+      if (isRecognitionActive) {
+        stopRecognition();
+      } else {
+        startRecognition();
+      }
+    };
+    
+    voiceRecognition.onresult = (event) => {
       const transcript = Array.from(event.results)
         .map(result => result[0].transcript)
         .join('');
       input.value = transcript;
     };
     
-    recognition.onend = () => {
+    voiceRecognition.onend = () => {
+      isRecognitionActive = false;
       voiceBtn.innerHTML = '🎤';
+      voiceBtn.title = 'Ask with voice (click to start/stop)';
       voiceBtn.style.opacity = '0.6';
       input.placeholder = 'Ask a question...';
     };
     
-    recognition.onerror = () => {
+    voiceRecognition.onerror = (event) => {
+      warn('Voice recognition error:', event.error);
+      isRecognitionActive = false;
       voiceBtn.innerHTML = '🎤';
+      voiceBtn.title = 'Ask with voice (click to start/stop)';
       voiceBtn.style.opacity = '0.6';
       input.placeholder = 'Ask a question...';
     };
     
-    // Add button to form
-    if (input && input.parentElement && input.parentElement.style.position !== 'relative') {
-      input.parentElement.style.position = 'relative';
+    // Add button to form with proper positioning
+    const inputParent = input.parentElement;
+    if (inputParent) {
+      // Ensure parent has relative positioning
+      const parentStyle = window.getComputedStyle(inputParent);
+      if (parentStyle.position === 'static') {
+        inputParent.style.position = 'relative';
+      }
+      inputParent.appendChild(voiceBtn);
     }
-    input.parentElement.appendChild(voiceBtn);
+    
+    // Monitor submitBtn disabled state to control voice button
+    if (submitBtn) {
+      const observer = new MutationObserver(() => {
+        if (voiceBtn) {
+          updateButtonState(submitBtn.disabled);
+          if (submitBtn.disabled && isRecognitionActive) {
+            stopRecognition();
+          }
+        }
+      });
+      observer.observe(submitBtn, { attributes: true, attributeFilter: ['disabled'] });
+    }
+    
     log('Voice input enabled');
+  }
+  
+  // Stop voice recognition when form is submitted
+  if (form) {
+    form.addEventListener('submit', () => {
+      if (isRecognitionActive && voiceRecognition) {
+        try {
+          voiceRecognition.stop();
+        } catch (e) {
+          // Already stopped
+        }
+        isRecognitionActive = false;
+      }
+    });
   }
   
   // Enable voice input on mobile devices

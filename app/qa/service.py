@@ -322,13 +322,19 @@ def answer_question(
                               include_followups=False)
     answer_ms = int((time.perf_counter() - answer_started_at) * 1000)
 
-    # Follow-up generation is useful but not part of the core answer itself.
-    # Run it in parallel with citation refinement and logging so the non-stream
+    # Follow-up and headline generation are useful but not part of the core answer itself.
+    # Run them in parallel with citation refinement and logging so the non-stream
     # endpoint does not pay the full extra OpenAI roundtrip serially.
-    from app.qa.answer import generate_follow_up_questions
-    follow_up_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    follow_up_future = follow_up_executor.submit(
+    from app.qa.answer import generate_follow_up_questions, generate_shareable_headline
+    metadata_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    follow_up_future = metadata_executor.submit(
         generate_follow_up_questions,
+        question,
+        response["answer"],
+        citation_payloads if citation_payloads is not None else chunk_payloads,
+    )
+    headline_future = metadata_executor.submit(
+        generate_shareable_headline,
         question,
         response["answer"],
         citation_payloads if citation_payloads is not None else chunk_payloads,
@@ -382,13 +388,20 @@ def answer_question(
         },
     )
 
+    # Collect follow-up questions and shareable headline from parallel tasks
     try:
         response["follow_up_questions"] = follow_up_future.result(timeout=15)
     except Exception as exc:
         logger.warning("Follow-up generation failed in non-stream flow: %s", exc)
         response["follow_up_questions"] = []
+    
+    try:
+        response["shareable_headline"] = headline_future.result(timeout=15)
+    except Exception as exc:
+        logger.warning("Headline generation failed in non-stream flow: %s", exc)
+        response["shareable_headline"] = ""
     finally:
-        follow_up_executor.shutdown(wait=False)
+        metadata_executor.shutdown(wait=False)
 
     # Cache this response for future similar questions
     result = {
@@ -396,6 +409,7 @@ def answer_question(
         "answer": response["answer"],
         "citations": response["citations"],
         "follow_up_questions": response.get("follow_up_questions", []),
+        "shareable_headline": response.get("shareable_headline", ""),
         "latency_ms": latency_ms,
         "qa_log_id": qa_log_id,
         "answer_source": response.get("answer_source", "openai"),
@@ -471,6 +485,7 @@ def answer_question_stream(
             yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
             yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
             yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
+            yield f"data: {json.dumps({'type': 'headline', 'text': exact_cached_response.get('shareable_headline', '')})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': exact_cached_response.get('answer_source', 'openai'), 'answer_status': exact_cached_response.get('answer_status', 'generated'), 'fallback_reason': exact_cached_response.get('fallback_reason')})}\n\n"
             return
 
@@ -501,6 +516,7 @@ def answer_question_stream(
             yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
             yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
             yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
+            yield f"data: {json.dumps({'type': 'headline', 'text': cached_response.get('shareable_headline', '')})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': cached_response.get('answer_source', 'openai'), 'answer_status': cached_response.get('answer_status', 'generated'), 'fallback_reason': cached_response.get('fallback_reason')})}\n\n"
             return
 
@@ -582,7 +598,7 @@ def answer_question_stream(
     answer_ms = int((time.perf_counter() - stream_answer_started_at) * 1000)
 
     # ── Send citations immediately — no extra latency ──
-    from app.qa.answer import _build_citations, generate_follow_up_questions
+    from app.qa.answer import _build_citations, generate_follow_up_questions, generate_shareable_headline
 
     citation_started_at = time.perf_counter()
     refined_citation_chunks = (
@@ -597,14 +613,17 @@ def answer_question_stream(
     citations = _build_citations(refined_citation_chunks) if refined_citation_chunks else []
     citation_ms = int((time.perf_counter() - citation_started_at) * 1000)
 
-    # ── Start follow-up generation in a background thread ──
-    # This runs concurrently while we yield citations and log to the DB,
-    # saving ~1–3 s that would otherwise be a blocking OpenAI call after
+    # ── Start follow-up and headline generation in background threads ──
+    # These run concurrently while we yield citations and log to the DB,
+    # saving ~1–3 s that would otherwise be blocking OpenAI calls after
     # the user has already seen the full answer and citations.
     _follow_up_ctx = citation_payloads or chunk_payloads
-    _follow_up_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    follow_up_future = _follow_up_executor.submit(
+    _metadata_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    follow_up_future = _metadata_executor.submit(
         generate_follow_up_questions, question, full_answer, _follow_up_ctx
+    )
+    headline_future = _metadata_executor.submit(
+        generate_shareable_headline, question, full_answer, _follow_up_ctx
     )
 
     yield f"data: {json.dumps({'type': 'citations', 'citations': citations})}\n\n"
@@ -641,9 +660,9 @@ def answer_question_stream(
         },
     )
 
-    # ── Mark the answer complete before optional follow-ups finish ──
+    # ── Mark the answer complete before optional metadata finishes ──
     # This lowers perceived latency and keeps analytics focused on answer
-    # readiness rather than the slower follow-up generation call.
+    # readiness rather than the slower metadata generation calls.
     done_payload = {
         "type": "done",
         "qa_log_id": qa_log_id,
@@ -655,16 +674,23 @@ def answer_question_stream(
         done_payload["fallback_reason"] = fallback_reason
     yield f"data: {json.dumps(done_payload)}\n\n"
 
-    # ── Collect follow-ups (background thread should be done by now) ──
+    # ── Collect metadata (background threads should be done by now) ──
     try:
         follow_ups = follow_up_future.result(timeout=15)
     except Exception as e:
         logger.warning("Follow-up generation failed in stream: %s", e)
         follow_ups = []
+    
+    try:
+        shareable_headline = headline_future.result(timeout=15)
+    except Exception as e:
+        logger.warning("Headline generation failed in stream: %s", e)
+        shareable_headline = ""
     finally:
-        _follow_up_executor.shutdown(wait=False)
+        _metadata_executor.shutdown(wait=False)
 
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
+    yield f"data: {json.dumps({'type': 'headline', 'text': shareable_headline})}\n\n"
 
     # Cache for next time (normalized question for better hit rate)
     cache_payload = {
@@ -672,6 +698,7 @@ def answer_question_stream(
         "answer": full_answer,
         "citations": citations,
         "follow_up_questions": follow_ups,
+        "shareable_headline": shareable_headline,
         "latency_ms": latency_ms,
         "qa_log_id": qa_log_id,
         "answer_source": answer_source,

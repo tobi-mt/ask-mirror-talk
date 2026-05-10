@@ -1838,6 +1838,11 @@
             showFollowUpQuestions(event.questions);
           }
 
+          if (event.type === 'headline') {
+            // Store the shareable headline for use in card generation
+            window._amtLastShareableHeadline = event.text || '';
+          }
+
           if (event.type === 'done') {
             // Expose qa_log_id for analytics addon
             window._amtLastQALogId = event.qa_log_id;
@@ -2792,6 +2797,15 @@
   }
 
   function extractShareHeadline(insight) {
+    // Prioritize API-provided shareable headline (LLM-generated for quality)
+    if (insight.shareable_headline && typeof insight.shareable_headline === 'string') {
+      const apiHeadline = ensureReflectionSentence(insight.shareable_headline);
+      if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+        return apiHeadline;
+      }
+    }
+
+    // Fallback to extraction from answer/excerpt if API headline not available
     const excerpt = ensureReflectionSentence(insight.excerpt || '');
     const fallback = buildThemeReflectionFallback(insight.theme || '');
     const answerHeadline = ensureReflectionSentence(extractCardHeadline(insight.answer || '', insight.theme || ''));
@@ -3653,6 +3667,8 @@
         }
         const data = result.data;
         if (!data.answer) throw new Error("No answer received from the service.");
+        // Store shareable headline if provided
+        window._amtLastShareableHeadline = data.shareable_headline || '';
         showAnswer(data.answer, data.citations || [], data.follow_up_questions || [], {
           answerSource: data.answer_source || data.answerSource || '',
           answerStatus: data.answer_status || data.answerStatus || '',
@@ -9382,7 +9398,8 @@
       question,
       answer: answerText,
       theme: themeHint || inferTheme(question, answerText),
-      savedAt: Date.now()
+      savedAt: Date.now(),
+      shareable_headline: window._amtLastShareableHeadline || ''
     });
     reflectionInsight.answerMeta = answerMeta || {};
     const pageUrl = buildTrackedPageUrl({

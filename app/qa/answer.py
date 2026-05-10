@@ -352,8 +352,11 @@ def compose_answer(
         result["fallback_reason"] = fallback_reason
     if include_followups:
         result["follow_up_questions"] = generate_follow_up_questions(question, answer_text, citation_chunks)
+        # Generate shareable headline for reflection cards
+        result["shareable_headline"] = generate_shareable_headline(question, answer_text, citation_chunks)
     else:
         result["follow_up_questions"] = []
+        result["shareable_headline"] = ""
 
     return result
 
@@ -551,6 +554,164 @@ def _fallback_follow_up_questions(question: str, chunks: list[dict]) -> list[str
 
     preferred_theme = next((theme for theme in theme_votes if theme != "reflection"), "reflection")
     return _theme_follow_up_questions(preferred_theme)[:3]
+
+
+def generate_shareable_headline(question: str, answer: str, chunks: list[dict]) -> str:
+    """
+    Public wrapper so callers can generate shareable headlines without going
+    through compose_answer and can do so in parallel with other work.
+    """
+    return _generate_shareable_headline(question, answer, chunks)
+
+
+def _generate_shareable_headline(question: str, answer: str, chunks: list[dict]) -> str:
+    """
+    Generate a shareable reflection card headline that is:
+    - Specific and insightful (not vague or generic)
+    - Grounded in the actual wisdom from the episodes
+    - Memorable and complete (not surface-level)
+    
+    Uses OpenAI if available, otherwise extracts best sentence from answer.
+    """
+    from app.core.config import settings
+
+    if settings.answer_generation_provider == "openai":
+        try:
+            api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+            if not api_key:
+                raise ValueError("No API key")
+
+            from openai import OpenAI
+            from app.core.openai_compat import create_chat_completion
+            client = OpenAI(api_key=api_key)
+
+            # Build brief context from the strongest citation
+            citation_excerpt = ""
+            if chunks:
+                strongest = chunks[0]
+                citation_text = strongest.get("text", "")[:200]
+                episode_title = strongest.get("episode", {}).get("title", "")
+                if citation_text:
+                    citation_excerpt = f'From "{episode_title}": {citation_text}'
+
+            response = create_chat_completion(
+                client,
+                model=settings.answer_followup_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You create shareable reflection card headlines for Mirror Talk podcast wisdom. "
+                            "Write ONE complete, insightful sentence that:\n"
+                            "- Captures a SPECIFIC insight from the episode wisdom (not generic advice)\n"
+                            "- Is grounded in what was actually said (reference concrete ideas)\n"
+                            "- Is memorable and deep (not surface-level or vague)\n"
+                            "- Is 8-22 words (50-140 characters)\n"
+                            "- Sounds natural, not scripted or forced\n"
+                            "- Avoids phrases like 'this reflection,' 'the key is,' 'remember to'\n"
+                            "- Does NOT start with a question word\n\n"
+                            "Good example: \"What you have in this relationship right now is already worth protecting.\"\n"
+                            "Bad example: \"Return to the kind of connection you want to build and protect.\"\n\n"
+                            "Return ONLY the headline text, nothing else."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Question: {question}\n\n"
+                            f"Answer excerpt: {answer[:500]}\n\n"
+                            f"{citation_excerpt}\n\n"
+                            "Write the shareable headline:"
+                        ),
+                    },
+                ],
+                temperature=0.8,
+                max_tokens=80,
+            )
+
+            message = response.choices[0].message
+            
+            # Check for refusal
+            if hasattr(message, 'refusal') and message.refusal:
+                logger.warning("Headline generation refused by model: %s", message.refusal)
+                return _extract_best_sentence_headline(answer)
+            
+            # Check if content is None or empty
+            raw = message.content
+            if not raw:
+                logger.warning("Headline generation returned empty content")
+                return _extract_best_sentence_headline(answer)
+            
+            headline = raw.strip().strip('"').strip()
+            
+            # Validate the headline meets quality criteria
+            words = headline.split()
+            # Check if it's actually a question (ends with ?) vs declarative sentence starting with "what"
+            is_actual_question = headline.endswith("?") or any(
+                headline.lower().startswith(q) for q in ("how do", "how can", "why ", "when should", "where ", "who ")
+            )
+            
+            if (
+                len(headline) >= 40
+                and len(headline) <= 180
+                and len(words) >= 6
+                and len(words) <= 26
+                and not is_actual_question
+                and headline[-1] in ".!?"
+            ):
+                logger.info("Generated shareable headline: %s", headline[:100])
+                return headline
+            
+            logger.warning("Generated headline did not meet quality criteria, using fallback: %s", headline)
+        except Exception as e:
+            logger.warning("Headline generation failed: %s", e, exc_info=True)
+
+    return _extract_best_sentence_headline(answer)
+
+
+def _extract_best_sentence_headline(answer: str) -> str:
+    """
+    Fallback: Extract the best sentence from the answer as a headline.
+    Looks for sentences with key insight words and good length.
+    """
+    sentences = _split_sentences(answer)
+    if not sentences:
+        return ""
+    
+    # Score sentences for headline quality
+    scored = []
+    for sentence in sentences:
+        score = 0
+        lower = sentence.lower()
+        
+        # Prefer sentences with concrete insight words
+        if any(word in lower for word in ["notice", "trust", "allow", "honor", "protect", "choose", "create", "hold", "listen", "stay", "return", "carry", "means", "becomes", "invites", "asks"]):
+            score += 3
+        
+        # Prefer sentences with "you" or "your" (direct and personal)
+        if "you" in lower or "your" in lower:
+            score += 2
+        
+        # Penalize sentences that start with weak phrases
+        if any(lower.startswith(phrase) for phrase in ["this reflection", "this is", "there is", "there are", "it is", "it can", "sometimes", "often"]):
+            score -= 3
+        
+        # Penalize questions
+        if lower.startswith(("how ", "what ", "why ", "when ", "where ", "who ")):
+            score -= 5
+        
+        # Prefer medium-length sentences
+        words = len(sentence.split())
+        if 8 <= words <= 22:
+            score += 2
+        elif words < 6 or words > 28:
+            score -= 2
+        
+        scored.append((score, sentence))
+    
+    # Return the highest-scoring sentence
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return scored[0][1] if scored else sentences[0]
 
 
 def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:

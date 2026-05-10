@@ -552,6 +552,175 @@ def _new_episode_copy(episode_title: str) -> tuple[str, str]:
     return title, _clip_sentence(body, 128)
 
 
+# ── HOLIDAY DETECTION ────────────────────────────────────────────────────────
+
+
+def _calculate_nth_weekday(year: int, month: int, week: int, day_of_week: int) -> int:
+    """
+    Calculate the day of month for the Nth occurrence of a weekday.
+    
+    Args:
+        year: Year
+        month: Month (1-12)
+        week: Week number (1=first, 2=second, -1=last, etc.)
+        day_of_week: 0=Monday, 6=Sunday
+    
+    Returns:
+        Day of month (1-31)
+    """
+    from calendar import Calendar
+    
+    cal = Calendar(firstweekday=0)  # Monday as first day
+    month_days = cal.monthdayscalendar(year, month)
+    
+    # Filter to only the specified weekday
+    matching_days = []
+    for week_days in month_days:
+        day = week_days[day_of_week]
+        if day != 0:  # 0 means day not in this month
+            matching_days.append(day)
+    
+    if not matching_days:
+        return 0
+    
+    # Handle negative indices (e.g., -1 = last occurrence)
+    if week < 0:
+        try:
+            return matching_days[week]
+        except IndexError:
+            return 0
+    
+    # Handle positive indices (1-indexed, not 0-indexed)
+    try:
+        return matching_days[week - 1]
+    except IndexError:
+        return 0
+
+
+def get_today_holiday_theme(db: Session) -> tuple[str | None, str | None]:
+    """
+    Check if today matches any active holiday and return its theme and name.
+    
+    Returns:
+        (theme, holiday_name) tuple, or (None, None) if no holiday today
+    """
+    from datetime import date as date_type
+    
+    today = date_type.today()
+    
+    # Check fixed-date holidays
+    fixed_result = db.execute(
+        text("""
+            SELECT theme, name
+            FROM holidays
+            WHERE active = true
+              AND fixed_month = :month
+              AND fixed_day = :day
+            LIMIT 1
+        """),
+        {"month": today.month, "day": today.day},
+    ).fetchone()
+    
+    if fixed_result:
+        return fixed_result[0], fixed_result[1]
+    
+    # Check calculated holidays
+    calc_holidays = db.execute(
+        text("""
+            SELECT theme, name, calc_month, calc_week, calc_day_of_week
+            FROM holidays
+            WHERE active = true
+              AND calc_month = :month
+        """),
+        {"month": today.month},
+    ).fetchall()
+    
+    for row in calc_holidays:
+        theme, name, calc_month, calc_week, calc_day_of_week = row
+        calculated_day = _calculate_nth_weekday(
+            today.year, calc_month, calc_week, calc_day_of_week
+        )
+        if calculated_day == today.day:
+            return theme, name
+    
+    return None, None
+
+
+def get_today_weekday_themes(db: Session) -> list[str]:
+    """
+    Get the prioritized themes for today's day of the week.
+    
+    Returns a list of theme names ordered by priority (highest first).
+    Empty list if no weekday themes are configured or active.
+    """
+    from datetime import date as date_type
+    
+    today = date_type.today()
+    day_of_week = today.weekday()  # 0=Monday, 6=Sunday
+    
+    rows = db.execute(
+        text("""
+            SELECT theme
+            FROM weekday_themes
+            WHERE active = true
+              AND day_of_week = :dow
+            ORDER BY priority DESC
+        """),
+        {"dow": day_of_week},
+    ).fetchall()
+    
+    return [r[0] for r in rows]
+
+
+def _log_themed_notification(
+    db: Session,
+    notification_type: str,
+    theme: str,
+    strategy: str,
+    user_ip: str,
+    day_of_week: int,
+    holiday_name: str | None = None
+) -> None:
+    """
+    Log theme analytics for notification sends.
+    
+    Args:
+        notification_type: 'qotd' or 'midday_motivation'
+        theme: The theme that was selected
+        strategy: 'holiday', 'weekday', or 'normal'
+        user_ip: Subscriber's IP for tracking
+        day_of_week: 0=Monday, 6=Sunday
+        holiday_name: Name of holiday if strategy is 'holiday'
+    """
+    import json as json_lib
+    
+    metadata = {
+        "theme": theme,
+        "strategy": strategy,
+        "day_of_week": day_of_week,
+        "day_name": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][day_of_week],
+    }
+    
+    if holiday_name:
+        metadata["holiday_name"] = holiday_name
+    
+    try:
+        db.execute(
+            text("""
+                INSERT INTO product_events (event_name, metadata_json, user_ip, created_at)
+                VALUES (:event_name, :metadata, :user_ip, NOW())
+            """),
+            {
+                "event_name": f"themed_notification_sent_{notification_type}",
+                "metadata": json_lib.dumps(metadata),
+                "user_ip": user_ip,
+            },
+        )
+    except Exception as e:
+        # Don't fail the notification send if analytics logging fails
+        logger.warning("Failed to log themed notification analytics: %s", e)
+
+
 def _load_pool_from_db(db: Session) -> list[dict]:
     """Return all questions from push_qotd_questions ordered by id."""
     rows = db.execute(
@@ -792,6 +961,17 @@ def send_qotd_notification(db: Session) -> dict:
     pool_ids = [q["id"] for q in pool]
     pool_by_id = {q["id"]: q for q in pool}
 
+    # ── Holiday-themed question selection ───────────────────────────────────
+    holiday_theme, holiday_name = get_today_holiday_theme(db)
+    weekday_themes = get_today_weekday_themes(db)
+    
+    if holiday_theme:
+        logger.info("🎉 Today is %s — prioritizing '%s' themed questions", holiday_name, holiday_theme)
+    elif weekday_themes:
+        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        today_name = day_names[datetime.now(timezone.utc).date().weekday()]
+        logger.info("📅 %s — prioritizing themes: %s", today_name, ", ".join(weekday_themes[:2]))
+
     today = datetime.now(timezone.utc).date()
     sent = 0
     failed = 0
@@ -807,8 +987,40 @@ def send_qotd_notification(db: Session) -> dict:
         ).fetchall()
         seen_ids = {r[0] for r in seen_rows}
 
-        # Pick the first unseen question (pool order = chronological insertion)
-        next_qotd = next((pool_by_id[qid] for qid in pool_ids if qid not in seen_ids), None)
+        # Pick the first unseen question with intelligent theming:
+        # Priority 1: Holiday theme (if today is a special holiday)
+        # Priority 2: Weekday themes (e.g., Monday motivation)
+        # Priority 3: Normal rotation (any unseen question)
+        next_qotd = None
+        selection_strategy = "normal"  # Track which strategy was used
+        
+        # Try holiday theme first
+        if holiday_theme:
+            next_qotd = next(
+                (pool_by_id[qid] for qid in pool_ids 
+                 if qid not in seen_ids and pool_by_id[qid].get("theme") == holiday_theme),
+                None
+            )
+            if next_qotd:
+                selection_strategy = "holiday"
+                logger.debug("Subscriber %d: selected holiday-themed question (theme=%s)", sub_id, holiday_theme)
+        
+        # Try weekday themes (in priority order)
+        if next_qotd is None and weekday_themes:
+            for theme in weekday_themes:
+                next_qotd = next(
+                    (pool_by_id[qid] for qid in pool_ids 
+                     if qid not in seen_ids and pool_by_id[qid].get("theme") == theme),
+                    None
+                )
+                if next_qotd:
+                    selection_strategy = "weekday"
+                    logger.debug("Subscriber %d: selected weekday-themed question (theme=%s)", sub_id, theme)
+                    break
+        
+        # Fall back to first unseen question
+        if next_qotd is None:
+            next_qotd = next((pool_by_id[qid] for qid in pool_ids if qid not in seen_ids), None)
 
         # Should never happen after the refill above, but guard anyway
         if next_qotd is None:
@@ -878,6 +1090,17 @@ def send_qotd_notification(db: Session) -> dict:
                     "VALUES (:sid, :qid, NOW())"
                 ),
                 {"sid": sub_id, "qid": qotd["id"]},
+            )
+            
+            # Log theme analytics
+            _log_themed_notification(
+                db=db,
+                notification_type="qotd",
+                theme=qotd["theme"],
+                strategy=selection_strategy,
+                user_ip=user_ip,
+                day_of_week=today.weekday(),
+                holiday_name=holiday_name if selection_strategy == "holiday" else None,
             )
         elif result == "expired":
             expired_ids.append(sub_id)
@@ -1221,6 +1444,17 @@ def send_midday_motivation_notification(db: Session) -> dict:
 
     logger.info("Sending midday motivation to %d subscribers", len(rows))
 
+    # ── Holiday-themed motivation selection ─────────────────────────────────
+    holiday_theme, holiday_name = get_today_holiday_theme(db)
+    weekday_themes = get_today_weekday_themes(db)
+    
+    if holiday_theme:
+        logger.info("🎉 Today is %s — prioritizing '%s' themed midday motivation", holiday_name, holiday_theme)
+    elif weekday_themes:
+        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        today_name = day_names[datetime.now(timezone.utc).date().weekday()]
+        logger.info("📅 %s midday — prioritizing themes: %s", today_name, ", ".join(weekday_themes[:2]))
+
     # ── Proactive pool refill ───────────────────────────────────────────────
     pool = _load_motivation_pool_from_db(db)
     pool_ids = [m["id"] for m in pool]
@@ -1269,6 +1503,8 @@ def send_midday_motivation_notification(db: Session) -> dict:
         body: str | None = None
         question_for_open: str | None = None
         msg_id: int | None = None
+        message_theme: str | None = None  # Track theme for analytics
+        selection_strategy = "normal"  # Track which strategy was used
         recent_questions = _recent_user_questions(db, user_ip, days=14, limit=5)
         recent_theme = _primary_theme_from_questions(recent_questions)
         is_returning = bool(recent_questions)
@@ -1280,6 +1516,8 @@ def send_midday_motivation_notification(db: Session) -> dict:
                 title = personalized["title"]
                 body = personalized["body"]
                 question_for_open = personalized["question"]
+                message_theme = personalized.get("theme", "personalized")
+                selection_strategy = "personalized"
                 # Store in pool so history can reference it by ID
                 msg_id = db.execute(
                     text("""
@@ -1299,7 +1537,41 @@ def send_midday_motivation_notification(db: Session) -> dict:
                     {"sid": sub_id},
                 ).fetchall()
             }
-            next_msg = next((pool_by_id[mid] for mid in pool_ids if mid not in seen_ids), None)
+            
+            # Intelligent theme selection:
+            # Priority 1: Holiday theme (if today is a special holiday)
+            # Priority 2: Weekday themes (e.g., Monday motivation)
+            # Priority 3: Normal rotation (any unseen message)
+            next_msg = None
+            
+            # Try holiday theme first
+            if holiday_theme:
+                next_msg = next(
+                    (pool_by_id[mid] for mid in pool_ids 
+                     if mid not in seen_ids and pool_by_id[mid].get("theme", "").lower() == holiday_theme.lower()),
+                    None
+                )
+                if next_msg:
+                    selection_strategy = "holiday"
+                    logger.debug("Subscriber %d: selected holiday-themed motivation (theme=%s)", sub_id, holiday_theme)
+            
+            # Try weekday themes (in priority order)
+            if next_msg is None and weekday_themes:
+                for theme in weekday_themes:
+                    next_msg = next(
+                        (pool_by_id[mid] for mid in pool_ids 
+                         if mid not in seen_ids and pool_by_id[mid].get("theme", "").lower() == theme.lower()),
+                        None
+                    )
+                    if next_msg:
+                        selection_strategy = "weekday"
+                        logger.debug("Subscriber %d: selected weekday-themed motivation (theme=%s)", sub_id, theme)
+                        break
+            
+            # Fall back to first unseen message
+            if next_msg is None:
+                next_msg = next((pool_by_id[mid] for mid in pool_ids if mid not in seen_ids), None)
+            
             if next_msg is None:
                 # All messages seen — restart from beginning
                 next_msg = pool_by_id[pool_ids[0]] if pool_ids else None
@@ -1309,6 +1581,7 @@ def send_midday_motivation_notification(db: Session) -> dict:
             title = next_msg["title"]
             body = next_msg["body"]
             msg_id = next_msg["id"]
+            message_theme = next_msg.get("theme", "unknown")
 
         subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
 
@@ -1347,6 +1620,18 @@ def send_midday_motivation_notification(db: Session) -> dict:
                 text("INSERT INTO push_motivation_history (subscription_id, sent_at, message_id) VALUES (:sid, NOW(), :mid)"),
                 {"sid": sub_id, "mid": msg_id},
             )
+            
+            # Log theme analytics
+            if message_theme:
+                _log_themed_notification(
+                    db=db,
+                    notification_type="midday_motivation",
+                    theme=message_theme,
+                    strategy=selection_strategy,
+                    user_ip=user_ip,
+                    day_of_week=today.date().weekday(),
+                    holiday_name=holiday_name if selection_strategy == "holiday" else None,
+                )
         elif result == "expired":
             expired_ids.append(sub_id)
             failed += 1

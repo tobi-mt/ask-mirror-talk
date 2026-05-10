@@ -722,7 +722,7 @@
       const patterns = await getCachedPatterns();
 
       const exportData = {
-        version: '5.5.32',
+        version: '5.6.2',
         exportedAt: new Date().toISOString(),
         reflections: history,
         patterns: patterns,

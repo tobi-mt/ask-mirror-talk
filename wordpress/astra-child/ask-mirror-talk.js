@@ -10265,15 +10265,15 @@
     voiceBtn.className = 'amt-voice-btn';
     voiceBtn.innerHTML = '🎤';
     voiceBtn.title = 'Ask with voice (click to start/stop)';
-    voiceBtn.style.cssText = 'position:absolute;right:60px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.5rem;cursor:pointer;padding:0.5rem;opacity:0.6;transition:opacity 0.2s;z-index:10;';
+    voiceBtn.style.cssText = 'position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,0.9);border:1px solid #d4cec6;border-radius:8px;font-size:1.3rem;cursor:pointer;padding:8px 10px;opacity:0.7;transition:all 0.2s;z-index:5;box-shadow:0 2px 4px rgba(0,0,0,0.08);';
     
     const updateButtonState = (disabled) => {
       if (disabled) {
-        voiceBtn.style.opacity = '0.3';
+        voiceBtn.style.opacity = '0.4';
         voiceBtn.style.cursor = 'not-allowed';
         voiceBtn.disabled = true;
       } else {
-        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.6';
+        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.7';
         voiceBtn.style.cursor = 'pointer';
         voiceBtn.disabled = false;
       }
@@ -10282,11 +10282,13 @@
     voiceBtn.onmouseenter = () => {
       if (!voiceBtn.disabled) {
         voiceBtn.style.opacity = '1';
+        voiceBtn.style.transform = 'scale(1.05)';
       }
     };
     voiceBtn.onmouseleave = () => {
       if (!voiceBtn.disabled) {
-        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.6';
+        voiceBtn.style.opacity = isRecognitionActive ? '1' : '0.7';
+        voiceBtn.style.transform = 'scale(1)';
       }
     };
     
@@ -10298,8 +10300,9 @@
           // Already stopped, ignore
         }
         isRecognitionActive = false;
-        voiceBtn.innerHTML = '🎤';
-        voiceBtn.title = 'Ask with voice (click to start/stop)';
+        voiceBtn.innerHTML = '🎤';7';
+        voiceBtn.style.background = 'rgba(255,255,255,0.9)';
+        input.placeholder = 'Ask what you are carrying, questioning, or trying to understandlick to start/stop)';
         voiceBtn.style.opacity = '0.6';
         input.placeholder = 'Ask a question...';
       }
@@ -10315,12 +10318,13 @@
         try {
           voiceRecognition.start();
           isRecognitionActive = true;
-          voiceBtn.innerHTML = '🔴';
-          voiceBtn.title = 'Recording... (click to stop)';
-          voiceBtn.style.opacity = '1';
-          input.placeholder = 'Listening...';
+          voiceBtn.style.background = 'rgba(255,255,255,1)';
+          input.placeholder = '🎤 Listening...';
         } catch (e) {
           warn('Voice recognition error:', e);
+          isRecognitionActive = false;
+          voiceBtn.innerHTML = '🎤';
+          voiceBtn.style.opacity = '0.7:', e);
           isRecognitionActive = false;
           voiceBtn.innerHTML = '🎤';
           voiceBtn.style.opacity = '0.6';
@@ -10348,12 +10352,9 @@
       input.value = transcript;
     };
     
-    voiceRecognition.onend = () => {
-      isRecognitionActive = false;
-      voiceBtn.innerHTML = '🎤';
-      voiceBtn.title = 'Ask with voice (click to start/stop)';
-      voiceBtn.style.opacity = '0.6';
-      input.placeholder = 'Ask a question...';
+    voiceRecognition.onend = () =>7';
+      voiceBtn.style.background = 'rgba(255,255,255,0.9)';
+      input.placeholder = 'Ask what you are carrying, questioning, or trying to understand...';
     };
     
     voiceRecognition.onerror = (event) => {
@@ -10361,16 +10362,20 @@
       isRecognitionActive = false;
       voiceBtn.innerHTML = '🎤';
       voiceBtn.title = 'Ask with voice (click to start/stop)';
-      voiceBtn.style.opacity = '0.6';
-      input.placeholder = 'Ask a question...';
+      voiceBtn.style.opacity = '0.7';
+      voiceBtn.style.background = 'rgba(255,255,255,0.9)';
+      input.placeholder = 'Ask what you are carrying, questioning, or trying to understand...';
     };
     
-    // Add button to form with proper positioning
-    const inputParent = input.parentElement;
-    if (inputParent) {
-      // Ensure parent has relative positioning
-      const parentStyle = window.getComputedStyle(inputParent);
-      if (parentStyle.position === 'static') {
+    // Create a wrapper for proper positioning
+    // Wrap the textarea in a positioned container so the mic button has a proper anchor
+    const textareaWrapper = document.createElement('div');
+    textareaWrapper.style.cssText = 'position:relative;';
+    
+    // Insert wrapper before textarea, then move textarea into it
+    input.parentNode.insertBefore(textareaWrapper, input);
+    textareaWrapper.appendChild(input);
+    textareaWrapper.appendChild(voiceBtn); if (parentStyle.position === 'static') {
         inputParent.style.position = 'relative';
       }
       inputParent.appendChild(voiceBtn);

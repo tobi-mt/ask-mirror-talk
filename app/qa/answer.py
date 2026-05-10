@@ -408,7 +408,20 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
             )
 
             import json
-            raw = response.choices[0].message.content.strip()
+            message = response.choices[0].message
+            
+            # Check for refusal (GPT-5 models may refuse)
+            if hasattr(message, 'refusal') and message.refusal:
+                logger.warning("Follow-up generation refused by model: %s", message.refusal)
+                return []
+            
+            # Check if content is None or empty
+            raw = message.content
+            if not raw:
+                logger.warning("Follow-up generation returned empty content")
+                return []
+            
+            raw = raw.strip()
             logger.info("Follow-up raw response: %s", raw[:300])
             
             # Strip markdown code fences if present (```json ... ```)
@@ -597,7 +610,18 @@ def _generate_intelligent_answer(question: str, chunks: list[dict]) -> str:
     if response is None:
         raise last_error or RuntimeError("Answer generation failed for all configured models")
     
-    answer = response.choices[0].message.content.strip()
+    message = response.choices[0].message
+    
+    # Check for refusal (GPT-5 models may refuse)
+    if hasattr(message, 'refusal') and message.refusal:
+        raise RuntimeError(f"Answer generation refused by model: {message.refusal}")
+    
+    # Check if content is None or empty
+    answer = message.content
+    if not answer:
+        raise RuntimeError("Answer generation returned empty content")
+    
+    answer = answer.strip()
     logger.info("Generated intelligent answer (length: %d chars)", len(answer))
     
     return answer

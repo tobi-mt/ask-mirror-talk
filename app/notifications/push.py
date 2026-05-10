@@ -649,7 +649,20 @@ Return only the JSON array, no other text."""
             temperature=0.9,
             max_tokens=2000,
         )
-        raw = response.choices[0].message.content.strip()
+        message = response.choices[0].message
+        
+        # Check for refusal (GPT-5 models may refuse)
+        if hasattr(message, 'refusal') and message.refusal:
+            logger.error("QOTD generation refused by model: %s", message.refusal)
+            return 0
+        
+        # Check if content is None or empty
+        raw = message.content
+        if not raw:
+            logger.error("QOTD generation returned empty content")
+            return 0
+            
+        raw = raw.strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -1012,7 +1025,20 @@ Return only the JSON array, no other text."""
             temperature=0.9,
             max_tokens=3000,
         )
-        raw = response.choices[0].message.content.strip()
+        message = response.choices[0].message
+        
+        # Check for refusal (GPT-5 models may refuse)
+        if hasattr(message, 'refusal') and message.refusal:
+            logger.error("Motivation batch generation refused by model: %s", message.refusal)
+            return 0
+        
+        # Check if content is None or empty
+        raw = message.content
+        if not raw:
+            logger.error("Motivation batch generation returned empty content")
+            return 0
+            
+        raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -1087,7 +1113,20 @@ Return only the JSON object, no other text."""
             temperature=0.85,
             max_tokens=300,
         )
-        raw = response.choices[0].message.content.strip()
+        message = response.choices[0].message
+        
+        # Check for refusal (GPT-5 models may refuse)
+        if hasattr(message, 'refusal') and message.refusal:
+            logger.warning("Personalized motivation refused by model: %s", message.refusal)
+            return None
+        
+        # Check if content is None or empty
+        raw = message.content
+        if not raw:
+            logger.warning("Personalized motivation returned empty content")
+            return None
+            
+        raw = raw.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):

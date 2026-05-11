@@ -68,23 +68,40 @@ def create_chat_completion(
 
     try:
         return client.chat.completions.create(**payload)
-    except (TypeError, Exception) as exc:
-        # Handle both SDK compatibility issues and API parameter errors
+    except TypeError as exc:
+        # Handle SDK compatibility issues with parameter names
         error_msg = str(exc)
         
-        # If API says max_tokens is not supported, retry with max_completion_tokens
-        if ("max_tokens" in error_msg and "max_completion_tokens" in error_msg):
+        # If SDK rejects max_completion_tokens, retry with max_tokens
+        if "max_completion_tokens" in error_msg and "unexpected keyword" in error_msg.lower():
+            if "max_completion_tokens" in payload:
+                legacy_payload = dict(payload)
+                legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
+                return client.chat.completions.create(**legacy_payload)
+        
+        # If SDK rejects max_tokens, retry with max_completion_tokens
+        if "max_tokens" in error_msg and "unexpected keyword" in error_msg.lower():
             if "max_tokens" in payload:
                 legacy_payload = dict(payload)
                 legacy_payload["max_completion_tokens"] = legacy_payload.pop("max_tokens")
                 return client.chat.completions.create(**legacy_payload)
         
-        # If API says max_completion_tokens is not supported, retry with max_tokens
-        if ("max_completion_tokens" in error_msg and "max_tokens" in error_msg):
-            if "max_completion_tokens" in payload:
-                legacy_payload = dict(payload)
-                legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
-                return client.chat.completions.create(**legacy_payload)
+        # Re-raise if it's not a parameter compatibility issue
+        raise
+    except Exception as exc:
+        # Handle API-level parameter errors
+        error_msg = str(exc)
+        
+        # If API says it wants the other parameter name
+        if "max_tokens" in error_msg and "max_completion_tokens" in error_msg:
+            if "max_tokens" in payload and "max_completion_tokens" not in payload:
+                retry_payload = dict(payload)
+                retry_payload["max_completion_tokens"] = retry_payload.pop("max_tokens")
+                return client.chat.completions.create(**retry_payload)
+            elif "max_completion_tokens" in payload and "max_tokens" not in payload:
+                retry_payload = dict(payload)
+                retry_payload["max_tokens"] = retry_payload.pop("max_completion_tokens")
+                return client.chat.completions.create(**retry_payload)
         
         # Re-raise if it's not a parameter compatibility issue
         raise

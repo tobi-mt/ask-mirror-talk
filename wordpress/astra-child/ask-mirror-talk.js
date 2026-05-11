@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.6.3 loaded');
+  log('Ask Mirror Talk Widget v5.6.4 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -2694,6 +2694,38 @@
     if (!fragment || fragment.length < 4) return [];
 
     const lower = fragment.toLowerCase();
+    
+    // Extract the core topic from common question patterns
+    const extractTopic = (text) => {
+      const patterns = [
+        /^tell me about\s+(.+)/i,
+        /^what (?:is|are)\s+(.+)/i,
+        /^how do i\s+(.+)/i,
+        /^can you (?:explain|tell me about)\s+(.+)/i,
+        /^explain\s+(.+)/i,
+        /^describe\s+(.+)/i,
+        /^help me (?:understand|with)\s+(.+)/i,
+        /^i (?:want to know|need to understand)\s+(?:about\s+)?(.+)/i,
+        /^i am (?:trying to|wanting to)?\s*(?:learn(?:ing)?|understand(?:ing)?)(?:\s+more)?\s+about\s+(.+?)(?:,|$)/i,
+      ];
+      
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+      
+      // If no pattern matched, try to extract topic from "about X" anywhere in the text
+      const aboutMatch = text.match(/\babout\s+([^,]+?)(?:,|$)/i);
+      if (aboutMatch && aboutMatch[1]) {
+        return aboutMatch[1].trim();
+      }
+      
+      return text; // If no pattern matches, use the original text
+    };
+    
+    const topic = extractTopic(lower);
     const prompts = [];
     const addPrompt = (label, questionText) => {
       const cleanQuestion = String(questionText || '').trim();
@@ -2703,14 +2735,14 @@
     };
 
     if (!/[?]$/.test(String(rawInput || '').trim()) || fragment.length < 26) {
-      addPrompt('Make it more specific', `How do I navigate ${lower} with honesty and clarity?`);
+      addPrompt('Make it more specific', `How do I navigate ${topic} with honesty and clarity?`);
     }
 
-    addPrompt('Ask for a first step', `What is the first step I should take with ${lower}?`);
-    addPrompt('Ground it in Mirror Talk', `What does Mirror Talk say about ${lower}?`);
+    addPrompt('Ask for a first step', `What is the first step I should take with ${topic}?`);
+    addPrompt('Ground it in Mirror Talk', `What does Mirror Talk say about ${topic}?`);
 
     if (lower.includes('feel ') || lower.includes('feeling')) {
-      addPrompt('Explore the feeling', `What might this feeling be trying to show me about ${lower}?`);
+      addPrompt('Explore the feeling', `What might this feeling be trying to show me about ${topic}?`);
     }
 
     return prompts.slice(0, 2);

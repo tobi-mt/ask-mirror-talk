@@ -54,13 +54,10 @@ def create_chat_completion(
     try:
         return client.chat.completions.create(**payload)
     except TypeError as exc:
-        # Only fall back to legacy max_tokens for non-reasoning models with old SDK
-        if "max_completion_tokens" not in str(exc) or "max_completion_tokens" not in payload:
-            raise
-        # For reasoning models (GPT-5, o1, etc), max_completion_tokens is required
-        if is_reasoning_chat_model(model):
-            raise
-        # For legacy models, retry with max_tokens if SDK doesn't support max_completion_tokens
-        legacy_payload = dict(payload)
-        legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
-        return client.chat.completions.create(**legacy_payload)
+        # Fallback for older OpenAI SDK versions that don't support max_completion_tokens
+        if "max_completion_tokens" in str(exc) and "max_completion_tokens" in payload:
+            # Try with legacy max_tokens parameter instead
+            legacy_payload = dict(payload)
+            legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
+            return client.chat.completions.create(**legacy_payload)
+        raise

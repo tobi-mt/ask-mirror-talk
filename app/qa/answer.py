@@ -5,11 +5,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_ANSWER_MODEL_FALLBACKS = ("gpt-4.1", "gpt-4.1-mini")
+_ANSWER_MODEL_FALLBACKS = ("gpt-4-turbo", "gpt-4o", "gpt-4")
 _MODEL_ALIASES = {
-    "gpt-5.5": "gpt-5.2",
-    "gpt-5.4": "gpt-5.2",
-    "gpt-5.4-mini": "gpt-5-mini",
+    "gpt-4.1": "gpt-4-turbo",
+    "gpt-4.1-mini": "gpt-4o-mini",
 }
 
 

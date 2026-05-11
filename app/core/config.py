@@ -88,9 +88,9 @@ class Settings(BaseSettings):
 
     # Answer Generation
     answer_generation_provider: str = "openai"  # openai | basic
-    answer_generation_model: str = "gpt-5.2"  # Premium reflective answers
-    answer_followup_model: str = "gpt-5-mini"  # Fast; decoupled from main answer model
-    notification_generation_model: str = "gpt-5-mini"  # QOTD/motivation copy generation
+    answer_generation_model: str = "gpt-4-turbo"  # Premium reflective answers (was gpt-5.2 - not yet available)
+    answer_followup_model: str = "gpt-4o-mini"  # Fast; decoupled from main answer model (was gpt-5-mini)
+    notification_generation_model: str = "gpt-4o-mini"  # QOTD/motivation copy generation
     answer_max_tokens: int = 800  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
     cache_similarity_threshold: float = 0.89  # Minimum cosine similarity for cache hits (lowered from 0.92 to improve hit rate)

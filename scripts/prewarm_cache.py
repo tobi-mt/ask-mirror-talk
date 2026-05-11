@@ -46,6 +46,41 @@ TOP_QUESTIONS = [
 ]
 
 
+def clean_incomplete_cached_answers():
+    """Remove incomplete cached answers before prewarming."""
+    from app.qa.cache import get_answer_cache
+    from app.qa.service import _is_incomplete_answer
+    
+    cache = get_answer_cache()
+    
+    print(f"🧹 Cleaning incomplete cached answers...")
+    
+    incomplete_count = 0
+    
+    with cache._lock:
+        entries_to_delete = []
+        
+        for entry in cache._entries:
+            answer = entry.response.get("answer", "")
+            
+            if _is_incomplete_answer(answer):
+                incomplete_count += 1
+                entries_to_delete.append(entry.question)
+                print(f"   ✗ Found incomplete: '{entry.question[:60]}...' (ends: '...{answer[-40:]}')")
+    
+    if incomplete_count > 0:
+        deleted = 0
+        for question in entries_to_delete:
+            if cache.delete(question):
+                deleted += 1
+        print(f"   ✓ Cleaned {deleted} incomplete cached answers")
+    else:
+        print(f"   ✓ No incomplete answers found - cache is clean")
+    
+    print()
+    return incomplete_count
+
+
 async def prewarm_cache(questions: list[str] | None = None, force: bool = False):
     """Pre-warm the cache with common questions."""
     questions_to_cache = questions or TOP_QUESTIONS
@@ -53,6 +88,10 @@ async def prewarm_cache(questions: list[str] | None = None, force: bool = False)
     print(f"\n{'='*80}")
     print(f"🔥 CACHE PRE-WARMING")
     print(f"{'='*80}\n")
+    
+    # Clean up incomplete cached answers first
+    clean_incomplete_cached_answers()
+    
     print(f"Questions to cache: {len(questions_to_cache)}")
     print(f"Force refresh: {force}")
     print()

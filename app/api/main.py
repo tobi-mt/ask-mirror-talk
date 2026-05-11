@@ -61,6 +61,30 @@ async def _prewarm_cache():
 
     cache = get_answer_cache()
 
+    # ── Phase 0: Clean incomplete cached answers ──
+    logger.info("  🧹 Cleaning incomplete cached answers...")
+    from app.qa.service import _is_incomplete_answer
+    
+    incomplete_count = 0
+    with cache._lock:
+        entries_to_delete = []
+        for entry in cache._entries:
+            answer = entry.response.get("answer", "")
+            if _is_incomplete_answer(answer):
+                incomplete_count += 1
+                entries_to_delete.append(entry.question)
+                logger.info("  ✗ Found incomplete: '%.50s...' (ends: '...%.30s')", 
+                           entry.question, answer[-30:] if answer else "")
+    
+    if incomplete_count > 0:
+        deleted = 0
+        for question in entries_to_delete:
+            if cache.delete(question):
+                deleted += 1
+        logger.info("  ✓ Cleaned %d incomplete cached answers", deleted)
+    else:
+        logger.info("  ✓ No incomplete answers found - cache is clean")
+
     # ── Phase 1: restore top user questions from DB (no OpenAI cost) ──
     logger.info("  📚 Loading historical user questions from DB...")
     SessionLocal = get_session_local()

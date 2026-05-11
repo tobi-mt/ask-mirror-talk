@@ -317,9 +317,9 @@ class AnswerCache:
     def clear(self) -> None:
         """Clear all cache entries (in-memory and Redis)."""
         with self._lock:
-                self._entries.clear()
-                self._entries_by_question.clear()
-                logger.info("Cache CLEARED")
+            self._entries.clear()
+            self._entries_by_question.clear()
+            logger.info("Cache CLEARED")
         if self._redis:
             try:
                 keys = self._redis.zrange(self._redis_index_key, 0, -1)
@@ -329,6 +329,33 @@ class AnswerCache:
                 logger.info("Redis cache CLEARED")
             except Exception as exc:
                 logger.warning("Failed to clear Redis cache: %s", exc)
+
+    def delete(self, question: str) -> bool:
+        """
+        Delete a specific cache entry by normalized question.
+        Returns True if entry was found and deleted, False otherwise.
+        """
+        with self._lock:
+            entry = self._entries_by_question.get(question)
+            if not entry:
+                return False
+            
+            # Remove from in-memory structures
+            self._entries = [e for e in self._entries if e.question != question]
+            self._entries_by_question.pop(question, None)
+            logger.info("Cache DELETE: '%.60s'", question)
+        
+        # Remove from Redis
+        if self._redis:
+            try:
+                key = self._entry_redis_key(question)
+                self._redis.delete(key)
+                self._redis.zrem(self._redis_index_key, key)
+                logger.info("Redis cache DELETE: '%.60s'", question)
+            except Exception as exc:
+                logger.warning("Failed to delete from Redis cache: %s", exc)
+        
+        return True
 
 
 def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:

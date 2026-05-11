@@ -53,6 +53,46 @@ def _is_degraded_cached_answer(response: dict | None) -> bool:
     )
 
 
+def _is_incomplete_answer(answer: str) -> bool:
+    """
+    Check if an answer appears incomplete (e.g., cut off mid-sentence).
+    Incomplete answers should not be cached.
+    """
+    if not answer or not isinstance(answer, str):
+        return True
+    
+    text = answer.strip()
+    
+    # Too short to be a real answer
+    if len(text) < 100:
+        return True
+    
+    # Check if it ends with incomplete punctuation
+    # Complete answers should end with ., !, or ?
+    if not text or text[-1] not in '.!?':
+        return True
+    
+    # Check for common mid-sentence cut-off patterns
+    # e.g., "the answer is", "it's clear that", ending with a conjunction, etc.
+    last_sentence = text.split('.')[-2] if '.' in text[:-1] else text
+    last_words = last_sentence.strip().split()[-3:] if last_sentence else []
+    
+    # Common incomplete patterns at the end
+    incomplete_endings = {
+        'is', 'are', 'was', 'were', 'been', 'being',
+        'that', 'which', 'who', 'what', 'when', 'where', 'why', 'how',
+        'a', 'an', 'the',
+        'and', 'or', 'but', 'so', 'yet',
+        'to', 'for', 'of', 'in', 'on', 'at', 'by', 'with',
+        'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must',
+    }
+    
+    if last_words and last_words[-1].lower() in incomplete_endings:
+        return True
+    
+    return False
+
+
 def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], extra: dict | None = None):
     payload = {
         "flow": flow,
@@ -420,6 +460,9 @@ def answer_question(
     
     if _is_degraded_cached_answer(result):
         logger.info("Skipping cache PUT for degraded answer to '%.80s'", question)
+    elif _is_incomplete_answer(result.get("answer", "")):
+        logger.warning("Skipping cache PUT for incomplete answer to '%.80s' (answer ends: '...%.50s')",
+                      question, result.get("answer", "")[-50:])
     else:
         cache.put(norm_q, query_embedding, result)
 
@@ -708,6 +751,9 @@ def answer_question_stream(
         cache_payload["fallback_reason"] = fallback_reason
     if _is_degraded_cached_answer(cache_payload):
         logger.info("Skipping cache PUT for degraded streaming answer to '%.80s'", question)
+    elif _is_incomplete_answer(full_answer):
+        logger.warning("Skipping cache PUT for incomplete streaming answer to '%.80s' (answer ends: '...%.50s')",
+                      question, full_answer[-50:] if full_answer else "")
     else:
         cache.put(norm_q, query_embedding, cache_payload)
 

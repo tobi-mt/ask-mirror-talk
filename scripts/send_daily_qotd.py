@@ -46,12 +46,61 @@ def _is_transient_db_error(exc: Exception) -> bool:
     )
 
 
+def _clean_incomplete_redis_cache():
+    """Clean incomplete answers from Redis cache (runs once per QOTD check)."""
+    try:
+        from app.qa.cache import get_answer_cache, _is_incomplete_answer
+        
+        cache = get_answer_cache()
+        
+        if not cache._redis:
+            # No Redis configured - skip cleanup
+            return
+        
+        # Get all cache entry keys from Redis
+        keys = cache._redis.zrange(cache._redis_index_key, 0, -1)
+        
+        if not keys:
+            return
+        
+        deleted_count = 0
+        
+        for key in keys:
+            raw = cache._redis.get(key)
+            if raw is None:
+                continue
+            
+            entry = cache._deserialize_entry(raw)
+            if entry is None:
+                continue
+            
+            answer = entry.response.get("answer", "")
+            
+            # Check if incomplete
+            if _is_incomplete_answer(answer):
+                deleted_count += 1
+                logger.info("Cleaning incomplete cached answer from Redis: '%.50s...'", entry.question)
+                
+                # Delete from Redis
+                cache._redis.delete(key)
+                cache._redis.zrem(cache._redis_index_key, key)
+        
+        if deleted_count > 0:
+            logger.info("✓ Cleaned %d incomplete answers from Redis cache", deleted_count)
+    
+    except Exception as e:
+        logger.warning("Failed to clean incomplete Redis cache entries: %s", e)
+
+
 def main():
     from app.core.db import get_session_local, safe_close_session
     from app.notifications.push import send_qotd_notification
     from app.core.config import settings
 
     logger.info("🔔 Starting daily QOTD push notification...")
+    
+    # Clean incomplete answers from Redis cache (once per hour)
+    _clean_incomplete_redis_cache()
 
     SessionLocal = get_session_local()
     max_attempts = 3

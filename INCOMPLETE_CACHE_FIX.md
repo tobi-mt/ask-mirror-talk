@@ -102,12 +102,23 @@ Automatic cache cleaning is now integrated into:
 - Cleans incomplete answers before prewarming with fresh content
 - Happens automatically on every deploy/restart
 
-**2. Manual Cache Prewarming** ([scripts/prewarm_cache.py](scripts/prewarm_cache.py)):
+**2. QOTD Script** ([scripts/send_daily_qotd.py](scripts/send_daily_qotd.py)) ⭐:
+- Runs **every hour** as part of the QOTD notification cron
+- Cleans incomplete answers from Redis before sending notifications
+- Ensures Redis stays clean automatically in production
+
+**3. Midday Motivation Script** ([scripts/send_midday_motivation.py](scripts/send_midday_motivation.py)) ⭐:
+- Runs **every hour** as part of the midday motivation cron
+- Additional cleanup pass to catch incomplete answers quickly
+- Multiple cleanup passes per day ensure cache stays healthy
+
+**4. Manual Cache Prewarming** ([scripts/prewarm_cache.py](scripts/prewarm_cache.py)):
 - Runs before prewarming questions
 - Ensures cache is clean before adding new entries
 - Invoked with: `python scripts/prewarm_cache.py`
 
-**3. Utility Scripts** (for manual inspection/cleaning):
+**5. Utility Scripts** (for manual inspection/cleaning):
+- **`scripts/clear_redis_incomplete.py`**: Immediately clear incomplete answers from Redis
 - **`scripts/clear_incomplete_cache.py`**: Clear a specific incomplete cached answer
 - **`scripts/scan_incomplete_cache.py`**: Scan entire cache for incomplete answers and remove them
 - **`scripts/test_incomplete_detection.py`**: Test suite for incomplete answer detection (12 test cases, all passing)
@@ -150,7 +161,18 @@ Removes from both in-memory cache and Redis persistence layer.
    - Integrated cache cleaning into prewarm workflow
    - Updated imports to use `_is_incomplete_answer` from `cache` module
 
-5. **Updated utility scripts**:
+5. **[scripts/send_daily_qotd.py](scripts/send_daily_qotd.py)** ⭐:
+   - Added `_clean_incomplete_redis_cache()` function
+   - Runs automatically every hour as part of QOTD cron
+   - Cleans incomplete answers from Redis before sending notifications
+
+6. **[scripts/send_midday_motivation.py](scripts/send_midday_motivation.py)** ⭐:
+   - Added `_clean_incomplete_redis_cache()` function
+   - Runs automatically every hour as part of motivation cron
+   - Provides additional cleanup pass throughout the day
+
+7. **Updated utility scripts**:
+   - [scripts/clear_redis_incomplete.py](scripts/clear_redis_incomplete.py) - NEW: Immediate Redis cleanup
    - [scripts/clear_incomplete_cache.py](scripts/clear_incomplete_cache.py)
    - [scripts/scan_incomplete_cache.py](scripts/scan_incomplete_cache.py)
    - [scripts/test_incomplete_detection.py](scripts/test_incomplete_detection.py)
@@ -211,9 +233,16 @@ However, this is **not necessary** - the fix handles it automatically on restart
 
 After this deployment, the system will automatically:
 - ✅ **Filter incomplete answers when loading from Redis** (primary protection)
+- ✅ **Clean Redis every hour** via QOTD and motivation scripts (automatic maintenance)
 - ✅ Prevent new incomplete answers from being cached
 - ✅ Clean up any incomplete answers during startup
 - ✅ Clean up incomplete answers when prewarming cache
+
+The **hourly cleanup** in the notification scripts means:
+- Incomplete answers are removed from Redis **automatically throughout the day**
+- No manual intervention needed
+- Cache stays clean even if incomplete answers somehow get cached
+- Multiple cleanup passes (QOTD + Midday Motivation) = ~24 cleanups per day
 
 ## Monitoring
 

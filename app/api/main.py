@@ -57,13 +57,12 @@ async def _prewarm_cache():
 
     logger.info("🔥 Starting cache pre-warm...")
 
-    from app.qa.cache import get_answer_cache, prewarm_from_db_history
+    from app.qa.cache import get_answer_cache, prewarm_from_db_history, _is_incomplete_answer
 
     cache = get_answer_cache()
 
     # ── Phase 0: Clean incomplete cached answers ──
     logger.info("  🧹 Cleaning incomplete cached answers...")
-    from app.qa.service import _is_incomplete_answer
     
     incomplete_count = 0
     with cache._lock:

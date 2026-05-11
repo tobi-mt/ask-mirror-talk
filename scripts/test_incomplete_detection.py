@@ -9,7 +9,7 @@ import os
 # Add parent directory to path so we can import app modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.qa.service import _is_incomplete_answer
+from app.qa.cache import _is_incomplete_answer
 
 
 def test_incomplete_answer_detection():

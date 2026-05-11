@@ -11,7 +11,7 @@ from app.qa.smart_citations import (
     select_citation_segments,
 )
 from app.qa.answer import compose_answer
-from app.qa.cache import get_answer_cache, normalize_question
+from app.qa.cache import get_answer_cache, normalize_question, _is_incomplete_answer
 from app.storage.repository import log_qa
 
 logger = logging.getLogger(__name__)
@@ -51,46 +51,6 @@ def _is_degraded_cached_answer(response: dict | None) -> bool:
         response.get("answer_source") in {"basic_fallback", "no_match"}
         or response.get("answer_status") in {"generation_failed", "source_moments_only", "needs_refinement"}
     )
-
-
-def _is_incomplete_answer(answer: str) -> bool:
-    """
-    Check if an answer appears incomplete (e.g., cut off mid-sentence).
-    Incomplete answers should not be cached.
-    """
-    if not answer or not isinstance(answer, str):
-        return True
-    
-    text = answer.strip()
-    
-    # Too short to be a real answer
-    if len(text) < 100:
-        return True
-    
-    # Check if it ends with incomplete punctuation
-    # Complete answers should end with ., !, or ?
-    if not text or text[-1] not in '.!?':
-        return True
-    
-    # Check for common mid-sentence cut-off patterns
-    # e.g., "the answer is", "it's clear that", ending with a conjunction, etc.
-    last_sentence = text.split('.')[-2] if '.' in text[:-1] else text
-    last_words = last_sentence.strip().split()[-3:] if last_sentence else []
-    
-    # Common incomplete patterns at the end
-    incomplete_endings = {
-        'is', 'are', 'was', 'were', 'been', 'being',
-        'that', 'which', 'who', 'what', 'when', 'where', 'why', 'how',
-        'a', 'an', 'the',
-        'and', 'or', 'but', 'so', 'yet',
-        'to', 'for', 'of', 'in', 'on', 'at', 'by', 'with',
-        'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must',
-    }
-    
-    if last_words and last_words[-1].lower() in incomplete_endings:
-        return True
-    
-    return False
 
 
 def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], extra: dict | None = None):

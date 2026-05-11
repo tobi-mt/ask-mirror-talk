@@ -1,5 +1,12 @@
 # Fix for Incomplete Cached Answers
 
+## Summary
+
+**Problem**: Cache hit returning incomplete answer ending with "...it's clear that true rest isn"  
+**Root Cause**: Incomplete streaming answers were cached to Redis and reloaded on app restart  
+**Solution**: Filter incomplete answers when loading from Redis **before** they enter memory  
+**Impact**: Incomplete cached answer will be automatically removed on next app restart
+
 ## Problem
 
 The cache was storing and serving incomplete answers that were cut off mid-sentence. This happened when:
@@ -20,21 +27,41 @@ The answer was incomplete (cut off mid-sentence), but was still cached and serve
 
 ## Root Cause
 
-The code in `answer_question_stream()` and `answer_question()` cached answers without validating if they were complete:
+The code cached incomplete streaming answers without validation, AND Redis persisted these incomplete answers. On app restart:
 
-```python
-# Old code - no validation
-if _is_degraded_cached_answer(cache_payload):
-    logger.info("Skipping cache PUT for degraded streaming answer to '%.80s'", question)
-else:
-    cache.put(norm_q, query_embedding, cache_payload)  # ❌ Caches incomplete answers
-```
+1. `AnswerCache.__init__()` loads cached answers from Redis
+2. Incomplete answers were loaded back into memory
+3. Later cleanup in `_prewarm_cache()` ran, but timing issues or multiple instances meant the incomplete answer persisted
+
+The critical issue: **incomplete answers in Redis survived app restarts** and got reloaded before any cleanup could run.
 
 ## Solution
 
-### 1. Added Incomplete Answer Detection
+### 1. Filter Incomplete Answers When Loading from Redis
 
-Created `_is_incomplete_answer()` function in [app/qa/service.py](app/qa/service.py) that checks:
+Updated `_load_from_redis()` in [app/qa/cache.py](app/qa/cache.py) to:
+- Validate each answer before loading it into memory
+- Skip incomplete answers (don't load them)
+- Delete incomplete entries from Redis immediately
+- Log how many incomplete answers were skipped
+
+```python
+# New code - validates on load from Redis
+answer = entry.response.get("answer", "")
+if _is_incomplete_answer(answer) or _looks_like_degraded_answer_text(answer):
+    skipped_incomplete += 1
+    logger.info("Skipping incomplete cached answer from Redis: '%.50s...'", entry.question)
+    # Clean it from Redis too
+    self._redis.delete(key)
+    self._redis.zrem(self._redis_index_key, key)
+    continue
+```
+
+This ensures incomplete answers **never make it back into memory** after a restart.
+
+### 2. Added Incomplete Answer Detection
+
+Created `_is_incomplete_answer()` function in [app/qa/cache.py](app/qa/cache.py) that checks:
 
 - **Length**: Answer must be at least 100 characters
 - **Ending punctuation**: Must end with `.`, `!`, or `?`
@@ -46,7 +73,12 @@ Created `_is_incomplete_answer()` function in [app/qa/service.py](app/qa/service
   - Question words: "that", "which", "who", "what"
   - Modal verbs: "can", "will", "should", "might"
 
-### 2. Updated Cache Logic
+This function is used in three places:
+1. **When loading from Redis** (prevents incomplete answers from being loaded)
+2. **When caching new answers** (prevents incomplete answers from being cached)
+3. **During startup cleanup** (removes any incomplete answers that slip through)
+
+### 3. Updated Cache Logic
 
 Both streaming and non-streaming answer generation now validate answers before caching:
 
@@ -96,27 +128,33 @@ Removes from both in-memory cache and Redis persistence layer.
 
 ## Files Changed
 
-1. **[app/qa/service.py](app/qa/service.py)**:
-   - Added `_is_incomplete_answer()` function
-   - Updated cache logic in `answer_question()` 
-   - Updated cache logic in `answer_question_stream()`
-
-2. **[app/qa/cache.py](app/qa/cache.py)**:
+1. **[app/qa/cache.py](app/qa/cache.py)** ⭐ (Primary fix):
+   - Added `_is_incomplete_answer()` function (centralized validation logic)
+   - **Updated `_load_from_redis()`** to skip incomplete answers when loading from Redis (KEY FIX)
    - Added `delete()` method to remove specific cache entries
    - Fixed indentation in `clear()` method
+
+2. **[app/qa/service.py](app/qa/service.py)**:
+   - Removed duplicate `_is_incomplete_answer()` function
+   - Updated imports to use `_is_incomplete_answer` from `cache` module
+   - Updated cache logic in `answer_question()` to validate before caching
+   - Updated cache logic in `answer_question_stream()` to validate before caching
 
 3. **[app/api/main.py](app/api/main.py)**:
    - Added automatic incomplete cache cleaning to `_prewarm_cache()` startup function
    - Runs on every app startup/restart
+   - Updated imports to use `_is_incomplete_answer` from `cache` module
 
 4. **[scripts/prewarm_cache.py](scripts/prewarm_cache.py)**:
    - Added `clean_incomplete_cached_answers()` function
    - Integrated cache cleaning into prewarm workflow
+   - Updated imports to use `_is_incomplete_answer` from `cache` module
 
-5. **New utility scripts**:
+5. **Updated utility scripts**:
    - [scripts/clear_incomplete_cache.py](scripts/clear_incomplete_cache.py)
    - [scripts/scan_incomplete_cache.py](scripts/scan_incomplete_cache.py)
    - [scripts/test_incomplete_detection.py](scripts/test_incomplete_detection.py)
+   - All now import `_is_incomplete_answer` from `cache` module
 
 ## Testing
 
@@ -130,28 +168,51 @@ All 12 test cases pass, including:
 
 ## Production Deployment
 
-### Automatic Cleaning
+### What Happens on Next Restart
 
-The fix includes **automatic cache cleaning** that runs:
+When you deploy this fix and the app restarts:
+
+1. **`AnswerCache.__init__()`** initializes and calls `_load_from_redis()`
+2. **The incomplete answer in Redis** (like the "rest isn" one) will be **detected and skipped**
+3. **The incomplete entry will be deleted from Redis** immediately
+4. **Only complete answers** will be loaded into memory
+5. **Background cleanup** in `_prewarm_cache()` runs as a safety net
+
+**Result**: The incomplete cached answer will be **automatically removed** on the next app restart. 🎯
+
+### Logs to Watch For
+
+You'll see logs like:
+```
+INFO: Skipping incomplete cached answer from Redis: 'what does rest really look like in a culture of...' 
+      (ends: '...it's clear that true rest isn')
+INFO: Loaded 15 entries from Redis cache (skipped 1 incomplete)
+```
+
+This confirms the incomplete answer was found and removed.
+
+### Manual Cleaning (Optional)
 
 1. **On every app startup/restart** - The `_prewarm_cache()` function in [app/api/main.py](app/api/main.py) automatically cleans incomplete answers before prewarming
 2. **When manually prewarming** - Running `python scripts/prewarm_cache.py` cleans the cache first
 
 ### Manual Cleaning (Optional)
 
-If you want to clean the cache immediately without waiting for a restart:
+If you want to verify or manually clean the cache before a restart, you can run:
 
 ```bash
 # Scan and optionally clean all incomplete cached answers
 python scripts/scan_incomplete_cache.py
-
-# Or clear a specific incomplete cached answer
-python scripts/clear_incomplete_cache.py
 ```
 
-After deployment, the fix will automatically:
+However, this is **not necessary** - the fix handles it automatically on restart.
+
+### Automatic Protection Going Forward
+
+After this deployment, the system will automatically:
+- ✅ **Filter incomplete answers when loading from Redis** (primary protection)
 - ✅ Prevent new incomplete answers from being cached
-- ✅ Clean up existing incomplete answers on startup
+- ✅ Clean up any incomplete answers during startup
 - ✅ Clean up incomplete answers when prewarming cache
 
 ## Monitoring

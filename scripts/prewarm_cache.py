@@ -48,8 +48,7 @@ TOP_QUESTIONS = [
 
 def clean_incomplete_cached_answers():
     """Remove incomplete cached answers before prewarming."""
-    from app.qa.cache import get_answer_cache
-    from app.qa.service import _is_incomplete_answer
+    from app.qa.cache import get_answer_cache, _is_incomplete_answer
     
     cache = get_answer_cache()
     

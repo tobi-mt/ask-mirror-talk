@@ -11,6 +11,21 @@ def is_reasoning_chat_model(model: str | None) -> bool:
     return name.startswith(("gpt-5", "o1", "o3", "o4"))
 
 
+def uses_max_completion_tokens(model: str | None) -> bool:
+    """
+    Return True for models that require max_completion_tokens instead of max_tokens.
+    This includes reasoning models and newer GPT-4 models.
+    """
+    name = (model or "").lower()
+    # Reasoning models (GPT-5, o1, o3, o4)
+    if name.startswith(("gpt-5", "o1", "o3", "o4")):
+        return True
+    # Newer GPT-4 models that require max_completion_tokens
+    if name.startswith(("gpt-4o", "gpt-4.1", "gpt-4-2024", "gpt-4-turbo-2024")):
+        return True
+    return False
+
+
 def create_chat_completion(
     client: Any,
     *,
@@ -25,8 +40,8 @@ def create_chat_completion(
 ) -> Any:
     """Create a Chat Completions response with model-compatible parameters.
 
-    GPT-5/o-series chat models use ``max_completion_tokens`` and reject several
-    older sampling controls. Older chat models keep the legacy parameters.
+    Newer models (GPT-5/o-series, GPT-4o, GPT-4.1+) use ``max_completion_tokens``
+    and may reject older sampling controls. Older models keep legacy parameters.
     """
     payload: dict[str, Any] = {
         "model": model,
@@ -35,7 +50,7 @@ def create_chat_completion(
     }
 
     if max_tokens is not None:
-        if is_reasoning_chat_model(model):
+        if uses_max_completion_tokens(model):
             payload["max_completion_tokens"] = max_tokens
         else:
             payload["max_tokens"] = max_tokens
@@ -53,11 +68,23 @@ def create_chat_completion(
 
     try:
         return client.chat.completions.create(**payload)
-    except TypeError as exc:
-        # Fallback for older OpenAI SDK versions that don't support max_completion_tokens
-        if "max_completion_tokens" in str(exc) and "max_completion_tokens" in payload:
-            # Try with legacy max_tokens parameter instead
-            legacy_payload = dict(payload)
-            legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
-            return client.chat.completions.create(**legacy_payload)
+    except (TypeError, Exception) as exc:
+        # Handle both SDK compatibility issues and API parameter errors
+        error_msg = str(exc)
+        
+        # If API says max_tokens is not supported, retry with max_completion_tokens
+        if ("max_tokens" in error_msg and "max_completion_tokens" in error_msg):
+            if "max_tokens" in payload:
+                legacy_payload = dict(payload)
+                legacy_payload["max_completion_tokens"] = legacy_payload.pop("max_tokens")
+                return client.chat.completions.create(**legacy_payload)
+        
+        # If API says max_completion_tokens is not supported, retry with max_tokens
+        if ("max_completion_tokens" in error_msg and "max_tokens" in error_msg):
+            if "max_completion_tokens" in payload:
+                legacy_payload = dict(payload)
+                legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
+                return client.chat.completions.create(**legacy_payload)
+        
+        # Re-raise if it's not a parameter compatibility issue
         raise

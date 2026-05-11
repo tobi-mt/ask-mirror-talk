@@ -50,6 +50,44 @@ def _looks_like_degraded_answer_text(answer: str) -> bool:
     ))
 
 
+def _is_incomplete_answer(answer: str) -> bool:
+    """
+    Check if an answer appears incomplete (e.g., cut off mid-sentence).
+    Used when loading from Redis to skip incomplete cached answers.
+    """
+    if not answer or not isinstance(answer, str):
+        return True
+    
+    text = answer.strip()
+    
+    # Too short to be a real answer
+    if len(text) < 100:
+        return True
+    
+    # Check if it ends with incomplete punctuation
+    if not text or text[-1] not in '.!?':
+        return True
+    
+    # Check for common mid-sentence cut-off patterns
+    last_sentence = text.split('.')[-2] if '.' in text[:-1] else text
+    last_words = last_sentence.strip().split()[-3:] if last_sentence else []
+    
+    # Common incomplete patterns at the end
+    incomplete_endings = {
+        'is', 'are', 'was', 'were', 'been', 'being',
+        'that', 'which', 'who', 'what', 'when', 'where', 'why', 'how',
+        'a', 'an', 'the',
+        'and', 'or', 'but', 'so', 'yet',
+        'to', 'for', 'of', 'in', 'on', 'at', 'by', 'with',
+        'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must',
+    }
+    
+    if last_words and last_words[-1].lower() in incomplete_endings:
+        return True
+    
+    return False
+
+
 @dataclass
 class CacheEntry:
     question: str
@@ -160,6 +198,7 @@ class AnswerCache:
             # Fetch all entry keys from the sorted set (score = created_at)
             keys = self._redis.zrange(self._redis_index_key, 0, -1)
             loaded = 0
+            skipped_incomplete = 0
             for key in keys:
                 raw = self._redis.get(key)
                 if raw is None:
@@ -172,10 +211,25 @@ class AnswerCache:
                 # Skip entries past their TTL
                 if (now - entry.created_at) >= self.ttl_seconds:
                     continue
+                
+                # Skip incomplete answers - don't load them from Redis
+                answer = entry.response.get("answer", "")
+                if _is_incomplete_answer(answer) or _looks_like_degraded_answer_text(answer):
+                    skipped_incomplete += 1
+                    logger.info("Skipping incomplete cached answer from Redis: '%.50s...' (ends: '...%.30s')", 
+                               entry.question, answer[-30:] if answer else "")
+                    # Clean it from Redis too
+                    try:
+                        self._redis.delete(key)
+                        self._redis.zrem(self._redis_index_key, key)
+                    except Exception:
+                        pass
+                    continue
+                
                 self._entries.append(entry)
                 self._entries_by_question[entry.question] = entry
                 loaded += 1
-            logger.info("Loaded %d entries from Redis cache", loaded)
+            logger.info("Loaded %d entries from Redis cache (skipped %d incomplete)", loaded, skipped_incomplete)
         except Exception as exc:
             logger.warning("Failed to load cache from Redis: %s", exc)
 

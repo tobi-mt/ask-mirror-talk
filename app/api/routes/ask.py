@@ -58,9 +58,8 @@ def ask(
     bypass_cache: bool = Query(default=False),
 ):
     ip = get_client_ip(request)
-    enforce_rate_limit(ip)
-
     question = _normalize_incoming_question(payload.question)
+    enforce_rate_limit(ip, question)
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     if _looks_like_placeholder_question(question):
@@ -89,9 +88,8 @@ def ask_stream(
 ):
     """Stream an answer using Server-Sent Events (SSE)."""
     ip = get_client_ip(request)
-    enforce_rate_limit(ip)
-
     question = _normalize_incoming_question(payload.question)
+    enforce_rate_limit(ip, question)
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     if _looks_like_placeholder_question(question):

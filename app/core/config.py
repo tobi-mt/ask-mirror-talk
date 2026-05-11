@@ -93,16 +93,20 @@ class Settings(BaseSettings):
     notification_generation_model: str = "gpt-5-mini"  # QOTD/motivation copy generation
     answer_max_tokens: int = 800  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
-    cache_similarity_threshold: float = 0.92  # Minimum cosine similarity for cache hits (0.0-1.0)
+    cache_similarity_threshold: float = 0.89  # Minimum cosine similarity for cache hits (lowered from 0.92 to improve hit rate)
     cache_ttl_seconds: int = 14400  # Cache TTL (default: 4 hours)
     cache_namespace: str = "citations-v3"  # bump to invalidate stale persisted answers safely
 
     # Persistent cache (optional Redis backend — survives restarts/deploys)
     redis_url: str | None = None  # e.g. redis://default:password@host:6379
 
-    # API
+    # Rate Limiting
     rate_limit_per_minute: int = 20
     rate_limit_per_day: int = 100  # Daily limit to prevent single IP domination
+    rate_limit_burst_threshold: int = 5  # Identical questions in short time = suspicious
+    rate_limit_burst_window: int = 300  # 5 minutes
+    
+    # API
     allowed_origins: str = ""  # comma-separated origins for CORS
     question_guardrails_enabled: bool = True
 

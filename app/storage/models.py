@@ -81,13 +81,13 @@ class QALog(Base):
     __tablename__ = "qa_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)  # Index for time-range queries
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     episode_ids: Mapped[str] = mapped_column(String(500))
     latency_ms: Mapped[int] = mapped_column(Integer)
-    user_ip: Mapped[str] = mapped_column(String(100))
-    is_cached: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    user_ip: Mapped[str] = mapped_column(String(100), index=True)  # Index for analytics by IP
+    is_cached: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)  # Index for cache analytics
     is_answered: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 

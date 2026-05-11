@@ -26,12 +26,80 @@ def _answer_model_candidates(primary_model: str) -> list[str]:
 
 
 def _generate_degraded_answer(question: str) -> str:
-    """Last-resort user-facing response when all model generation fails."""
-    return (
-        "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now. "
-        "Please try the question again in a moment, or rephrase it with one extra detail about what you are facing. "
-        "For example: \"What is one wise first step I can take in this situation?\""
+    """
+    Last-resort user-facing response when all model generation fails.
+    Provides helpful alternative questions based on popular topics.
+    """
+    # Extract potential topic keywords from the question
+    question_lower = question.lower()
+    
+    # Suggest related popular questions based on topic detection
+    suggestions = []
+    
+    if any(word in question_lower for word in ['grief', 'loss', 'death', 'died']):
+        suggestions = [
+            "How do I deal with grief and loss?",
+            "How do I carry grief without losing myself?"
+        ]
+    elif any(word in question_lower for word in ['courage', 'brave', 'fear', 'afraid']):
+        suggestions = [
+            "What does courage look like in everyday life?",
+            "How do I face my fears?"
+        ]
+    elif any(word in question_lower for word in ['boundary', 'boundaries', 'saying no']):
+        suggestions = [
+            "How do I set boundaries without feeling guilty?",
+            "What does it mean to protect my peace?"
+        ]
+    elif any(word in question_lower for word in ['forgive', 'forgiveness', 'resentment']):
+        suggestions = [
+            "What does it mean to truly forgive someone?",
+            "What does forgiveness require when trust has been damaged deeply?"
+        ]
+    elif any(word in question_lower for word in ['love', 'relationship', 'partner']):
+        suggestions = [
+            "How do I love someone without losing myself?",
+            "How can I rebuild trust after it's been broken?"
+        ]
+    elif any(word in question_lower for word in ['compare', 'comparison', 'jealous', 'envy']):
+        suggestions = [
+            "How do I stop comparing myself to others?",
+            "What can I learn about my own journey?"
+        ]
+    elif any(word in question_lower for word in ['parent', 'parenting', 'child', 'kids']):
+        suggestions = [
+            "How do I parent through my own unresolved pain?",
+            "How do I raise kids who are emotionally resilient?"
+        ]
+    elif any(word in question_lower for word in ['failure', 'fail', 'mistake']):
+        suggestions = [
+            "What can I learn from failure?",
+            "How do I move forward after a major setback?"
+        ]
+    elif any(word in question_lower for word in ['lonely', 'loneliness', 'alone', 'isolated']):
+        suggestions = [
+            "How do I deal with loneliness even when I'm surrounded by people?",
+            "What does Mirror Talk teach about the power of community?"
+        ]
+    elif any(word in question_lower for word in ['peace', 'calm', 'anxiety', 'worry', 'uncertain']):
+        suggestions = [
+            "How do I find peace when everything feels uncertain?",
+            "How do I stop running from my emotions?"
+        ]
+    
+    # Build the response
+    base_message = (
+        "I found related Mirror Talk material, but I could not generate a complete reflection just now. "
     )
+    
+    if suggestions:
+        suggestion_text = " or ".join(f'"{s}"' for s in suggestions[:2])
+        return base_message + f"Try asking: {suggestion_text}"
+    else:
+        return base_message + (
+            "Please try rephrasing your question with a bit more context. "
+            "For example: \"What is one wise first step I can take in this situation?\""
+        )
 
 # ── Shared prompt used by both streaming and non-streaming answer generation ──
 

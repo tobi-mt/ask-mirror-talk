@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly Recap Template Test - Vibrant Cards</title>
+  <link rel="stylesheet" href="wordpress/astra-child/ask-mirror-talk.css">
+  <style>
+    body { 
+      margin: 40px; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5; 
+    }
+    h1 { color: #333; margin-bottom: 10px; }
+    .subtitle { color: #666; margin-bottom: 30px; }
+    .test-info { 
+      background: #e3f2fd; 
+      padding: 20px; 
+      margin: 20px 0; 
+      border-radius: 8px;
+      border-left: 4px solid #2196f3;
+    }
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin: 30px 0;
+    }
+    .template-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .template-card h3 {
+      margin-top: 0;
+      color: #2196f3;
+    }
+    .template-card img {
+      width: 100%;
+      border-radius: 8px;
+      border: 2px solid #e0e0e0;
+      margin-top: 10px;
+    }
+    .description {
+      color: #666;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+    button {
+      background: #2196f3;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background: #1976d2;
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Weekly Recap Template Showcase</h1>
+  <p class="subtitle">Beautiful, colorful, and shareable card templates that rotate weekly</p>
+  
+  <div class="test-info">
+    <p><strong>✨ What's New:</strong></p>
+    <ul>
+      <li><strong>8 vibrant card templates</strong> - Each uniquely beautiful and highly shareable</li>
+      <li><strong>Automatic weekly rotation</strong> - Different template each week for variety</li>
+      <li><strong>Enhanced visibility</strong> - Shadows, white panels, and perfect positioning on all templates</li>
+      <li><strong>Instagram-ready designs</strong> - Colorful, attractive, and professional</li>
+      <li><strong>Consistent branding</strong> - All cards maintain your identity while being visually stunning</li>
+    </ul>
+  </div>
+
+  <button onclick="generateAllTemplates()">Generate All 8 Templates</button>
+  <button onclick="generateCurrentWeek()">Generate Current Week's Template</button>
+
+  <div id="template-grid" class="template-grid"></div>
+
+  <script>
+    // Enable test exports before loading the main script
+    window.__AMT_ENABLE_TEST_EXPORTS__ = true;
+    
+    // Provide dummy WordPress globals for testing
+    window.AskMirrorTalk = {
+      ajaxUrl: '/wp-admin/admin-ajax.php',
+      nonce: 'test-nonce',
+      apiUrl: 'https://ask-mirror-talk-production.up.railway.app'
+    };
+  </script>
+  <script src="wordpress/astra-child/ask-mirror-talk.js"></script>
+  
+  <script>
+    // Mock data for testing
+    const mockData = {
+      topTheme: 'Healing',
+      questionCount: 42,
+      savedCount: 3,
+      shareCount: 10,
+      strongestDayCount: 21,
+      recapPrompt: 'How has exploring Healing shaped your week?',
+      latestSavedInsight: {
+        excerpt: 'Loving someone without losing yourself is about maintaining a robust sense of self-love and setting clear boundaries that honor your personal needs and values.'
+      }
+    };
+
+    const templates = [
+      { 
+        name: 'Gradient Vibrant', 
+        key: 'gradient_vibrant',
+        description: 'Bold red-to-gold gradients with vibrant energy - perfect for courage, passion, and transformation.'
+      },
+      { 
+        name: 'Prismatic Rainbow', 
+        key: 'prismatic_rainbow',
+        description: 'Multi-color spectrum from pink to blue - ideal for celebration, joy, and diversity of reflection.'
+      },
+      { 
+        name: 'Neon Modern', 
+        key: 'neon_modern',
+        description: 'Dark with cyan and pink neon accents - sophisticated, contemporary, and introspective.'
+      },
+      { 
+        name: 'Sunset Warmth', 
+        key: 'sunset_warmth',
+        description: 'Warm pink-to-blue sunset tones - comforting, hopeful, and peaceful for healing themes.'
+      },
+      { 
+        name: 'Ocean Depths', 
+        key: 'ocean_depths',
+        description: 'Deep blue-to-turquoise ocean gradient - calm, flowing, and meditative for clarity themes.'
+      },
+      { 
+        name: 'Purple Dream', 
+        key: 'purple_dream',
+        description: 'Royal purple to soft pink - dreamy, spiritual, and elegant for wisdom and intuition.'
+      },
+      { 
+        name: 'Forest Vitality', 
+        key: 'forest_vitality',
+        description: 'Rich green forest gradient - fresh, grounding, and vital for growth and renewal themes.'
+      },
+      { 
+        name: 'Golden Hour', 
+        key: 'golden_hour',
+        description: 'Warm amber to peach golden tones - radiant, uplifting, and grateful for gratitude themes.'
+      }
+    ];
+
+    function generateAllTemplates() {
+      const grid = document.getElementById('template-grid');
+      grid.innerHTML = '';
+
+      const { buildWeeklyRecapShareCard, getWeeklyRecapTemplate } = window.__AMT_TEST_EXPORTS__;
+
+      templates.forEach((template, index) => {
+        // Temporarily override the week number to test each template
+        const originalFn = getWeeklyRecapTemplate;
+        window.__AMT_TEST_EXPORTS__.getWeeklyRecapTemplate = function() { return template.key; };
+
+        const dataUrl = buildWeeklyRecapShareCard(mockData, 0.35);
+
+        window.__AMT_TEST_EXPORTS__.getWeeklyRecapTemplate = originalFn;
+
+        if (dataUrl) {
+          const card = document.createElement('div');
+          card.className = 'template-card';
+          card.innerHTML = `
+            <h3>${template.name}</h3>
+            <p class="description">${template.description}</p>
+            <img src="${dataUrl}" alt="${template.name}">
+            <p style="font-size: 12px; color: #999; margin-top: 10px;">
+              Week ${index} of rotation cycle
+            </p>
+          `;
+          grid.appendChild(card);
+        }
+      });
+
+      console.log('✅ Generated all 8 template variations');
+    }
+
+    function generateCurrentWeek() {
+      const grid = document.getElementById('template-grid');
+      grid.innerHTML = '';
+
+      const { buildWeeklyRecapShareCard } = window.__AMT_TEST_EXPORTS__;
+      const dataUrl = buildWeeklyRecapShareCard(mockData, 0.5);
+      
+      if (dataUrl) {
+        const now = new Date();
+        const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
+        const currentTemplate = templates[weekNumber % templates.length];
+
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        card.style.maxWidth = '600px';
+        card.style.margin = '0 auto';
+        card.innerHTML = `
+          <h3>🎯 This Week's Template: ${currentTemplate.name}</h3>
+          <p class="description">${currentTemplate.description}</p>
+          <img src="${dataUrl}" alt="Current Week Template">
+          <p style="font-size: 14px; color: #666; margin-top: 15px;">
+            <strong>Week #${weekNumber}</strong> - This template will be used for all weekly recaps this week.
+            <br><br>
+            <strong>Rotation:</strong> Templates cycle through all 8 variations every 8 weeks.
+          </p>
+        `;
+        grid.appendChild(card);
+        
+        console.log(`✅ Generated current week's template: ${currentTemplate.name}`);
+      }
+    }
+
+    // Generate current week's template on load
+    window.addEventListener('load', () => {
+      console.log('🎨 Weekly Recap Template Test loaded');
+      console.log('📊 8 beautiful templates available');
+      console.log('Click "Generate All 8 Templates" to see all variations');
+      console.log('Click "Generate Current Week\'s Template" to see what users will see this week');
+    });
+  </script>
+</body>
+</html>

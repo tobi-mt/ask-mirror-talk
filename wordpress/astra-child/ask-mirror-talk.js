@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.6.4 loaded');
+  log('Ask Mirror Talk Widget v5.7.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -53,13 +53,16 @@
   };
   const saveShareHub = document.querySelector('#amt-save-share-hub');
 
-  if (!form) {
+  // Check if we're in test mode before checking for form
+  const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
+
+  if (!form && !ENABLE_TEST_EXPORTS) {
     warn('⚠️ Ask Mirror Talk form not found on this page');
     return;
   }
 
   // ─── API URL ────────────────────────────────────────────────
-  const API_BASE = (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app');
+  const API_BASE = (typeof AskMirrorTalk !== 'undefined' ? (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app') : 'https://ask-mirror-talk-production.up.railway.app');
   const BASE_PAGE_URL = 'https://mirrortalkpodcast.com/ask-mirror-talk';
   const REFLECTION_CARD_QR_URL = `${BASE_PAGE_URL}?ref=card_qr`;
   const REFLECTION_CARD_URL_LABEL = 'mirrortalkpodcast.com/ask-mirror-talk';
@@ -69,7 +72,6 @@
   const RECENT_NIGHT_THEMES_KEY = 'amt_recent_night_themes';
   const WORKFLOW_SESSION_KEY = 'amt_active_workflow_step';
   const AUTO_START_SESSION_KEY = 'amt_auto_start_processed';
-  const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
   const TEST_FORCE_FAMILY = String(window.__AMT_TEST_FORCE_FAMILY__ || '').trim();
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
@@ -5473,6 +5475,23 @@
     };
   }
 
+  // Get weekly recap template style (rotates between vibrant styles)
+  function getWeeklyRecapTemplate() {
+    const now = new Date();
+    const weekNumber = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));
+    const templates = [
+      'gradient_vibrant',
+      'prismatic_rainbow', 
+      'neon_modern', 
+      'sunset_warmth',
+      'ocean_depths',
+      'purple_dream',
+      'forest_vitality',
+      'golden_hour'
+    ];
+    return templates[weekNumber % templates.length];
+  }
+
   function buildWeeklyRecapShareCard(recap, scale) {
     const data = recap || getWeeklyRecapData();
     if (!data) return null;
@@ -5491,29 +5510,240 @@
       ctx.scale(scaleFactor, scaleFactor);
     }
 
-    // Use the sophisticated card shell with gradients (similar to editorial_serene style)
+    // Get the template for this week
+    const template = getWeeklyRecapTemplate();
+
+    // Apply template-specific background
+    if (template === 'gradient_vibrant') {
+      // Bold multi-color gradient (courage/energy theme)
+      const vibrantGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      vibrantGrad.addColorStop(0, '#ff3366');
+      vibrantGrad.addColorStop(0.3, '#ff6b4a');
+      vibrantGrad.addColorStop(0.7, '#ffaa00');
+      vibrantGrad.addColorStop(1, '#ffd700');
+      ctx.fillStyle = vibrantGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Subtle overlay for depth
+      const overlay = ctx.createRadialGradient(540, 675, 0, 540, 675, 800);
+      overlay.addColorStop(0, 'rgba(0,0,0,0)');
+      overlay.addColorStop(1, 'rgba(0,0,0,0.20)');
+      ctx.fillStyle = overlay;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Decorative elements
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.arc(160, 270, 120, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(950, 1010, 160, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (template === 'prismatic_rainbow') {
+      // Rainbow gradient like the example card
+      const prismatic = ctx.createLinearGradient(0, 0, 1080, 1350);
+      prismatic.addColorStop(0, '#ff0080');
+      prismatic.addColorStop(0.15, '#ff4500');
+      prismatic.addColorStop(0.3, '#ff8c00');
+      prismatic.addColorStop(0.45, '#40e0d0');
+      prismatic.addColorStop(0.6, '#7b68ee');
+      prismatic.addColorStop(0.75, '#ff1493');
+      prismatic.addColorStop(0.9, '#ff6b9d');
+      prismatic.addColorStop(1, '#4169e1');
+      ctx.fillStyle = prismatic;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Soften with overlay
+      const softener = ctx.createLinearGradient(0, 0, 0, 1350);
+      softener.addColorStop(0, 'rgba(0,0,0,0.12)');
+      softener.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+      softener.addColorStop(1, 'rgba(0,0,0,0.18)');
+      ctx.fillStyle = softener;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Radial light source
+      const spotlight = ctx.createRadialGradient(540, 550, 0, 540, 550, 700);
+      spotlight.addColorStop(0, 'rgba(255,255,255,0.15)');
+      spotlight.addColorStop(0.6, 'rgba(255,255,255,0.05)');
+      spotlight.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = spotlight;
+      ctx.fillRect(0, 0, 1080, 1350);
+    } else if (template === 'neon_modern') {
+      // Dark gradient base
+      const darkGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      darkGrad.addColorStop(0, '#0a0a0f');
+      darkGrad.addColorStop(0.5, '#1a1a2e');
+      darkGrad.addColorStop(1, '#16213e');
+      ctx.fillStyle = darkGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Neon glow orbs
+      const neonColor = '#00d9ff';
+      const glow1 = ctx.createRadialGradient(270, 470, 0, 270, 470, 280);
+      glow1.addColorStop(0, neonColor + '40');
+      glow1.addColorStop(0.5, neonColor + '20');
+      glow1.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow1;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      const glow2 = ctx.createRadialGradient(840, 920, 0, 840, 920, 320);
+      glow2.addColorStop(0, '#ff0080' + '35');
+      glow2.addColorStop(0.5, '#ff0080' + '18');
+      glow2.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow2;
+      ctx.fillRect(0, 0, 1080, 1350);
+    } else if (template === 'sunset_warmth') {
+      // Warm sunset gradient
+      const sunsetGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      sunsetGrad.addColorStop(0, '#ff6b9d');
+      sunsetGrad.addColorStop(0.3, '#ffa07a');
+      sunsetGrad.addColorStop(0.6, '#ffb347');
+      sunsetGrad.addColorStop(1, '#87ceeb');
+      ctx.fillStyle = sunsetGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Overlay for warmth
+      const warmOverlay = ctx.createRadialGradient(540, 400, 0, 540, 400, 900);
+      warmOverlay.addColorStop(0, 'rgba(255,140,0,0.10)');
+      warmOverlay.addColorStop(0.7, 'rgba(255,69,0,0.05)');
+      warmOverlay.addColorStop(1, 'rgba(0,0,0,0.15)');
+      ctx.fillStyle = warmOverlay;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Decorative sun circle
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(200, 200, 140, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (template === 'ocean_depths') {
+      // Deep ocean blue gradient
+      const oceanGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      oceanGrad.addColorStop(0, '#006994');
+      oceanGrad.addColorStop(0.3, '#0088cc');
+      oceanGrad.addColorStop(0.6, '#00bcd4');
+      oceanGrad.addColorStop(1, '#26c6da');
+      ctx.fillStyle = oceanGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Wave overlay effect
+      const waveOverlay = ctx.createRadialGradient(540, 300, 0, 540, 300, 800);
+      waveOverlay.addColorStop(0, 'rgba(255,255,255,0.10)');
+      waveOverlay.addColorStop(0.5, 'rgba(0,188,212,0.15)');
+      waveOverlay.addColorStop(1, 'rgba(0,0,50,0.20)');
+      ctx.fillStyle = waveOverlay;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Decorative bubbles
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      ctx.beginPath();
+      ctx.arc(850, 280, 100, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(220, 950, 130, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(950, 1100, 80, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (template === 'purple_dream') {
+      // Dreamy purple to pink gradient
+      const purpleGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      purpleGrad.addColorStop(0, '#6a1b9a');
+      purpleGrad.addColorStop(0.25, '#8e24aa');
+      purpleGrad.addColorStop(0.5, '#ab47bc');
+      purpleGrad.addColorStop(0.75, '#ce93d8');
+      purpleGrad.addColorStop(1, '#f48fb1');
+      ctx.fillStyle = purpleGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Dreamy overlay with soft light
+      const dreamOverlay = ctx.createRadialGradient(400, 500, 0, 400, 500, 900);
+      dreamOverlay.addColorStop(0, 'rgba(255,255,255,0.15)');
+      dreamOverlay.addColorStop(0.6, 'rgba(171,71,188,0.10)');
+      dreamOverlay.addColorStop(1, 'rgba(106,27,154,0.10)');
+      ctx.fillStyle = dreamOverlay;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Floating orbs
+      ctx.fillStyle = 'rgba(255,255,255,0.09)';
+      ctx.beginPath();
+      ctx.arc(180, 250, 110, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(900, 850, 140, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (template === 'forest_vitality') {
+      // Fresh forest green gradient
+      const forestGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      forestGrad.addColorStop(0, '#1b5e20');
+      forestGrad.addColorStop(0.3, '#2e7d32');
+      forestGrad.addColorStop(0.6, '#43a047');
+      forestGrad.addColorStop(0.85, '#66bb6a');
+      forestGrad.addColorStop(1, '#81c784');
+      ctx.fillStyle = forestGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Nature light filtering through
+      const forestLight = ctx.createRadialGradient(540, 200, 0, 540, 200, 700);
+      forestLight.addColorStop(0, 'rgba(200,230,201,0.18)');
+      forestLight.addColorStop(0.5, 'rgba(129,199,132,0.10)');
+      forestLight.addColorStop(1, 'rgba(27,94,32,0.05)');
+      ctx.fillStyle = forestLight;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Subtle leaf shapes
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.arc(150, 350, 95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(930, 1000, 120, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (template === 'golden_hour') {
+      // Golden hour amber to peach gradient
+      const goldenGrad = ctx.createLinearGradient(0, 0, 1080, 1350);
+      goldenGrad.addColorStop(0, '#ff6f00');
+      goldenGrad.addColorStop(0.25, '#ff8f00');
+      goldenGrad.addColorStop(0.5, '#ffa726');
+      goldenGrad.addColorStop(0.75, '#ffb74d');
+      goldenGrad.addColorStop(1, '#ffcc80');
+      ctx.fillStyle = goldenGrad;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Golden glow overlay
+      const goldenGlow = ctx.createRadialGradient(540, 450, 0, 540, 450, 850);
+      goldenGlow.addColorStop(0, 'rgba(255,193,7,0.20)');
+      goldenGlow.addColorStop(0.5, 'rgba(255,152,0,0.12)');
+      goldenGlow.addColorStop(1, 'rgba(230,74,25,0.10)');
+      ctx.fillStyle = goldenGlow;
+      ctx.fillRect(0, 0, 1080, 1350);
+      
+      // Warm light circles
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(220, 220, 130, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(860, 1050, 150, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Define style colors based on template (all use white text on colorful backgrounds)
     const style = {
-      bg: ['#e8f5f2', '#d9ebe7', '#c8dfd9'],
-      orbA: 'rgba(78,205,196,0.28)',
-      orbB: 'rgba(112,162,153,0.22)',
-      accent: '#4a7b74',
-      text: '#1a2f2a',
-      textSoft: 'rgba(26,47,42,0.72)',
-      cardText: '#2e3a38',
-      panelEdge: 'rgba(255,255,255,0.32)'
+      bg: ['#ffffff', '#ffffff', '#ffffff'],
+      orbA: 'rgba(255,255,255,0.08)',
+      orbB: 'rgba(255,255,255,0.08)',
+      accent: '#ffffff',
+      text: '#ffffff',
+      textSoft: 'rgba(255,255,255,0.92)',
+      cardText: '#2e3a38', // Dark text for white panels
+      panelEdge: 'rgba(255,255,255,0.40)'
     };
     
-    const variant = {
-      orbA: { x: 0.18, y: 0.14, inner: 28, outer: 520 },
-      orbB: { x: 0.84, y: 0.72, inner: 32, outer: 590 },
-      glossCurve: { lineX: 78, bendX: 46, bendY: 324, tailY: 490 }
-    };
-
-    // Draw the beautiful card shell with gradients, orbs, and gloss
-    drawShareCardShell(ctx, style, 1080, 1350, variant);
-
-    // Header
+    // Header with shadow for visibility on colorful backgrounds
     ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
     ctx.fillText('ASK MIRROR TALK', 96, 114);
@@ -5521,32 +5751,48 @@
     ctx.fillStyle = style.textSoft;
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillText('Your weekly reflection recap', 96, 156);
+    ctx.shadowColor = 'transparent';
 
-    // Theme pill (if available)
+    // Theme pill (if available) - enhanced for colorful backgrounds
     if (data.topTheme) {
       const themeLabel = truncateText(data.topTheme, 24);
       ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       const pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
       const pillX = 1080 - pillWidth - 96;
       const pillY = 96;
+      
+      // Enhanced pill with better visibility
+      ctx.shadowColor = 'rgba(0,0,0,0.25)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 6;
       const themeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillWidth, pillY + 54);
-      themeGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
-      themeGrad.addColorStop(1, 'rgba(255,255,255,0.10)');
+      themeGrad.addColorStop(0, 'rgba(255,255,255,0.32)');
+      themeGrad.addColorStop(1, 'rgba(255,255,255,0.18)');
       ctx.fillStyle = themeGrad;
       _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth = 1.4;
+      ctx.shadowColor = 'transparent';
+      
+      ctx.strokeStyle = 'rgba(255,255,255,0.40)';
+      ctx.lineWidth = 1.8;
       _roundRect(ctx, pillX, pillY, pillWidth, 54, 27);
       ctx.stroke();
-      ctx.fillStyle = style.accent;
+      
+      ctx.shadowColor = 'rgba(0,0,0,0.30)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(themeLabel, pillX + (pillWidth / 2), pillY + 27);
       ctx.textBaseline = 'alphabetic';
+      ctx.shadowColor = 'transparent';
     }
 
-    // Headline
+    // Headline with shadow for better visibility
+    ctx.shadowColor = 'rgba(0,0,0,0.40)';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetY = 6;
     ctx.fillStyle = style.text;
     ctx.font = '700 64px Georgia, serif';
     ctx.textAlign = 'left';
@@ -5554,8 +5800,9 @@
       ? `This week I kept returning to ${data.topTheme}.`
       : 'This week I kept returning to reflection.';
     wrapCanvasText(ctx, headline, 110, 278, 860, 76, 3, 'left');
+    ctx.shadowColor = 'transparent';
 
-    // Metrics panel
+    // Metrics panel - enhanced white glass panel
     const metrics = [
       { label: 'QUESTIONS', value: data.questionCount },
       { label: 'SAVED', value: data.savedCount },
@@ -5567,49 +5814,57 @@
     const panelHeight = 190;
     const panelX = 110;
     
-    // Glass panel background with shadow
-    ctx.shadowColor = 'rgba(0,0,0,0.15)';
-    ctx.shadowBlur = 34;
-    ctx.shadowOffsetY = 14;
+    // White glass panel with enhanced shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.30)';
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 18;
     const panelGrad = ctx.createLinearGradient(panelX, panelY, panelX + panelWidth, panelY + panelHeight);
-    panelGrad.addColorStop(0, 'rgba(255,255,255,0.93)');
-    panelGrad.addColorStop(1, 'rgba(255,255,255,0.88)');
+    panelGrad.addColorStop(0, 'rgba(255,255,255,0.96)');
+    panelGrad.addColorStop(1, 'rgba(255,255,255,0.92)');
     ctx.fillStyle = panelGrad;
     _roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 30);
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = style.panelEdge;
-    ctx.lineWidth = 1.2;
+    
+    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
+    ctx.lineWidth = 1.5;
     _roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 30);
     ctx.stroke();
     
-    // Metrics grid
+    // Metrics grid - dark text on white panel
     const metricWidth = panelWidth / 3;
+    const metricTextColor = '#2a2a2a';
+    const metricAccentColor = '#666666';
+    
     metrics.forEach((metric, index) => {
       const x = panelX + (index * metricWidth) + (metricWidth / 2);
       
-      ctx.fillStyle = style.accent;
+      ctx.fillStyle = metricAccentColor;
       ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(metric.label, x, panelY + 62);
       
-      ctx.fillStyle = style.text;
+      ctx.fillStyle = metricTextColor;
       ctx.font = '700 54px Georgia, serif';
       ctx.fillText(String(metric.value), x, panelY + 128);
     });
 
-    // Supporting text
+    // Supporting text with shadow
     const subtextY = panelY + panelHeight + 52;
     const subline = data.strongestDayCount >= 3
       ? `Strongest day: ${data.strongestDayCount} moments of reflection`
       : 'Small consistent returns are building momentum';
     
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
     ctx.fillStyle = style.textSoft;
     ctx.font = '600 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(subline, 1080 / 2, subtextY);
+    ctx.shadowColor = 'transparent';
 
-    // Optional saved insight quote
+    // Optional saved insight quote - enhanced white panel
     if (data.latestSavedInsight && data.latestSavedInsight.excerpt) {
       const quoteY = subtextY + 70;
       const quotePanel = {
@@ -5619,26 +5874,41 @@
         height: 170
       };
       
-      // Quote panel background
-      ctx.shadowColor = 'rgba(0,0,0,0.12)';
-      ctx.shadowBlur = 24;
-      ctx.shadowOffsetY = 10;
+      // White quote panel with shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.25)';
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 12;
       const quoteGrad = ctx.createLinearGradient(quotePanel.x, quotePanel.y, quotePanel.x + quotePanel.width, quotePanel.y + quotePanel.height);
-      quoteGrad.addColorStop(0, 'rgba(255,255,255,0.86)');
-      quoteGrad.addColorStop(1, 'rgba(255,255,255,0.82)');
+      quoteGrad.addColorStop(0, 'rgba(255,255,255,0.95)');
+      quoteGrad.addColorStop(1, 'rgba(255,255,255,0.90)');
       ctx.fillStyle = quoteGrad;
       _roundRect(ctx, quotePanel.x, quotePanel.y, quotePanel.width, quotePanel.height, 24);
       ctx.fill();
       ctx.shadowColor = 'transparent';
       
-      // Opening quote mark
-      ctx.fillStyle = style.accent;
+      ctx.strokeStyle = 'rgba(255,255,255,0.40)';
+      ctx.lineWidth = 1.5;
+      _roundRect(ctx, quotePanel.x, quotePanel.y, quotePanel.width, quotePanel.height, 24);
+      ctx.stroke();
+      
+      // Opening quote mark - accent color matching the template
+      let quoteMarkColor = '#ff6b9d'; // default
+      if (template === 'neon_modern') quoteMarkColor = '#00d9ff';
+      else if (template === 'gradient_vibrant') quoteMarkColor = '#ff3366';
+      else if (template === 'prismatic_rainbow') quoteMarkColor = '#ff0080';
+      else if (template === 'sunset_warmth') quoteMarkColor = '#ff6b9d';
+      else if (template === 'ocean_depths') quoteMarkColor = '#00bcd4';
+      else if (template === 'purple_dream') quoteMarkColor = '#ab47bc';
+      else if (template === 'forest_vitality') quoteMarkColor = '#43a047';
+      else if (template === 'golden_hour') quoteMarkColor = '#ff8f00';
+      
+      ctx.fillStyle = quoteMarkColor;
       ctx.font = '72px Georgia, serif';
       ctx.textAlign = 'left';
       ctx.fillText('"', quotePanel.x + 32, quotePanel.y + 76);
       
-      // Quote text
-      ctx.fillStyle = style.cardText;
+      // Quote text - dark on white panel
+      ctx.fillStyle = '#2e3a38';
       ctx.font = '400 30px Georgia, serif';
       wrapCanvasText(ctx, data.latestSavedInsight.excerpt, quotePanel.x + 78, quotePanel.y + 94, quotePanel.width - 110, 44, 3, 'left');
     }
@@ -10576,7 +10846,9 @@
       getReflectionCardQrPayload,
       getInsightShareThemeStyle,
       getInsightShareVariant,
-      getInsightShareFamily
+      getInsightShareFamily,
+      buildWeeklyRecapShareCard,
+      getWeeklyRecapTemplate
     };
   }
 

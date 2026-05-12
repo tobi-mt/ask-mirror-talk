@@ -10,7 +10,7 @@ from app.qa.smart_citations import (
     retrieve_chunks_two_tier,
     select_citation_segments,
 )
-from app.qa.answer import compose_answer
+from app.qa.answer import compose_answer, sanitize_shareable_headline
 from app.qa.cache import get_answer_cache, normalize_question, _is_incomplete_answer
 from app.storage.repository import log_qa
 
@@ -485,10 +485,15 @@ def answer_question_stream(
                 log_interaction=log_interaction,
                 context="qa_stream_exact_cache_logging",
             )
+            # Sanitize cached headline to fix legacy issues (fragments, questions, etc.)
+            cached_headline = sanitize_shareable_headline(
+                exact_cached_response.get('shareable_headline', ''),
+                exact_cached_response['answer']
+            )
             yield f"data: {json.dumps({'type': 'chunk', 'text': exact_cached_response['answer']})}\n\n"
             yield f"data: {json.dumps({'type': 'citations', 'citations': _exact_citations})}\n\n"
             yield f"data: {json.dumps({'type': 'follow_up', 'questions': exact_cached_response.get('follow_up_questions', [])})}\n\n"
-            yield f"data: {json.dumps({'type': 'headline', 'text': exact_cached_response.get('shareable_headline', '')})}\n\n"
+            yield f"data: {json.dumps({'type': 'headline', 'text': cached_headline})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': exact_cached_response.get('answer_source', 'openai'), 'answer_status': exact_cached_response.get('answer_status', 'generated'), 'fallback_reason': exact_cached_response.get('fallback_reason')})}\n\n"
             return
 
@@ -516,10 +521,15 @@ def answer_question_stream(
                 context="qa_stream_similarity_cache_logging",
             )
             # Stream the full cached answer as a single chunk for instant display
+            # Sanitize cached headline to fix legacy issues (fragments, questions, etc.)
+            cached_headline = sanitize_shareable_headline(
+                cached_response.get('shareable_headline', ''),
+                cached_response['answer']
+            )
             yield f"data: {json.dumps({'type': 'chunk', 'text': cached_response['answer']})}\n\n"
             yield f"data: {json.dumps({'type': 'citations', 'citations': cached_response.get('citations', [])})}\n\n"
             yield f"data: {json.dumps({'type': 'follow_up', 'questions': cached_response.get('follow_up_questions', [])})}\n\n"
-            yield f"data: {json.dumps({'type': 'headline', 'text': cached_response.get('shareable_headline', '')})}\n\n"
+            yield f"data: {json.dumps({'type': 'headline', 'text': cached_headline})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'qa_log_id': qa_log_id, 'latency_ms': latency_ms, 'cached': True, 'answer_source': cached_response.get('answer_source', 'openai'), 'answer_status': cached_response.get('answer_status', 'generated'), 'fallback_reason': cached_response.get('fallback_reason')})}\n\n"
             return
 

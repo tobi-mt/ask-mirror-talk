@@ -243,13 +243,15 @@ class TestShareableHeadlineGeneration:
         assert "Trust that your next" in result
     
     def test_public_wrapper_function(self):
-        """Should expose a public wrapper function."""
+        """Should expose a public wrapper function and sanitize the result."""
         with patch('app.qa.answer._generate_shareable_headline') as mock_gen:
-            mock_gen.return_value = "Test headline."
+            # Use a valid headline that will pass sanitization
+            valid_headline = "Trust that your next right step will reveal itself when you need it."
+            mock_gen.return_value = valid_headline
             
             result = generate_shareable_headline("Q?", "A.", [])
             
-            assert result == "Test headline."
+            assert result == valid_headline
             assert mock_gen.called
 
 

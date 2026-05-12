@@ -623,12 +623,81 @@ def _fallback_follow_up_questions(question: str, chunks: list[dict]) -> list[str
     return _theme_follow_up_questions(preferred_theme)[:3]
 
 
+def sanitize_shareable_headline(headline: str, answer: str = "") -> str:
+    """
+    Sanitize a shareable headline to ensure it meets quality standards.
+    Fixes common issues like fragment starts, questions, and poor formatting.
+    
+    Args:
+        headline: The headline text to sanitize
+        answer: Optional answer text to extract a better headline from if needed
+    
+    Returns:
+        A sanitized headline, or an extracted one from answer if the original is unfixable
+    """
+    if not headline:
+        return ""
+    
+    cleaned = headline.strip().strip('"').strip("'").strip()
+    if not cleaned:
+        return ""
+    
+    lower = cleaned.lower()
+    
+    # Check if it starts with a fragment word
+    fragment_starts = ("and ", "but ", "or ", "so ", "because ", "if ", "when ", "where ")
+    is_fragment = any(lower.startswith(frag) for frag in fragment_starts)
+    
+    # Check if it's a question
+    is_question = (
+        cleaned.endswith("?") 
+        or lower.startswith(("how do", "how can", "how should", "how would"))
+        or lower.startswith(("what is", "what are", "what should", "what would", "what can"))
+        or lower.startswith(("why ", "when should", "when do", "when can"))
+        or lower.startswith(("where ", "who ", "which ", "whose "))
+    )
+    
+    # Check basic length/quality requirements
+    words = cleaned.split()
+    is_valid_length = 40 <= len(cleaned) <= 180 and 6 <= len(words) <= 26
+    has_ending = cleaned[-1] in ".!?" if cleaned else False
+    
+    # If it meets all criteria, return as-is
+    if is_valid_length and has_ending and not is_fragment and not is_question:
+        return cleaned
+    
+    # If it's a fragment, try to fix it by removing the fragment start
+    if is_fragment:
+        for frag in fragment_starts:
+            if lower.startswith(frag):
+                # Remove the fragment word and capitalize the next word
+                fixed = cleaned[len(frag):].strip()
+                if fixed:
+                    fixed = fixed[0].upper() + fixed[1:] if len(fixed) > 1 else fixed.upper()
+                    # Recursively check if the fixed version is valid
+                    return sanitize_shareable_headline(fixed, answer)
+                break
+    
+    # If it's a question or otherwise invalid and we have answer text, extract from answer
+    if answer and (is_question or not is_valid_length or not has_ending):
+        extracted = _extract_best_sentence_headline(answer)
+        if extracted:
+            logger.info("Replaced invalid headline '%s' with extracted: %s", headline[:50], extracted[:80])
+            return extracted
+    
+    # If we can't fix it and have no answer, return empty (frontend will handle)
+    logger.warning("Could not sanitize headline: %s", headline[:80])
+    return ""
+
+
 def generate_shareable_headline(question: str, answer: str, chunks: list[dict]) -> str:
     """
     Public wrapper so callers can generate shareable headlines without going
     through compose_answer and can do so in parallel with other work.
     """
-    return _generate_shareable_headline(question, answer, chunks)
+    headline = _generate_shareable_headline(question, answer, chunks)
+    # Always sanitize before returning
+    return sanitize_shareable_headline(headline, answer)
 
 
 def _generate_shareable_headline(question: str, answer: str, chunks: list[dict]) -> str:

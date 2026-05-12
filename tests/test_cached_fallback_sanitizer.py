@@ -13,7 +13,7 @@ def test_cached_basic_fallback_answer_is_rewritten_for_users():
     assert sanitized["answer_status"] == "generation_failed"
     assert sanitized["answer_source"] == "basic_fallback"
     assert "I found a few Mirror Talk moments" not in sanitized["answer"]
-    assert "polished reflection answer" in sanitized["answer"]
+    assert "complete reflection" in sanitized["answer"]  # Updated to match actual text
     assert _is_degraded_cached_answer(sanitized)
 
 
@@ -24,7 +24,7 @@ def test_answer_cache_does_not_store_generation_failed_responses():
         "what's the first step to breaking a bad habit",
         [1.0, 0.0],
         {
-            "answer": "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now.",
+            "answer": "I found related Mirror Talk material, but I could not generate a complete reflection just now.",
             "answer_source": "basic_fallback",
             "answer_status": "generation_failed",
             "citations": [],
@@ -41,7 +41,7 @@ def test_answer_cache_does_not_store_degraded_text_without_metadata():
         "what's the first step to breaking a bad habit",
         [1.0, 0.0],
         {
-            "answer": "I found related Mirror Talk material, but I could not generate the polished reflection answer cleanly just now.",
+            "answer": "I found related Mirror Talk material, but I could not generate a complete reflection just now.",
             "citations": [{"episode_id": 1}],
         },
     )

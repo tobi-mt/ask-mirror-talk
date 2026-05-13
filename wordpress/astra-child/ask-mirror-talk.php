@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.5.27';
+    return '5.8.5';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -512,11 +512,8 @@ function ask_mirror_talk_serve_sw_init() {
     if (now - lastEnforceAt < 30000) return;
     lastEnforceAt = now;
 
-    if (!isStandalone && navigator.serviceWorker.controller) {
-      passiveUpdate();
-      return;
-    }
-
+    // ALWAYS enforce version check and unregister mismatches
+    // Passive update is too gentle - old SW can cache itself and prevent updates
     enforceSW().catch(function(err) {
       if (navigator.serviceWorker.controller) {
         console.info('[PWA] SW enforce skipped; existing worker remains active');

@@ -6,9 +6,12 @@
  *   - App shell (CSS/JS/HTML): cache-first, updated in background
  *   - API answers: network-first with cache fallback (so users see cached answers offline)
  *   - Audio: network-only (too large to cache)
+ *   
+ * FORCE UPDATE: Build timestamp to ensure browser detects changes
  */
 
-const CACHE_VERSION = 'amt-v5.7.0';
+const BUILD_TIMESTAMP = '2026-05-14T00:45:00.000Z';  // Update this to force SW refresh
+const CACHE_VERSION = 'amt-v5.8.5';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 

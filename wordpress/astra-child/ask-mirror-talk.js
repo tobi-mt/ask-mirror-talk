@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.7.0 loaded');
+  log('Ask Mirror Talk Widget v5.8.5 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -821,7 +821,7 @@
         
         // Skip reload if user has results displayed or text in progress
         const hasResults = document.querySelector('.amt-result-card');
-        const hasTextInProgress = askInput && askInput.value.trim().length > 0;
+        const hasTextInProgress = input && input.value.trim().length > 0;
         const hasUnsavedWork = hasResults || hasTextInProgress;
         
         // Skip reload if it's been less than 30 seconds since page load (user just opened app)
@@ -1843,6 +1843,7 @@
           if (event.type === 'headline') {
             // Store the shareable headline for use in card generation
             window._amtLastShareableHeadline = event.text || '';
+            console.log('[SSE] Received shareable_headline:', event.text);
           }
 
           if (event.type === 'done') {
@@ -2089,29 +2090,55 @@
 
   function isCompleteReflectionSentence(text) {
     const clean = normalizeReflectionText(text);
-    if (!clean || clean.length < 28) return false;
+    console.log('[isCompleteReflectionSentence] Input:', text);
+    console.log('[isCompleteReflectionSentence] Clean:', clean);
+    if (!clean || clean.length < 28) {
+      console.log('[isCompleteReflectionSentence] REJECT: Too short');
+      return false;
+    }
     
     // Must end with proper punctuation
-    if (!/[.!?]$/.test(clean)) return false;
-    if (/…|\.\.\./.test(clean)) return false;
-    if (/\b[a-z]{1,2}\s+[A-Z][a-z]/.test(clean)) return false;
+    if (!/[.!?]$/.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: No ending punctuation');
+      return false;
+    }
+    if (/…|\.\.\./.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Has ellipsis');
+      return false;
+    }
+    if (/\b[a-z]{1,2}\s+[A-Z][a-z]/.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Mid-sentence capitalization');
+      return false;
+    }
     
     // Check for unbalanced quotes and parentheses (critical for shareability)
     const openParens = (clean.match(/\(/g) || []).length;
     const closeParens = (clean.match(/\)/g) || []).length;
-    if (openParens !== closeParens) return false;
+    if (openParens !== closeParens) {
+      console.log('[isCompleteReflectionSentence] REJECT: Unbalanced parentheses');
+      return false;
+    }
     
     const openBrackets = (clean.match(/\[/g) || []).length;
     const closeBrackets = (clean.match(/\]/g) || []).length;
-    if (openBrackets !== closeBrackets) return false;
+    if (openBrackets !== closeBrackets) {
+      console.log('[isCompleteReflectionSentence] REJECT: Unbalanced brackets');
+      return false;
+    }
     
     // Check for unbalanced quotes (straight and curly)
     const straightDoubleQuotes = (clean.match(/"/g) || []).length;
-    if (straightDoubleQuotes % 2 !== 0) return false;
+    if (straightDoubleQuotes % 2 !== 0) {
+      console.log('[isCompleteReflectionSentence] REJECT: Unbalanced straight quotes');
+      return false;
+    }
     
     const curlyOpenQuotes = (clean.match(/[""]/g) || []).length;
     const curlyCloseQuotes = (clean.match(/[""]/g) || []).length;
-    if (curlyOpenQuotes !== curlyCloseQuotes) return false;
+    if (curlyOpenQuotes !== curlyCloseQuotes) {
+      console.log('[isCompleteReflectionSentence] REJECT: Unbalanced curly quotes');
+      return false;
+    }
     
     const singleQuotes = (clean.match(/'/g) || []).length;
     const curlyOpenSingle = (clean.match(/'/g) || []).length;
@@ -2120,43 +2147,82 @@
     if (singleQuotes >= 2 && singleQuotes % 2 !== 0) {
       // Allow single quotes that are likely apostrophes (preceded/followed by letters)
       const apostrophes = (clean.match(/[a-z]'[a-z]/gi) || []).length;
-      if ((singleQuotes - apostrophes) % 2 !== 0) return false;
+      if ((singleQuotes - apostrophes) % 2 !== 0) {
+        console.log('[isCompleteReflectionSentence] REJECT: Unbalanced single quotes');
+        return false;
+      }
     }
-    if (curlyOpenSingle !== curlyCloseSingle) return false;
+    if (curlyOpenSingle !== curlyCloseSingle) {
+      console.log('[isCompleteReflectionSentence] REJECT: Unbalanced curly single quotes');
+      return false;
+    }
     
     // Can't be a question
-    if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) return false;
-    if (isWeakShareHeadlineCandidate(clean)) return false;
+    if (/^(how|what|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Starts like a question');
+      return false;
+    }
+    if (isWeakShareHeadlineCandidate(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Weak headline');
+      return false;
+    }
     
     // Can't end mid-thought with conjunctions
-    if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) return false;
-    if (/\b(and|or|but|because|which|that|about|around|into|with|for|of|on|to|from|can|could|would|should|may|might|enhance|transform|deep|honest)[.!?]$/i.test(clean)) return false;
-    if (/,\s*(deep|honest|gentle|steady|quiet|open|real|true)[.!?]$/i.test(clean)) return false;
+    if (/[,:;]\s*(and|or|but|because|which|that|about|with|for)$/i.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Ends with conjunction after comma');
+      return false;
+    }
+    const weakEndPattern = /\b(and|or|but|because|which|that|about|around|into|with|for|of|on|to|from|can|could|would|should|may|might|enhance|transform|deep|honest)[.!?]$/i;
+    if (weakEndPattern.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Ends with weak word:', clean.match(weakEndPattern)[0]);
+      return false;
+    }
+    if (/,\s*(deep|honest|gentle|steady|quiet|open|real|true)[.!?]$/i.test(clean)) {
+      console.log('[isCompleteReflectionSentence] REJECT: Ends with adjective after comma');
+      return false;
+    }
     
     // Must have reasonable word count for a complete thought
     const words = clean.split(/\s+/).filter(Boolean);
-    if (words.length < 5) return false;
+    if (words.length < 5) {
+      console.log('[isCompleteReflectionSentence] REJECT: Too few words');
+      return false;
+    }
     const lastWord = (words[words.length - 1] || '').replace(/[^A-Za-z']/g, '').replace(/^'+|'+$/g, '');
-    const allowedShortEndings = new Set(['me', 'us']);
-    if (lastWord && lastWord.length <= 2 && !allowedShortEndings.has(lastWord.toLowerCase())) return false;
+    const allowedShortEndings = new Set(['me', 'us', 'it', 'be', 'go', 'do']);
+    if (lastWord && lastWord.length <= 2 && !allowedShortEndings.has(lastWord.toLowerCase())) {
+      console.log('[isCompleteReflectionSentence] REJECT: Last word too short:', lastWord);
+      return false;
+    }
     
     // Should have action or being verb for completeness
-    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|starts|looks|feels|helps|lets|gives|make|makes|remember|remembers|remind|reminds|notice|notices|open|opens|repair|repairs|rebuild|rebuilds|restore|restores|reconnect|reconnects|transform|transforms|strengthen|strengthens|ground|grounds|anchor|anchors|soften|softens|require|requires|invite|invites|call|calls|create|creates|grow|grows|become|becomes|allow|allows|ask|asks|teach|teaches|reveal|reveals|hold|holds|carry|carries|stay|trust|return|release|choose|protect|honor|pause|listen|lead|follow|speak|learn|face|faced|succeed|succeeded)\b/i.test(clean);
+    const hasVerb = /\b(is|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|should|shall|may|might|must|means|begins|starts|looks|feels|helps|lets|gives|give|make|makes|remember|remembers|remind|reminds|notice|notices|open|opens|repair|repairs|rebuild|rebuilds|restore|restores|reconnect|reconnects|transform|transforms|strengthen|strengthens|ground|grounds|anchor|anchors|soften|softens|require|requires|invite|invites|call|calls|create|creates|grow|grows|become|becomes|allow|allows|ask|asks|teach|teaches|reveal|reveals|hold|holds|carry|carries|stay|trust|return|release|choose|protect|honor|pause|listen|lead|follow|speak|learn|face|faced|succeed|succeeded|build|builds|steer|steers|shape|shapes|enable|enables|manifest|manifests|discuss|discusses|align|aligns|suggest|suggests|cultivate|cultivates|reflect|reflects|mirror|mirrors|reinforce|reinforces|expand|expands|confront|confronts|embrace|embracing|act|acting|set|sets)\b/i.test(clean);
     
-    return hasVerb;
+    if (!hasVerb) {
+      console.log('[isCompleteReflectionSentence] REJECT: No action/being verb');
+      return false;
+    }
+    
+    console.log('[isCompleteReflectionSentence] ACCEPT: Passed all checks');
+    return true;
   }
 
   function ensureReflectionSentence(text) {
+    console.log('[ensureReflectionSentence] Input:', text);
     let clean = cleanReflectionSentenceCandidate(text);
+    console.log('[ensureReflectionSentence] After cleanReflectionSentenceCandidate:', clean);
     if (clean) return clean;
 
     clean = trimDanglingHeadlineTail(text);
+    console.log('[ensureReflectionSentence] After trimDanglingHeadlineTail:', clean);
     if (!clean) return '';
     
     // Remove trailing commas and semicolons
     clean = clean.replace(/[,:;]+$/g, '').trim();
 
-    return isCompleteReflectionSentence(clean) ? clean : '';
+    const isComplete = isCompleteReflectionSentence(clean);
+    console.log('[ensureReflectionSentence] isCompleteReflectionSentence result:', isComplete);
+    return isComplete ? clean : '';
   }
 
   function capitalizeReflectionSentence(text) {
@@ -2892,9 +2958,16 @@
 
   function isWeakShareHeadlineCandidate(text) {
     const cleaned = trimDanglingHeadlineTail(text);
+    console.log('[isWeakShareHeadlineCandidate] After trimming:', cleaned);
     const lower = cleaned.toLowerCase();
-    if (!cleaned) return true;
-    if (cleaned.length < 32) return true;
+    if (!cleaned) {
+      console.log('[isWeakShareHeadlineCandidate] WEAK: Empty after trimming');
+      return true;
+    }
+    if (cleaned.length < 32) {
+      console.log('[isWeakShareHeadlineCandidate] WEAK: Too short (<32 chars)');
+      return true;
+    }
     if (
       lower.startsWith('what likely stayed with you') ||
       lower.startsWith('what stayed with me') ||
@@ -2911,8 +2984,10 @@
       lower.startsWith('in this reflection') ||
       lower.startsWith('this reflection')
     ) {
+      console.log('[isWeakShareHeadlineCandidate] WEAK: Generic phrase detected');
       return true;
     }
+    console.log('[isWeakShareHeadlineCandidate] STRONG: Passed all checks');
     return false;
   }
 
@@ -7043,6 +7118,9 @@
     const question = String((insight && insight.question) || '').trim();
     const answer = String((insight && insight.answer) || '').trim();
     const rawExcerpt = String((insight && insight.excerpt) || '').trim();
+    const shareableHeadline = String((insight && insight.shareable_headline) || '').trim();
+    console.log('[Normalize] Input shareable_headline:', insight && insight.shareable_headline);
+    console.log('[Normalize] Cleaned shareable_headline:', shareableHeadline);
     const theme = inferReflectionArtifactTheme(
       question,
       `${answer} ${rawExcerpt}`,
@@ -7057,6 +7135,7 @@
       answer,
       theme,
       excerpt,
+      shareable_headline: shareableHeadline,
       savedAt: (insight && insight.savedAt) || Date.now()
     };
   }
@@ -7509,6 +7588,76 @@
 
   function selectFittingShareHeadline(ctx, normalized, fitOptions) {
     const opts = fitOptions || {};
+    
+    console.log('[selectFittingShareHeadline] normalized.shareable_headline:', normalized.shareable_headline);
+    
+    // Prioritize API-generated shareable_headline if available and fits rendering constraints
+    const apiHeadline = normalized.shareable_headline && typeof normalized.shareable_headline === 'string' 
+      ? ensureReflectionSentence(normalized.shareable_headline) 
+      : '';
+    
+    console.log('[selectFittingShareHeadline] apiHeadline after ensureReflectionSentence:', apiHeadline);
+    
+    // Try API headline first if it's not weak and fits the canvas
+    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+      // First try: use provided constraints
+      if (canRenderCanvasTextFully(
+        ctx,
+        apiHeadline,
+        opts.maxWidth,
+        opts.maxHeight,
+        opts.maxLines,
+        opts.fontTemplate,
+        opts.maxSize,
+        opts.minSize,
+        opts.lineHeightRatio
+      )) {
+        console.log('[Card] Using API-generated headline:', apiHeadline.substring(0, 60) + '...');
+        return apiHeadline;
+      }
+      
+      // Second try: allow smaller font size (reduce minSize by 20%)
+      const flexibleMinSize = Math.max(28, Math.floor(opts.minSize * 0.8));
+      if (canRenderCanvasTextFully(
+        ctx,
+        apiHeadline,
+        opts.maxWidth,
+        opts.maxHeight,
+        opts.maxLines,
+        opts.fontTemplate,
+        opts.maxSize,
+        flexibleMinSize,
+        opts.lineHeightRatio
+      )) {
+        console.log('[Card] Using API headline with reduced font size (min:', flexibleMinSize + 'px)');
+        return apiHeadline;
+      }
+      
+      // Third try: allow one more line if we're close
+      const flexibleMaxLines = Math.min(7, opts.maxLines + 1);
+      if (canRenderCanvasTextFully(
+        ctx,
+        apiHeadline,
+        opts.maxWidth,
+        opts.maxHeight * 1.15,  // 15% more height
+        flexibleMaxLines,
+        opts.fontTemplate,
+        opts.maxSize,
+        flexibleMinSize,
+        opts.lineHeightRatio
+      )) {
+        console.log('[Card] Using API headline with extra line (max:', flexibleMaxLines, 'lines)');
+        return apiHeadline;
+      }
+      
+      console.log('[Card] API headline exists but doesn\'t fit canvas constraints, using fallback');
+    } else if (!apiHeadline) {
+      console.log('[Card] No API headline available, extracting from answer text');
+    } else {
+      console.log('[Card] API headline is weak/generic, using fallback');
+    }
+    
+    // Fallback to extraction from answer text if API headline not usable
     const candidates = listCardHeadlineCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || ''
@@ -7532,6 +7681,31 @@
     if (TEST_FORCE_FAMILY) return TEST_FORCE_FAMILY;
 
     const headline = extractShareHeadline(insight);
+    const apiHeadline = insight.shareable_headline && typeof insight.shareable_headline === 'string' 
+      ? ensureReflectionSentence(insight.shareable_headline) 
+      : '';
+    
+    // If we have an API headline, prefer card families with more generous height limits
+    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+      const words = apiHeadline.split(/\s+/).filter(Boolean);
+      const chars = apiHeadline.length;
+      const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
+      
+      // For longer API headlines, prefer families with larger canvas limits
+      // spotlight: 620px height, 6 lines; poster: 520px, 6 lines
+      if (chars > 110 || words.length > 18) {
+        console.log('[Card Family] API headline is long (' + chars + ' chars), choosing generous layout');
+        // Alternate between spotlight and poster for variety
+        return seed % 2 === 0 ? 'spotlight' : 'poster';
+      }
+      
+      if (chars > 85 || words.length > 15) {
+        console.log('[Card Family] API headline is medium-long (' + chars + ' chars), using poster layout');
+        return 'poster';  // 520px height, 6 lines
+      }
+    }
+    
+    // Default logic for shorter headlines or fallback extractions
     const words = String(headline || '').split(/\s+/).filter(Boolean);
     if (words.length <= 20) {
       return 'aura_poster';
@@ -7727,7 +7901,7 @@
     const qrOuter = (qr.size + qrQuiet * 2) * qrModuleSize;
     const chipW = opts.chipWidth || 484;
     const chipH = opts.chipHeight || Math.max(188, qrOuter + 20);
-    const chipX = align === 'left' ? 96 : Math.round((W - chipW) / 2);
+    const chipX = align === 'left' ? 80 : Math.round((W - chipW) / 2);
     const chipY = Math.min(y + 28, 1350 - chipH - 42);
 
     const glassGrad = ctx.createLinearGradient(chipX, chipY, chipX + chipW, chipY + chipH);
@@ -7796,97 +7970,75 @@
 
   function buildPosterInsightShareCard(ctx, normalized, style, W, H, variant) {
     let headline = selectFittingShareHeadline(ctx, normalized, {
-      maxWidth: W - 192,
-      maxHeight: 470,
-      maxLines: 5,
+      maxWidth: W - 160,
+      maxHeight: 520,
+      maxLines: 6,
       fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 76,
-      minSize: 42,
+      maxSize: 78,
+      minSize: 44,
       lineHeightRatio: 1.14
     });
     headline = ensureReflectionSentence(headline);
     
-    drawShareCardShell(ctx, style, W, H, variant);
+    // Enhanced gradient background
+    const richGrad = ctx.createLinearGradient(0, 0, W, H);
+    richGrad.addColorStop(0, style.bg[0]);
+    richGrad.addColorStop(0.42, style.bg[1]);
+    richGrad.addColorStop(1, style.bg[2]);
+    ctx.fillStyle = richGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Add depth with orbs
+    const orbA = ctx.createRadialGradient(W * 0.18, H * 0.22, 0, W * 0.18, H * 0.22, 440);
+    orbA.addColorStop(0, 'rgba(255,255,255,0.14)');
+    orbA.addColorStop(0.55, 'rgba(255,255,255,0.05)');
+    orbA.addColorStop(1, 'transparent');
+    ctx.fillStyle = orbA;
+    ctx.fillRect(0, 0, W, H);
+    
+    const orbB = ctx.createRadialGradient(W * 0.86, H * 0.72, 0, W * 0.86, H * 0.72, 400);
+    orbB.addColorStop(0, style.accentSoft || 'rgba(255,255,255,0.12)');
+    orbB.addColorStop(0.6, 'rgba(255,255,255,0.04)');
+    orbB.addColorStop(1, 'transparent');
+    ctx.fillStyle = orbB;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Frame
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 2.5;
+    _roundRect(ctx, 28, 28, W - 56, H - 56, 38);
+    ctx.stroke();
 
     ctx.textAlign = 'left';
     ctx.fillStyle = style.accent;
-    ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 92, 108);
-    ctx.textAlign = 'right';
-    ctx.fillText('ASK MIRROR TALK', W - 92, 108);
-
-    const words = headline.split(/\s+/).filter(Boolean);
-    const pivot = Math.max(2, Math.min(words.length - 2, Math.ceil(words.length / 2)));
-    const first = words.slice(0, pivot).join(' ');
-    const second = words.slice(pivot).join(' ');
-
-    const firstMetrics = drawFittedCanvasText(ctx, {
-      text: first,
-      x: 96,
-      y: 286,
-      maxWidth: W - 192,
-      maxHeight: 190,
-      maxLines: 2,
-      align: 'left',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 72,
-      minSize: 44,
-      lineHeightRatio: 1.14
-    });
-    ctx.font = `500 ${firstMetrics.size}px Georgia, serif`;
-    const firstLines = splitCanvasLines(ctx, first, W - 192).slice(0, firstMetrics.lineCount);
-    const firstBlockWidth = Math.min(
-      700,
-      Math.max(
-        320,
-        Math.ceil(Math.max(...firstLines.map(line => ctx.measureText(line).width), 0) + 52)
-      )
-    );
-    const firstBoxHeight = 34 + firstMetrics.height;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.13)';
-    _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
-    ctx.fill();
-    ctx.strokeStyle = style.panelEdge || 'rgba(255,255,255,0.20)';
-    ctx.lineWidth = 1.1;
-    _roundRect(ctx, 92, 232, firstBlockWidth, firstBoxHeight, 6);
+    ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 80, 105);
+    
+    // Subtle decorative line under theme
+    ctx.strokeStyle = style.accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(80, 125);
+    ctx.lineTo(280, 125);
     ctx.stroke();
 
-    ctx.fillStyle = '#fff9f1';
-    drawFittedCanvasText(ctx, {
-      text: first,
-      x: 96,
-      y: 286,
-      maxWidth: W - 192,
-      maxHeight: 190,
-      maxLines: 2,
+    // Render headline as unified text block - clean design without blue box
+    ctx.fillStyle = style.text;
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: 80,
+      y: 300,
+      maxWidth: W - 160,
+      maxHeight: 520,
+      maxLines: 6,
       align: 'left',
       fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: firstMetrics.size,
+      maxSize: 78,
       minSize: 44,
       lineHeightRatio: 1.14
     });
 
-    const secondY = 252 + firstBoxHeight + 34;
-    ctx.fillStyle = style.text;
-    const secondMetrics = drawFittedCanvasText(ctx, {
-      text: second || first,
-      x: 96,
-      y: secondY,
-      maxWidth: W - 192,
-      maxHeight: 260,
-      maxLines: 3,
-      align: 'left',
-      fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 76,
-      minSize: 42,
-      lineHeightRatio: 1.13
-    });
-
-    ctx.fillStyle = style.accent;
-    ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(style.kicker, 96, H - 196);
-    drawShareFooter(ctx, style, W, H - 160, 'left');
+    drawShareFooter(ctx, style, W, H - 135, 'left');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = { family: 'poster', headline };
     }
@@ -7894,89 +8046,75 @@
 
   function buildSpotlightInsightShareCard(ctx, normalized, style, W, H, variant) {
     let headline = selectFittingShareHeadline(ctx, normalized, {
-      maxWidth: W - 180,
-      maxHeight: 490,
+      maxWidth: W - 160,
+      maxHeight: 620,
       maxLines: 6,
       fontTemplate: '500 __SIZE__px Georgia, serif',
-      maxSize: 66,
-      minSize: 36,
-      lineHeightRatio: 1.12
+      maxSize: 68,
+      minSize: 42,
+      lineHeightRatio: 1.15
     });
     headline = ensureReflectionSentence(headline);
-    const splitHeadline = splitHeadlineForSpotlight(headline);
     
-    drawShareCardShell(ctx, style, W, H, variant);
+    // Enhanced gradient background with more depth
+    const richGrad = ctx.createLinearGradient(0, 0, W, H);
+    richGrad.addColorStop(0, style.bg[0]);
+    richGrad.addColorStop(0.35, style.bg[1]);
+    richGrad.addColorStop(1, style.bg[2]);
+    ctx.fillStyle = richGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Add atmospheric orbs for depth
+    const orbA = ctx.createRadialGradient(W * 0.82, H * 0.18, 0, W * 0.82, H * 0.18, 420);
+    orbA.addColorStop(0, 'rgba(255,255,255,0.12)');
+    orbA.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+    orbA.addColorStop(1, 'transparent');
+    ctx.fillStyle = orbA;
+    ctx.fillRect(0, 0, W, H);
+    
+    const orbB = ctx.createRadialGradient(W * 0.15, H * 0.78, 0, W * 0.15, H * 0.78, 380);
+    orbB.addColorStop(0, style.accentSoft || 'rgba(255,255,255,0.10)');
+    orbB.addColorStop(0.6, 'rgba(255,255,255,0.03)');
+    orbB.addColorStop(1, 'transparent');
+    ctx.fillStyle = orbB;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Frame border
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 2.5;
+    _roundRect(ctx, 28, 28, W - 56, H - 56, 40);
+    ctx.stroke();
 
     ctx.textAlign = 'center';
     ctx.fillStyle = style.accent;
-    ctx.font = '700 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W / 2, 106);
+    ctx.font = '700 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W / 2, 105);
 
-    const splitY = 268;
-    let runningY = splitY;
-    if (splitHeadline.lead) {
-      ctx.fillStyle = style.text;
-      const leadMetrics = drawFittedCanvasText(ctx, {
-        text: splitHeadline.lead,
-        x: W / 2,
-        y: runningY,
-        maxWidth: W - 180,
-        maxHeight: 170,
-        maxLines: 2,
-        align: 'center',
-        fontTemplate: '500 __SIZE__px Georgia, serif',
-        maxSize: 66,
-        minSize: 40,
-        lineHeightRatio: 1.12
-      });
-      runningY += leadMetrics.height + 28;
-    }
+    // Subtle decorative line under theme
+    ctx.strokeStyle = style.accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 40, 125);
+    ctx.lineTo(W / 2 + 40, 125);
+    ctx.stroke();
 
-    if (splitHeadline.highlight) {
-      const highlightY = runningY;
-      ctx.fillStyle = style.accentSoft;
-      _roundRect(ctx, 118, highlightY - 54, W - 236, 104, 18);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth = 1.3;
-      _roundRect(ctx, 118, highlightY - 54, W - 236, 104, 18);
-      ctx.stroke();
-      ctx.fillStyle = '#fffdf8';
-      const highlightMetrics = drawFittedCanvasText(ctx, {
-        text: splitHeadline.highlight,
-        x: W / 2,
-        y: highlightY,
-        maxWidth: W - 220,
-        maxHeight: 86,
-        maxLines: 2,
-        align: 'center',
-        fontTemplate: '700 __SIZE__px Georgia, serif',
-        maxSize: 70,
-        minSize: 42,
-        lineHeightRatio: 1.08
-      });
-      runningY += Math.max(110, highlightMetrics.height + 36);
+    // Render headline as unified text block with consistent typography
+    ctx.fillStyle = style.text;
+    const headlineMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: 300,
+      maxWidth: W - 160,
+      maxHeight: 620,
+      maxLines: 6,
+      align: 'center',
+      fontTemplate: '500 __SIZE__px Georgia, serif',
+      maxSize: 68,
+      minSize: 42,
+      lineHeightRatio: 1.15
+    });
 
-      if (splitHeadline.tail) {
-        ctx.fillStyle = style.text;
-        const tailMetrics = drawFittedCanvasText(ctx, {
-          text: splitHeadline.tail,
-          x: W / 2,
-          y: runningY,
-          maxWidth: W - 180,
-          maxHeight: 190,
-          maxLines: 3,
-          align: 'center',
-          fontTemplate: '500 __SIZE__px Georgia, serif',
-          maxSize: 66,
-          minSize: 38,
-          lineHeightRatio: 1.12
-        });
-        runningY += tailMetrics.height + 70;
-      }
-    }
-
-    drawShareFooter(ctx, style, W, H - 154, 'center');
+    drawShareFooter(ctx, style, W, H - 135, 'center');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = { family: 'spotlight', headline };
     }
@@ -8300,15 +8438,20 @@
       minSize: 34,
       lineHeightRatio: 1.1
     };
-    const headlineCandidates = listCardHeadlineCandidates(
-      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-      normalized.theme || ''
-    );
-
-    let headline = headlineCandidates.find(candidate =>
-      canRenderCanvasTextFully(
+    
+    // Prioritize API-generated shareable_headline if available and fits rendering constraints
+    const apiHeadline = normalized.shareable_headline && typeof normalized.shareable_headline === 'string' 
+      ? ensureReflectionSentence(normalized.shareable_headline) 
+      : '';
+    
+    let headline = '';
+    
+    // Try API headline first if it's not weak and fits the canvas
+    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+      // First try: standard constraints
+      if (canRenderCanvasTextFully(
         ctx,
-        candidate,
+        apiHeadline,
         headlineOptions.maxWidth,
         headlineOptions.maxHeightWithExcerpt,
         headlineOptions.maxLines,
@@ -8316,11 +8459,9 @@
         headlineOptions.maxSizeWithExcerpt,
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
-      )
-    ) || headlineCandidates.find(candidate =>
-      canRenderCanvasTextFully(
+      ) || canRenderCanvasTextFully(
         ctx,
-        candidate,
+        apiHeadline,
         headlineOptions.maxWidth,
         headlineOptions.maxHeightWithoutExcerpt,
         headlineOptions.maxLines,
@@ -8328,8 +8469,79 @@
         headlineOptions.maxSizeWithoutExcerpt,
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
-      )
-    ) || buildThemeReflectionFallback(normalized.theme || '');
+      )) {
+        headline = apiHeadline;
+        console.log('[Editorial Card] Using API-generated headline:', apiHeadline.substring(0, 60) + '...');
+      }
+      // Second try: allow smaller font (reduce minSize by 20%)
+      else {
+        const flexibleMinSize = Math.max(28, Math.floor(headlineOptions.minSize * 0.8));
+        if (canRenderCanvasTextFully(
+          ctx,
+          apiHeadline,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithExcerpt,
+          flexibleMinSize,
+          headlineOptions.lineHeightRatio
+        ) || canRenderCanvasTextFully(
+          ctx,
+          apiHeadline,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithoutExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithoutExcerpt,
+          flexibleMinSize,
+          headlineOptions.lineHeightRatio
+        )) {
+          headline = apiHeadline;
+          console.log('[Editorial Card] Using API headline with reduced font size');
+        } else {
+          console.log('[Editorial Card] API headline exists but doesn\'t fit canvas constraints, using fallback');
+        }
+      }
+    } else if (!apiHeadline) {
+      console.log('[Editorial Card] No API headline available, extracting from answer text');
+    } else {
+      console.log('[Editorial Card] API headline is weak/generic, using fallback');
+    }
+    
+    // Fallback to extraction from answer text if API headline not usable
+    if (!headline) {
+      const headlineCandidates = listCardHeadlineCandidates(
+        joinReflectionTextParts([normalized.answer, normalized.excerpt]),
+        normalized.theme || ''
+      );
+
+      headline = headlineCandidates.find(candidate =>
+        canRenderCanvasTextFully(
+          ctx,
+          candidate,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithExcerpt,
+          headlineOptions.minSize,
+          headlineOptions.lineHeightRatio
+        )
+      ) || headlineCandidates.find(candidate =>
+        canRenderCanvasTextFully(
+          ctx,
+          candidate,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithoutExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithoutExcerpt,
+          headlineOptions.minSize,
+          headlineOptions.lineHeightRatio
+        )
+      ) || buildThemeReflectionFallback(normalized.theme || '');
+    }
 
     const supportingCandidates = listSupportingReflectionCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
@@ -8521,15 +8733,20 @@
       minSize: 34,
       lineHeightRatio: 1.1
     };
-    const headlineCandidates = listCardHeadlineCandidates(
-      joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-      normalized.theme || ''
-    );
-
-    const headline = headlineCandidates.find(candidate =>
-      canRenderCanvasTextFully(
+    
+    // Prioritize API-generated shareable_headline if available and fits rendering constraints
+    const apiHeadline = normalized.shareable_headline && typeof normalized.shareable_headline === 'string' 
+      ? ensureReflectionSentence(normalized.shareable_headline) 
+      : '';
+    
+    let headline = '';
+    
+    // Try API headline first if it's not weak and fits the canvas
+    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+      // First try: standard constraints
+      if (canRenderCanvasTextFully(
         ctx,
-        candidate,
+        apiHeadline,
         headlineOptions.maxWidth,
         headlineOptions.maxHeightWithExcerpt,
         headlineOptions.maxLines,
@@ -8537,11 +8754,9 @@
         headlineOptions.maxSizeWithExcerpt,
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
-      )
-    ) || headlineCandidates.find(candidate =>
-      canRenderCanvasTextFully(
+      ) || canRenderCanvasTextFully(
         ctx,
-        candidate,
+        apiHeadline,
         headlineOptions.maxWidth,
         headlineOptions.maxHeightWithoutExcerpt,
         headlineOptions.maxLines,
@@ -8549,8 +8764,79 @@
         headlineOptions.maxSizeWithoutExcerpt,
         headlineOptions.minSize,
         headlineOptions.lineHeightRatio
-      )
-    ) || buildThemeReflectionFallback(normalized.theme || '');
+      )) {
+        headline = apiHeadline;
+        console.log('[Editorial Serene Card] Using API-generated headline:', apiHeadline.substring(0, 60) + '...');
+      }
+      // Second try: allow smaller font (reduce minSize by 20%)
+      else {
+        const flexibleMinSize = Math.max(28, Math.floor(headlineOptions.minSize * 0.8));
+        if (canRenderCanvasTextFully(
+          ctx,
+          apiHeadline,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithExcerpt,
+          flexibleMinSize,
+          headlineOptions.lineHeightRatio
+        ) || canRenderCanvasTextFully(
+          ctx,
+          apiHeadline,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithoutExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithoutExcerpt,
+          flexibleMinSize,
+          headlineOptions.lineHeightRatio
+        )) {
+          headline = apiHeadline;
+          console.log('[Editorial Serene Card] Using API headline with reduced font size');
+        } else {
+          console.log('[Editorial Serene Card] API headline exists but doesn\'t fit canvas constraints, using fallback');
+        }
+      }
+    } else if (!apiHeadline) {
+      console.log('[Editorial Serene Card] No API headline available, extracting from answer text');
+    } else {
+      console.log('[Editorial Serene Card] API headline is weak/generic, using fallback');
+    }
+    
+    // Fallback to extraction from answer text if API headline not usable
+    if (!headline) {
+      const headlineCandidates = listCardHeadlineCandidates(
+        joinReflectionTextParts([normalized.answer, normalized.excerpt]),
+        normalized.theme || ''
+      );
+
+      headline = headlineCandidates.find(candidate =>
+        canRenderCanvasTextFully(
+          ctx,
+          candidate,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithExcerpt,
+          headlineOptions.minSize,
+          headlineOptions.lineHeightRatio
+        )
+      ) || headlineCandidates.find(candidate =>
+        canRenderCanvasTextFully(
+          ctx,
+          candidate,
+          headlineOptions.maxWidth,
+          headlineOptions.maxHeightWithoutExcerpt,
+          headlineOptions.maxLines,
+          headlineOptions.fontTemplate,
+          headlineOptions.maxSizeWithoutExcerpt,
+          headlineOptions.minSize,
+          headlineOptions.lineHeightRatio
+        )
+      ) || buildThemeReflectionFallback(normalized.theme || '');
+    }
 
     const supportingCandidates = listSupportingReflectionCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
@@ -9696,6 +9982,8 @@
     shareSection.className = 'amt-share-section amt-share-section-v2';
     const fallbackAnswer = isFallbackAnswerMeta(answerMeta);
 
+    console.log('[addShareButtonV2] window._amtLastShareableHeadline:', window._amtLastShareableHeadline);
+    
     const reflectionInsight = normalizeInsightRecord({
       question,
       answer: answerText,

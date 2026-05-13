@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def is_reasoning_chat_model(model: str | None) -> bool:
@@ -89,19 +92,40 @@ def create_chat_completion(
         # Re-raise if it's not a parameter compatibility issue
         raise
     except Exception as exc:
-        # Handle API-level parameter errors
-        error_msg = str(exc)
+        # Handle API-level parameter errors (BadRequestError from OpenAI)
+        error_msg = str(exc).lower()
         
-        # If API says it wants the other parameter name
-        if "max_tokens" in error_msg and "max_completion_tokens" in error_msg:
-            if "max_tokens" in payload and "max_completion_tokens" not in payload:
-                retry_payload = dict(payload)
-                retry_payload["max_completion_tokens"] = retry_payload.pop("max_tokens")
-                return client.chat.completions.create(**retry_payload)
-            elif "max_completion_tokens" in payload and "max_tokens" not in payload:
-                retry_payload = dict(payload)
-                retry_payload["max_tokens"] = retry_payload.pop("max_completion_tokens")
-                return client.chat.completions.create(**retry_payload)
+        # Check if it's a max_tokens/max_completion_tokens parameter error
+        is_max_tokens_error = (
+            "max_tokens" in error_msg 
+            and ("max_completion_tokens" in error_msg or "unsupported parameter" in error_msg)
+        )
+        is_max_completion_tokens_error = (
+            "max_completion_tokens" in error_msg 
+            and ("max_tokens" in error_msg or "unsupported parameter" in error_msg)
+        )
+        
+        # If API says max_tokens is not supported, use max_completion_tokens
+        if is_max_tokens_error and "max_tokens" in payload:
+            retry_payload = dict(payload)
+            token_value = retry_payload.pop("max_tokens")
+            retry_payload["max_completion_tokens"] = token_value
+            logger.info(
+                "OpenAI API rejected max_tokens for model %s, retrying with max_completion_tokens",
+                model
+            )
+            return client.chat.completions.create(**retry_payload)
+        
+        # If API says max_completion_tokens is not supported, use max_tokens
+        if is_max_completion_tokens_error and "max_completion_tokens" in payload:
+            retry_payload = dict(payload)
+            token_value = retry_payload.pop("max_completion_tokens")
+            retry_payload["max_tokens"] = token_value
+            logger.info(
+                "OpenAI API rejected max_completion_tokens for model %s, retrying with max_tokens",
+                model
+            )
+            return client.chat.completions.create(**retry_payload)
         
         # Re-raise if it's not a parameter compatibility issue
         raise

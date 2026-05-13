@@ -673,21 +673,8 @@ def answer_question_stream(
         },
     )
 
-    # ── Mark the answer complete before optional metadata finishes ──
-    # This lowers perceived latency and keeps analytics focused on answer
-    # readiness rather than the slower metadata generation calls.
-    done_payload = {
-        "type": "done",
-        "qa_log_id": qa_log_id,
-        "latency_ms": latency_ms,
-        "answer_source": answer_source,
-        "answer_status": answer_status,
-    }
-    if fallback_reason:
-        done_payload["fallback_reason"] = fallback_reason
-    yield f"data: {json.dumps(done_payload)}\n\n"
-
     # ── Collect metadata (background threads should be done by now) ──
+    # Important: Get headline BEFORE sending done event so frontend can use it immediately
     try:
         follow_ups = follow_up_future.result(timeout=15)
     except Exception as e:
@@ -702,8 +689,22 @@ def answer_question_stream(
     finally:
         _metadata_executor.shutdown(wait=False)
 
+    # ── Send metadata before "done" so they're available for card generation ──
     yield f"data: {json.dumps({'type': 'follow_up', 'questions': follow_ups})}\n\n"
     yield f"data: {json.dumps({'type': 'headline', 'text': shareable_headline})}\n\n"
+
+    # ── Mark the answer complete AFTER metadata is ready ──
+    # This ensures the frontend has all data it needs for card generation
+    done_payload = {
+        "type": "done",
+        "qa_log_id": qa_log_id,
+        "latency_ms": latency_ms,
+        "answer_source": answer_source,
+        "answer_status": answer_status,
+    }
+    if fallback_reason:
+        done_payload["fallback_reason"] = fallback_reason
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
     # Cache for next time (normalized question for better hit rate)
     cache_payload = {

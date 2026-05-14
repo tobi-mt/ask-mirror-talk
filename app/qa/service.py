@@ -94,11 +94,6 @@ def _generate_answer_with_quality_checks(
     Returns:
         Answer dict with quality metadata
     """
-    attempt = 0
-    last_response = None
-    last_quality = None
-    
-    while attempt < max_retries:
     from app.qa.answer import _generate_degraded_answer
     
     attempt = 0
@@ -212,9 +207,6 @@ def _generate_answer_with_quality_checks(
         "fallback_reason": "max_retries_exceeded",
         "generation_attempts": max_retries,
     }
-    if extra:
-        payload.update(extra)
-    logger.info("QA phase timings: %s", payload)
 
 
 def _maybe_log_qa(

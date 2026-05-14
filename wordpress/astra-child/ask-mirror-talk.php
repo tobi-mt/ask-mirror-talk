@@ -13,13 +13,29 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.8.5';
+    return '5.8.7';
 }
 
 function ask_mirror_talk_shortcode() {
     ob_start();
     ?>
     <div class="ask-mirror-talk amt-workflow-mode-ask">
+        <div id="amt-launch-splash" class="amt-launch-splash" role="status" aria-live="polite" aria-label="Loading Ask Mirror Talk">
+            <div class="amt-launch-splash-inner">
+                <div class="amt-launch-mark" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <p class="amt-launch-eyebrow">ASK MIRROR TALK</p>
+                <h3>Preparing your reflection space</h3>
+                <p id="amt-launch-splash-status" class="amt-launch-status">Loading your premium experience...</p>
+                <div class="amt-launch-actions">
+                    <button type="button" id="amt-launch-splash-audio-toggle" class="amt-launch-audio-toggle" aria-pressed="false">Play calm intro</button>
+                    <button type="button" id="amt-launch-splash-audio-autoplay-toggle" class="amt-launch-audio-toggle amt-launch-audio-toggle-secondary" aria-pressed="false">Autoplay off</button>
+                </div>
+            </div>
+        </div>
         <div class="amt-heading-row">
             <div class="amt-heading-copy">
                 <p class="amt-heading-kicker">Premium reflection</p>
@@ -104,6 +120,8 @@ function ask_mirror_talk_shortcode() {
                         </div>
                         <p class="amt-form-note">Best for personal, honest questions. We’ll surface the strongest episode moments we can find and show you where the answer came from.</p>
                     </div>
+                    <div id="amt-starter-journeys" class="amt-starter-journeys" aria-label="Quick start reflection journeys"></div>
+                    <div id="amt-activation-checklist" class="amt-activation-checklist" style="display:none;" aria-label="Getting started checklist"></div>
                     <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
                     <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
                     <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>

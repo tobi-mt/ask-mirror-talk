@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.8.5 loaded');
+  log('Ask Mirror Talk Widget v5.8.7 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -26,6 +26,8 @@
   const topicsContainer = document.querySelector("#ask-mirror-talk-topics");
   const topicsList = topicsContainer ? topicsContainer.querySelector(".amt-topics-list") : null;
   const qotdContainer = document.querySelector("#ask-mirror-talk-qotd");
+  const starterJourneysContainer = document.querySelector('#amt-starter-journeys');
+  const activationChecklistContainer = document.querySelector('#amt-activation-checklist');
   const exploreExpander = document.querySelector('#amt-explore-expander');
   const exploreToggle = document.querySelector('#amt-explore-toggle');
   const explorePanel = document.querySelector('#amt-explore-panel');
@@ -44,6 +46,10 @@
   const workflowNudgeText = document.querySelector('#amt-workflow-nudge-text');
   const workflowNudgeActions = document.querySelector('#amt-workflow-nudge-actions');
   const widgetRoot = form ? form.closest('.ask-mirror-talk') : document.querySelector('.ask-mirror-talk');
+  const launchSplash = document.querySelector('#amt-launch-splash');
+  const launchSplashStatus = document.querySelector('#amt-launch-splash-status');
+  const launchSplashAudioToggle = document.querySelector('#amt-launch-splash-audio-toggle');
+  const launchSplashAudioAutoplayToggle = document.querySelector('#amt-launch-splash-audio-autoplay-toggle');
   const workflowPanelsRoot = document.querySelector('#amt-workflow-panels');
   const workflowPanels = {
     ask: document.querySelector('#amt-workflow-panel-ask'),
@@ -55,11 +61,396 @@
 
   // Check if we're in test mode before checking for form
   const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
+  const LAUNCH_AUDIO_AUTOPLAY_KEY = 'amt_launch_audio_autoplay';
+  const ACTIVATION_CHECKLIST_KEY = 'amt_activation_checklist_v1';
+  let hasHiddenLaunchSplash = false;
+  let launchSplashAudioStop = null;
+  let launchSplashMood = 'Calm';
 
   if (!form && !ENABLE_TEST_EXPORTS) {
+    if (launchSplash) launchSplash.style.display = 'none';
     warn('⚠️ Ask Mirror Talk form not found on this page');
     return;
   }
+
+  function hideLaunchSplash(message) {
+    if (hasHiddenLaunchSplash || !launchSplash) return;
+    hasHiddenLaunchSplash = true;
+
+    if (launchSplashStatus && message) {
+      launchSplashStatus.textContent = String(message).slice(0, 120);
+    }
+
+    if (typeof launchSplashAudioStop === 'function') {
+      launchSplashAudioStop();
+      launchSplashAudioStop = null;
+    }
+
+    launchSplash.classList.add('amt-launch-splash-exit');
+    setTimeout(() => {
+      launchSplash.style.display = 'none';
+      launchSplash.setAttribute('aria-hidden', 'true');
+    }, 500);
+  }
+
+  function normalizeMoodPreset(mood) {
+    const clean = String(mood || '').trim().toLowerCase();
+    if (clean === 'warm') return 'Warm';
+    if (clean === 'hopeful') return 'Hopeful';
+    return 'Calm';
+  }
+
+  const THEME_MOOD_EXACT_MAP = {
+    'self-worth': 'Warm',
+    'self worth': 'Warm',
+    'self-love': 'Warm',
+    'self love': 'Warm',
+    'self-compassion': 'Warm',
+    'self compassion': 'Warm',
+    'relationships': 'Warm',
+    'relationship': 'Warm',
+    'love': 'Warm',
+    'family': 'Warm',
+    'friendship': 'Warm',
+    'belonging': 'Warm',
+    'gratitude': 'Warm',
+    'forgiveness': 'Warm',
+    'inner peace': 'Calm',
+    'healing': 'Calm',
+    'anxiety': 'Calm',
+    'stress': 'Calm',
+    'fear': 'Calm',
+    'grief': 'Calm',
+    'rest': 'Calm',
+    'burnout': 'Calm',
+    'trauma': 'Calm',
+    'loneliness': 'Calm',
+    'faith': 'Hopeful',
+    'hope': 'Hopeful',
+    'purpose': 'Hopeful',
+    'calling': 'Hopeful',
+    'growth': 'Hopeful',
+    'clarity': 'Hopeful',
+    'confidence': 'Hopeful',
+    'courage': 'Hopeful',
+    'vision': 'Hopeful',
+    'leadership': 'Hopeful',
+    'career': 'Hopeful',
+  };
+
+  const THEME_MOOD_PHRASE_RULES = [
+    { mood: 'Calm', test: /night reflection|evening reflection|rest and reset|release and rest|calm your mind/ },
+    { mood: 'Hopeful', test: /midday reflection|purpose reset|next step|future self|fresh start|new chapter/ },
+    { mood: 'Warm', test: /self[-\s]?worth|self[-\s]?love|self[-\s]?compassion|belonging|connection|relationships?/ },
+    { mood: 'Calm', test: /inner peace|grief|anx|fear|stress|overwhelm|burnout|healing|forgive|loneliness/ },
+    { mood: 'Hopeful', test: /purpose|calling|growth|clarity|confidence|courage|vision|career|momentum|breakthrough/ },
+  ];
+
+  function normalizeThemeKey(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+  }
+
+  function inferMoodFromThemeText(themeText) {
+    const text = normalizeThemeKey(themeText);
+    if (!text) return 'Calm';
+
+    if (THEME_MOOD_EXACT_MAP[text]) {
+      return THEME_MOOD_EXACT_MAP[text];
+    }
+
+    for (const [exactTheme, mood] of Object.entries(THEME_MOOD_EXACT_MAP)) {
+      if (text.includes(exactTheme)) return mood;
+    }
+
+    for (const rule of THEME_MOOD_PHRASE_RULES) {
+      if (rule.test.test(text)) return rule.mood;
+    }
+
+    if (/calm|peace|quiet|still|gentle|breathe|slow/.test(text)) return 'Calm';
+    if (/love|heart|care|compassion|kindness|bond|together/.test(text)) return 'Warm';
+    if (/hope|rise|build|grow|dream|believe|advance|thrive/.test(text)) return 'Hopeful';
+
+    return 'Calm';
+  }
+
+  function resolveLaunchMoodPreset() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('night_reflection') === '1') return 'Calm';
+      if (params.get('midday_reflection') === '1') return 'Hopeful';
+      if (params.get('invite_reflection') === '1') return 'Warm';
+
+      const intent = params.get('intent') || '';
+      if (intent) return inferMoodFromThemeText(intent);
+
+      const theme = params.get('theme') || '';
+      if (theme) return inferMoodFromThemeText(theme);
+    } catch (e) {}
+
+    try {
+      const qotdRaw = localStorage.getItem('amt_latest_qotd');
+      if (qotdRaw) {
+        const qotd = JSON.parse(qotdRaw);
+        if (qotd && qotd.theme) return inferMoodFromThemeText(qotd.theme);
+      }
+    } catch (e) {}
+
+    const hour = new Date().getHours();
+    if (hour >= 22 || hour < 6) return 'Calm';
+    if (hour >= 11 && hour <= 16) return 'Hopeful';
+    return 'Warm';
+  }
+
+  function getMoodPresetConfig(mood) {
+    const key = normalizeMoodPreset(mood);
+    const presets = {
+      Calm: {
+        cycleMs: 520,
+        masterGain: 0.038,
+        padGain: 0.026,
+        pulsePattern: [0.65, 0, 0.32, 0, 0.55, 0, 0.22, 0],
+        melodyPattern: [392.0, 349.23, 329.63, 349.23, 392.0, 440.0, 392.0, 349.23],
+        chordPattern: [[196.0, 246.94], [174.61, 220.0], [146.83, 196.0], [174.61, 220.0]],
+      },
+      Warm: {
+        cycleMs: 500,
+        masterGain: 0.042,
+        padGain: 0.028,
+        pulsePattern: [0.8, 0, 0.45, 0, 0.72, 0, 0.38, 0],
+        melodyPattern: [392.0, 440.0, 493.88, 440.0, 392.0, 349.23, 329.63, 349.23],
+        chordPattern: [[196.0, 246.94], [220.0, 261.63], [174.61, 220.0], [196.0, 246.94]],
+      },
+      Hopeful: {
+        cycleMs: 470,
+        masterGain: 0.045,
+        padGain: 0.03,
+        pulsePattern: [1, 0, 0.6, 0, 0.86, 0, 0.5, 0],
+        melodyPattern: [392.0, 440.0, 493.88, 523.25, 493.88, 440.0, 392.0, 349.23],
+        chordPattern: [[196.0, 246.94], [220.0, 277.18], [246.94, 293.66], [220.0, 277.18]],
+      },
+    };
+    return presets[key] || presets.Calm;
+  }
+
+  function readLaunchAutoplayPreference() {
+    try {
+      return localStorage.getItem(LAUNCH_AUDIO_AUTOPLAY_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function writeLaunchAutoplayPreference(enabled) {
+    try {
+      localStorage.setItem(LAUNCH_AUDIO_AUTOPLAY_KEY, enabled ? '1' : '0');
+    } catch (e) {}
+  }
+
+  function updateLaunchAutoplayToggleLabel(enabled) {
+    if (!launchSplashAudioAutoplayToggle) return;
+    launchSplashAudioAutoplayToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    launchSplashAudioAutoplayToggle.textContent = enabled ? 'Autoplay on' : 'Autoplay off';
+  }
+
+  function createLaunchSplashAmbientTrack(mood) {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return null;
+
+    const preset = getMoodPresetConfig(mood);
+
+    const context = new AudioContextCtor();
+    const master = context.createGain();
+    const padGain = context.createGain();
+    const rhythmGain = context.createGain();
+    const melodyGain = context.createGain();
+    const lowPad = context.createOscillator();
+    const highPad = context.createOscillator();
+    const pulse = context.createOscillator();
+    const melody = context.createOscillator();
+
+    lowPad.type = 'sine';
+    lowPad.frequency.value = 196.0; // G3
+
+    highPad.type = 'triangle';
+    highPad.frequency.value = 246.94; // B3
+
+    pulse.type = 'sine';
+    pulse.frequency.value = 98.0; // G2 pulse bass
+
+    melody.type = 'triangle';
+    melody.frequency.value = 392.0; // G4
+
+    master.gain.setValueAtTime(0.0001, context.currentTime);
+    padGain.gain.setValueAtTime(0.0001, context.currentTime);
+    rhythmGain.gain.setValueAtTime(0.0001, context.currentTime);
+    melodyGain.gain.setValueAtTime(0.0001, context.currentTime);
+
+    lowPad.connect(padGain);
+    highPad.connect(padGain);
+    pulse.connect(rhythmGain);
+    melody.connect(melodyGain);
+
+    padGain.connect(master);
+    rhythmGain.connect(master);
+    melodyGain.connect(master);
+    master.connect(context.destination);
+
+    lowPad.start();
+    highPad.start();
+    pulse.start();
+    melody.start();
+
+    const now = context.currentTime;
+    // Intro: slower ramp so the sound blooms in softly.
+    master.gain.linearRampToValueAtTime(preset.masterGain, now + 1.4);
+    padGain.gain.linearRampToValueAtTime(preset.padGain, now + 1.1);
+    rhythmGain.gain.linearRampToValueAtTime(0.0001, now + 1.2);
+    melodyGain.gain.linearRampToValueAtTime(0.0001, now + 1.2);
+
+    let step = 0;
+    const cycleMs = preset.cycleMs;
+    const pulsePattern = preset.pulsePattern;
+    const melodyPattern = preset.melodyPattern;
+    const chordPattern = preset.chordPattern;
+
+    const interval = window.setInterval(() => {
+      const t = context.currentTime;
+      const pulseStrength = pulsePattern[step % pulsePattern.length];
+      const melodyFreq = melodyPattern[step % melodyPattern.length];
+      const chord = chordPattern[Math.floor(step / 2) % chordPattern.length];
+
+      lowPad.frequency.setTargetAtTime(chord[0], t, 0.18);
+      highPad.frequency.setTargetAtTime(chord[1], t, 0.2);
+
+      pulse.frequency.setTargetAtTime(chord[0] / 2, t, 0.08);
+      rhythmGain.gain.cancelScheduledValues(t);
+      rhythmGain.gain.setValueAtTime(0.012, t);
+      rhythmGain.gain.linearRampToValueAtTime(0.02 + (preset.masterGain * pulseStrength), t + 0.08);
+      rhythmGain.gain.linearRampToValueAtTime(0.01, t + 0.38);
+
+      melody.frequency.setTargetAtTime(melodyFreq, t, 0.06);
+      melodyGain.gain.cancelScheduledValues(t);
+      melodyGain.gain.setValueAtTime(0.0001, t);
+      melodyGain.gain.linearRampToValueAtTime(0.012, t + 0.12);
+      melodyGain.gain.linearRampToValueAtTime(0.0001, t + 0.42);
+
+      step += 1;
+    }, cycleMs);
+
+    if (typeof context.resume === 'function') {
+      context.resume().catch(() => {});
+    }
+
+    return () => {
+      window.clearInterval(interval);
+      const endAt = context.currentTime + 0.85;
+      master.gain.cancelScheduledValues(context.currentTime);
+      master.gain.setValueAtTime(master.gain.value, context.currentTime);
+      master.gain.linearRampToValueAtTime(0.0001, endAt);
+
+      window.setTimeout(() => {
+        try { lowPad.stop(); } catch (e) {}
+        try { highPad.stop(); } catch (e) {}
+        try { pulse.stop(); } catch (e) {}
+        try { melody.stop(); } catch (e) {}
+        try { context.close(); } catch (e) {}
+      }, 920);
+    };
+  }
+
+  function initLaunchSplash() {
+    if (!launchSplash) return;
+
+    launchSplashMood = resolveLaunchMoodPreset();
+
+    if (launchSplashStatus) {
+      launchSplashStatus.textContent = `Loading your premium ${launchSplashMood.toLowerCase()} mode...`;
+    }
+
+    if (launchSplashAudioToggle) {
+      launchSplashAudioToggle.textContent = `Play ${launchSplashMood.toLowerCase()} intro`;
+    }
+
+    const autoplayEnabled = readLaunchAutoplayPreference();
+    updateLaunchAutoplayToggleLabel(autoplayEnabled);
+
+    window.setTimeout(() => {
+      hideLaunchSplash('Ready to reflect');
+    }, 9000);
+
+    window.addEventListener('load', () => {
+      hideLaunchSplash('Ready to reflect');
+    }, { once: true });
+
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        hideLaunchSplash('Ready to reflect');
+      }, 320);
+    });
+
+    if (launchSplashAudioToggle) {
+      launchSplashAudioToggle.addEventListener('click', async () => {
+        if (launchSplashAudioStop) {
+          launchSplashAudioStop();
+          launchSplashAudioStop = null;
+          launchSplashAudioToggle.setAttribute('aria-pressed', 'false');
+          launchSplashAudioToggle.textContent = `Play ${launchSplashMood.toLowerCase()} intro`;
+          return;
+        }
+
+        const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
+        if (!stopAudio) {
+          launchSplashAudioToggle.textContent = 'Audio unavailable on this device';
+          launchSplashAudioToggle.disabled = true;
+          return;
+        }
+
+        launchSplashAudioStop = stopAudio;
+        launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
+        launchSplashAudioToggle.textContent = 'Stop calm intro';
+      });
+    }
+
+    if (launchSplashAudioAutoplayToggle) {
+      launchSplashAudioAutoplayToggle.addEventListener('click', () => {
+        const next = !readLaunchAutoplayPreference();
+        writeLaunchAutoplayPreference(next);
+        updateLaunchAutoplayToggleLabel(next);
+
+        if (next && !launchSplashAudioStop && !hasHiddenLaunchSplash) {
+          const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
+          if (stopAudio) {
+            launchSplashAudioStop = stopAudio;
+            if (launchSplashAudioToggle) {
+              launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
+              launchSplashAudioToggle.textContent = 'Stop calm intro';
+            }
+          }
+        }
+      });
+    }
+
+    if (autoplayEnabled && !hasHiddenLaunchSplash) {
+      // Browsers may still block this attempt; if blocked we keep the manual play button.
+      window.setTimeout(() => {
+        if (launchSplashAudioStop || hasHiddenLaunchSplash) return;
+        const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
+        if (stopAudio) {
+          launchSplashAudioStop = stopAudio;
+          if (launchSplashAudioToggle) {
+            launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
+            launchSplashAudioToggle.textContent = 'Stop calm intro';
+          }
+        }
+      }, 60);
+    }
+  }
+
+  initLaunchSplash();
 
   // ─── API URL ────────────────────────────────────────────────
   const API_BASE = (typeof AskMirrorTalk !== 'undefined' ? (AskMirrorTalk.apiUrl || 'https://ask-mirror-talk-production.up.railway.app') : 'https://ask-mirror-talk-production.up.railway.app');
@@ -68,6 +459,8 @@
   const REFLECTION_CARD_URL_LABEL = 'mirrortalkpodcast.com/ask-mirror-talk';
   const DEBUG_NO_CACHE = new URLSearchParams(window.location.search).get('amt_nocache') === '1';
   const CAMPAIGN_SESSION_KEY = 'amt_campaign_context';
+  const REFERRAL_CTA_DISMISS_KEY = 'amt_referral_cta_dismiss_until';
+  const REFERRAL_CTA_SHOWN_SESSION_KEY = 'amt_referral_cta_shown';
   const RECENT_EXPLORE_THEMES_KEY = 'amt_recent_explore_themes';
   const RECENT_NIGHT_THEMES_KEY = 'amt_recent_night_themes';
   const WORKFLOW_SESSION_KEY = 'amt_active_workflow_step';
@@ -159,6 +552,53 @@
     return url.toString();
   }
 
+  function shouldShowReferralCta() {
+    try {
+      const dismissedUntil = parseInt(localStorage.getItem(REFERRAL_CTA_DISMISS_KEY) || '0', 10);
+      if (dismissedUntil && Date.now() < dismissedUntil) return false;
+    } catch (e) {}
+    return true;
+  }
+
+  function dismissReferralCta(days) {
+    const safeDays = Math.max(1, parseInt(days || '3', 10));
+    try {
+      const until = Date.now() + safeDays * 24 * 60 * 60 * 1000;
+      localStorage.setItem(REFERRAL_CTA_DISMISS_KEY, String(until));
+    } catch (e) {}
+  }
+
+  function markReferralCtaShownOncePerSession() {
+    try {
+      if (sessionStorage.getItem(REFERRAL_CTA_SHOWN_SESSION_KEY) === '1') return false;
+      sessionStorage.setItem(REFERRAL_CTA_SHOWN_SESSION_KEY, '1');
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function buildReferralInvitePayload(questionText, themeText) {
+    const safeQuestion = sanitizeCampaignValue(questionText || '', 120);
+    const safeTheme = sanitizeCampaignValue(themeText || '', 80);
+    const inviteUrl = buildTrackedPageUrl({
+      source: 'referral',
+      medium: 'in_app',
+      campaign: 'first_1000_growth',
+      ref: 'save_share_referral',
+      intent: 'friend_invite',
+      question: safeQuestion,
+      theme: safeTheme,
+      inviteReflection: true,
+    });
+    const questionCopy = safeQuestion || 'What is on your heart right now?';
+    return {
+      title: 'Ask Mirror Talk',
+      text: `Ask Mirror Talk helped me reflect on this question: "${questionCopy}". If this feels useful for you too, start here: ${inviteUrl}`,
+      url: inviteUrl,
+    };
+  }
+
   function emitProductEvent(name, metadata) {
     try {
       const merged = Object.assign({}, getCampaignMetadata(), metadata || {});
@@ -169,6 +609,194 @@
         }
       }));
     } catch (e) {}
+  }
+
+  function loadActivationChecklistState() {
+    const defaults = {
+      askedFirstQuestion: false,
+      usedGuidedEntry: false,
+      savedOrShared: false,
+      completedAt: 0,
+    };
+    try {
+      const raw = localStorage.getItem(ACTIVATION_CHECKLIST_KEY);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      return Object.assign({}, defaults, parsed || {});
+    } catch (e) {
+      return defaults;
+    }
+  }
+
+  function saveActivationChecklistState(nextState) {
+    try {
+      localStorage.setItem(ACTIVATION_CHECKLIST_KEY, JSON.stringify(nextState || {}));
+    } catch (e) {}
+  }
+
+  function countActivationChecklistCompleted(state) {
+    const s = state || loadActivationChecklistState();
+    let total = 0;
+    if (s.askedFirstQuestion) total += 1;
+    if (s.usedGuidedEntry) total += 1;
+    if (s.savedOrShared) total += 1;
+    return total;
+  }
+
+  function markActivationChecklistStep(step, metadata) {
+    const state = loadActivationChecklistState();
+    if (!Object.prototype.hasOwnProperty.call(state, step) || state[step]) return;
+
+    state[step] = true;
+    if (countActivationChecklistCompleted(state) >= 3 && !state.completedAt) {
+      state.completedAt = Date.now();
+    }
+    saveActivationChecklistState(state);
+
+    emitProductEvent('activation_step_completed', Object.assign({
+      step,
+      completed_count: countActivationChecklistCompleted(state),
+    }, metadata || {}));
+
+    renderActivationChecklist();
+  }
+
+  function getStarterJourneysByMood(mood) {
+    const key = normalizeMoodPreset(mood);
+    const journeys = {
+      Calm: [
+        { label: 'Ease anxiety', question: 'I feel anxious right now. What gentle step can help me feel steady again?' },
+        { label: 'Carry grief softly', question: 'I am carrying grief today. How can I move through it with honesty and peace?' },
+        { label: 'Release pressure', question: 'I feel pressure building up. How can I release it without shutting down?' },
+        { label: 'Night reset', question: 'Before I sleep, what should I release and what should I keep?' },
+      ],
+      Warm: [
+        { label: 'Build self-worth', question: 'How can I rebuild self-worth in a practical way this week?' },
+        { label: 'Heal a relationship', question: 'What is one honest way to improve a relationship that matters to me?' },
+        { label: 'Lead with compassion', question: 'How can I speak truth with compassion in a difficult conversation?' },
+        { label: 'Find belonging', question: 'Why do I feel alone lately, and how can I reconnect with people safely?' },
+      ],
+      Hopeful: [
+        { label: 'Find purpose', question: 'I need clarity about purpose. What should I focus on right now?' },
+        { label: 'Grow confidence', question: 'How can I grow confidence without pretending to be someone I am not?' },
+        { label: 'Take next step', question: 'What is one courageous next step I can take this week?' },
+        { label: 'Midday reset', question: 'In the middle of today, what would help me reset and move with intention?' },
+      ],
+    };
+    return journeys[key] || journeys.Calm;
+  }
+
+  function renderStarterJourneys() {
+    if (!starterJourneysContainer) return;
+    const mood = launchSplashMood || resolveLaunchMoodPreset();
+    const journeys = getStarterJourneysByMood(mood);
+    starterJourneysContainer.innerHTML = `
+      <p class="amt-starter-journeys-head">Quick start (${escapeHtml(String(mood).toLowerCase())} mode)</p>
+      <div class="amt-starter-journeys-list">
+        ${journeys.map(item => `<button type="button" class="amt-starter-journey-btn" data-q="${escapeHtml(item.question)}">${escapeHtml(item.label)}</button>`).join('')}
+      </div>
+    `;
+
+    starterJourneysContainer.querySelectorAll('.amt-starter-journey-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const q = btn.getAttribute('data-q') || '';
+        setQuestionOrigin('starter_journey', { mood });
+        markActivationChecklistStep('usedGuidedEntry', { source: 'starter_journey' });
+        submitQuestionFromPrompt(q);
+      });
+    });
+  }
+
+  function renderActivationChecklist() {
+    if (!activationChecklistContainer) return;
+    const state = loadActivationChecklistState();
+    const doneCount = countActivationChecklistCompleted(state);
+
+    if (doneCount >= 3) {
+      activationChecklistContainer.style.display = 'none';
+      activationChecklistContainer.innerHTML = '';
+      return;
+    }
+
+    const tasks = [
+      { key: 'askedFirstQuestion', label: 'Ask your first reflection question' },
+      { key: 'usedGuidedEntry', label: 'Use a guided entry (QOTD or quick start)' },
+      { key: 'savedOrShared', label: 'Save or share one reflection' },
+    ];
+
+    const nextAction = !state.askedFirstQuestion
+      ? 'ask'
+      : (!state.usedGuidedEntry ? 'guided' : 'share');
+
+    activationChecklistContainer.innerHTML = `
+      <div class="amt-activation-checklist-head">
+        <p class="amt-activation-checklist-title">Your first 3 wins</p>
+        <span class="amt-activation-checklist-progress">${doneCount}/3 done</span>
+      </div>
+      <ul class="amt-activation-checklist-list">
+        ${tasks.map(task => `
+          <li class="amt-activation-checklist-item${state[task.key] ? ' done' : ''}">
+            <span class="amt-activation-checklist-dot" aria-hidden="true"></span>
+            <span>${state[task.key] ? '<strong>Done:</strong> ' : ''}${escapeHtml(task.label)}</span>
+          </li>
+        `).join('')}
+      </ul>
+      <div class="amt-activation-checklist-actions">
+        ${nextAction === 'ask' ? '<button type="button" class="amt-activation-checklist-btn" data-action="focus-ask">Start with your first question</button>' : ''}
+        ${nextAction === 'guided' ? '<button type="button" class="amt-activation-checklist-btn" data-action="try-guided">Try a guided quick start</button>' : ''}
+        ${nextAction === 'share' ? '<button type="button" class="amt-activation-checklist-btn" data-action="open-share">Open Save & Share</button>' : ''}
+      </div>
+    `;
+
+    activationChecklistContainer.style.display = '';
+
+    activationChecklistContainer.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.getAttribute('data-action');
+        if (action === 'focus-ask') {
+          runWorkflowAction('ask', { persist: true, scroll: true });
+          if (input) input.focus();
+          return;
+        }
+        if (action === 'try-guided') {
+          const firstStarter = starterJourneysContainer?.querySelector('.amt-starter-journey-btn');
+          if (firstStarter) {
+            firstStarter.click();
+            return;
+          }
+        }
+        if (action === 'open-share') {
+          runWorkflowAction('save_share', { persist: true, scroll: true });
+        }
+      });
+    });
+  }
+
+  function initActivationExperience() {
+    renderStarterJourneys();
+    renderActivationChecklist();
+
+    window.addEventListener('amt:product-event', (event) => {
+      const detail = event && event.detail ? event.detail : {};
+      const name = detail.eventName || '';
+      const metadata = detail.metadata || {};
+      if (!name || name === 'activation_step_completed') return;
+
+      if (name === 'question_submitted') {
+        markActivationChecklistStep('askedFirstQuestion', { source: 'submit' });
+      }
+
+      if (name === 'question_origin_selected') {
+        const origin = String((metadata && metadata.origin) || '').toLowerCase();
+        if (['qotd', 'starter_journey', 'topic_starter', 'question_coach', 'suggested_question', 'continue_reflection'].includes(origin)) {
+          markActivationChecklistStep('usedGuidedEntry', { source: origin });
+        }
+      }
+
+      if (name === 'share_cta_used' || name === 'reflection_note_saved') {
+        markActivationChecklistStep('savedOrShared', { source: name });
+      }
+    });
   }
 
   function setQuestionOrigin(origin, metadata) {
@@ -865,6 +1493,7 @@
   }
 
   loadQuestionOfTheDay();
+  initActivationExperience();
 
   // ─── Suggested Questions ────────────────────────────────────
   function loadSuggestedQuestions() {
@@ -1842,8 +2471,13 @@
 
           if (event.type === 'headline') {
             // Store the shareable headline for use in card generation
-            window._amtLastShareableHeadline = event.text || '';
-            console.log('[SSE] Received shareable_headline:', event.text);
+            const rawHeadline = event.text || '';
+            const sanitizedHeadline = ensureReflectionSentence(rawHeadline);
+            window._amtLastShareableHeadline = sanitizedHeadline || '';
+            console.log('[SSE] Received shareable_headline:', rawHeadline);
+            if (!sanitizedHeadline && rawHeadline) {
+              console.log('[SSE] Rejected weak headline candidate for share card');
+            }
           }
 
           if (event.type === 'done') {
@@ -3222,6 +3856,31 @@
     const lastExcerpt = lastSession
       ? ensureReflectionSentence(lastSession.excerpt || extractInsightExcerpt(lastSession.answer || '', lastTheme) || '')
       : '';
+    const referralEligible = shouldShowReferralCta() && (hasCurrentAnswer || (lastSession && lastQuestion));
+
+    const referralQuestion = hasCurrentAnswer
+      ? String((input && input.value) || lastQuestion || '').trim()
+      : lastQuestion;
+    const referralTheme = hasCurrentAnswer
+      ? (window._amtLastTheme || inferTheme(referralQuestion, answerText) || 'Reflection')
+      : lastTheme;
+
+    const referralBlock = referralEligible ? `
+      <div class="amt-referral-cta">
+        <p class="amt-referral-cta-text">Invite one person who asked for support, not a mass blast.</p>
+        <div class="amt-referral-cta-actions">
+          <button type="button" class="amt-save-share-hub-btn" data-save-share-action="referral_share">Invite one friend</button>
+          <button type="button" class="amt-save-share-hub-btn amt-save-share-hub-btn-secondary" data-save-share-action="referral_dismiss">Not now</button>
+        </div>
+      </div>
+    ` : '';
+
+    if (referralEligible && markReferralCtaShownOncePerSession()) {
+      emitProductEvent('referral_cta_shown', {
+        context: hasCurrentAnswer ? 'current_answer' : 'last_session',
+        theme: referralTheme || null,
+      });
+    }
 
     if (hasCurrentAnswer) {
       const currentQuestion = input ? (input.value || 'your reflection') : 'your reflection';
@@ -3232,12 +3891,10 @@
           <span class="amt-save-share-kicker">This reflection is ready to keep.</span>
           <h3>Choose what should happen next.</h3>
           <p>Write a private note, save the insight, email it to yourself, or pass on a card when the line is complete enough to share.</p>
+          ${referralBlock}
         </div>
       `;
-      return;
-    }
-
-    if (lastSession && lastQuestion) {
+    } else if (lastSession && lastQuestion) {
       saveShareHub.innerHTML = `
         <div class="amt-save-share-hub-card">
           <span class="amt-save-share-kicker">${escapeHtml(lastTheme || 'Last reflection')}</span>
@@ -3248,6 +3905,7 @@
             <button type="button" class="amt-save-share-hub-btn" data-save-share-action="revisit">Revisit this reflection</button>
             <button type="button" class="amt-save-share-hub-btn amt-save-share-hub-btn-secondary" data-save-share-action="insights">Open saved insights</button>
           </div>
+          ${referralBlock}
         </div>
       `;
     } else {
@@ -3265,7 +3923,7 @@
     }
 
     saveShareHub.querySelectorAll('[data-save-share-action]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const action = btn.dataset.saveShareAction;
         if (action === 'revisit' && lastQuestion) {
           setQuestionOrigin('saved_reflection_revisit', { theme: lastTheme || null });
@@ -3274,6 +3932,44 @@
         }
         if (action === 'insights') {
           renderInsightsPanel();
+          return;
+        }
+        if (action === 'referral_dismiss') {
+          dismissReferralCta(3);
+          emitProductEvent('referral_cta_dismissed', {
+            context: hasCurrentAnswer ? 'current_answer' : 'last_session',
+          });
+          renderSaveShareHub();
+          return;
+        }
+        if (action === 'referral_share') {
+          const payload = buildReferralInvitePayload(referralQuestion, referralTheme);
+          emitProductEvent('referral_cta_used', {
+            context: hasCurrentAnswer ? 'current_answer' : 'last_session',
+            guardrail: 'single_friend_only',
+            theme: referralTheme || null,
+          });
+
+          try {
+            if (navigator.share) {
+              await navigator.share({ title: payload.title, text: payload.text, url: payload.url });
+              emitProductEvent('share_cta_used', { action: 'invite_friend_save_share', method: 'native_share' });
+              return;
+            }
+          } catch (e) {
+            if (e.name !== 'AbortError') warn('Referral share failed:', e);
+          }
+
+          try {
+            await navigator.clipboard.writeText(payload.text);
+            emitProductEvent('share_cta_used', { action: 'invite_friend_save_share', method: 'copy_link' });
+            const originalText = btn.textContent;
+            btn.textContent = 'Invite link copied';
+            setTimeout(() => { btn.textContent = originalText; }, 2200);
+            return;
+          } catch (e) {
+            warn('Referral copy failed:', e);
+          }
           return;
         }
         runWorkflowAction('ask', { persist: true, scroll: true });
@@ -3481,6 +4177,21 @@
       ? 'Use these source moments for listening or refining the question. Reflection cards are held back until the answer is complete enough to share.'
       : meta.contextDetail;
     const supportPill = fallbackAnswer ? 'Refine before sharing' : meta.supportPill;
+    const sourceCount = Array.isArray(citationsList) ? citationsList.length : 0;
+    const trustSummary = fallbackAnswer
+      ? 'Source moments only'
+      : (sourceCount > 0 ? `${sourceCount} source moment${sourceCount === 1 ? '' : 's'}` : 'Light source grounding');
+    const trustDetails = fallbackAnswer
+      ? [
+          'The app found related source moments, but full premium reflection generation did not complete.',
+          sourceCount > 0 ? `There are ${sourceCount} source moment${sourceCount === 1 ? '' : 's'} available below.` : 'No direct source moment was detected for this question yet.',
+          'Refining the question usually restores a complete reflection answer.',
+        ]
+      : [
+          sourceCount > 0 ? `Grounded in ${sourceCount} source moment${sourceCount === 1 ? '' : 's'}.` : 'Grounding is lighter than usual right now.',
+          `Support level: ${meta.level}.`,
+          'Theme and next-step guidance are inferred from your question and response language.',
+        ];
 
     answerContext.innerHTML = `
       <div class="amt-answer-context-copy${lowMatch ? ' amt-answer-context-copy-soft' : ''}">
@@ -3488,11 +4199,36 @@
         <p class="amt-answer-context-summary">${escapeHtml(contextSummary)}</p>
         <p class="amt-answer-context-detail">${escapeHtml(contextDetail)}</p>
       </div>
+      <button type="button" class="amt-answer-trust-toggle" aria-expanded="false">Why this answer? ${escapeHtml(trustSummary)}</button>
+      <div class="amt-answer-trust-capsule" style="display:none;" aria-hidden="true">
+        <ul>
+          ${trustDetails.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+        </ul>
+      </div>
       <div class="amt-answer-context-pills">
         ${theme ? `<span class="amt-answer-pill">${escapeHtml(theme)}</span>` : ''}
         <span class="amt-answer-pill">${escapeHtml(supportPill)}</span>
       </div>
     `;
+
+    const trustToggle = answerContext.querySelector('.amt-answer-trust-toggle');
+    const trustCapsule = answerContext.querySelector('.amt-answer-trust-capsule');
+    if (trustToggle && trustCapsule) {
+      trustToggle.addEventListener('click', () => {
+        const isExpanded = trustToggle.getAttribute('aria-expanded') === 'true';
+        trustToggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+        trustCapsule.style.display = isExpanded ? 'none' : '';
+        trustCapsule.setAttribute('aria-hidden', isExpanded ? 'true' : 'false');
+        if (!isExpanded) {
+          emitProductEvent('trust_capsule_opened', {
+            fallback_mode: fallbackAnswer,
+            source_count: sourceCount,
+            support_level: meta.level,
+          });
+        }
+      });
+    }
+
     answerContext.style.display = '';
   }
 

@@ -78,6 +78,15 @@ def create_chat_completion(
         # If SDK rejects max_completion_tokens, retry with max_tokens
         if "max_completion_tokens" in error_msg and "unexpected keyword" in error_msg.lower():
             if "max_completion_tokens" in payload:
+                if is_reasoning_chat_model(model):
+                    # Do not downgrade reasoning/newer models to max_tokens; the API
+                    # rejects that parameter and this would mask the real SDK mismatch.
+                    logger.warning(
+                        "OpenAI SDK rejected max_completion_tokens for model %s; "
+                        "upgrade the OpenAI SDK to support this model family.",
+                        model,
+                    )
+                    raise
                 legacy_payload = dict(payload)
                 legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
                 return client.chat.completions.create(**legacy_payload)

@@ -254,6 +254,33 @@ class TestShareableHeadlineGeneration:
             assert result == valid_headline
             assert mock_gen.called
 
+    def test_public_wrapper_guarantees_inspirational_fallback_when_empty(self):
+        """Wrapper should always return a complete sentence even if model output is unusable."""
+        with patch('app.qa.answer._generate_shareable_headline', return_value=""):
+            result = generate_shareable_headline(
+                "I feel anxious and overwhelmed today",
+                "",
+                [],
+            )
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+        assert result.endswith(".")
+        assert 6 <= len(result.split()) <= 26
+
+    def test_public_wrapper_replaces_question_with_inspirational_fallback(self):
+        """Question-form model output should be rejected and replaced with deterministic fallback."""
+        with patch('app.qa.answer._generate_shareable_headline', return_value="How can I fix this quickly?"):
+            result = generate_shareable_headline(
+                "How do I find peace when I am anxious?",
+                "",
+                [],
+            )
+
+        assert result.endswith(".")
+        assert not result.endswith("?")
+        assert 6 <= len(result.split()) <= 26
+
 
 class TestHeadlineQualityCriteria:
     """Test that generated headlines meet quality standards."""

@@ -59,25 +59,28 @@ def test_gpt5_chat_completion_uses_new_token_param_and_omits_legacy_sampling():
     assert "frequency_penalty" not in payload
 
 
-def test_gpt5_chat_completion_falls_back_to_max_tokens_for_old_sdk():
-    """GPT-5 models prefer max_completion_tokens, but fall back to max_tokens for old SDKs."""
+def test_gpt5_chat_completion_does_not_downgrade_to_max_tokens_for_old_sdk():
+    """GPT-5 models should not be downgraded to max_tokens on old SDKs.
+
+    The API rejects max_tokens for GPT-5/o-series, so we surface the SDK mismatch
+    and let callers use model fallback chains.
+    """
     client = _LegacyClient()
 
-    result = create_chat_completion(
-        client,
-        model="gpt-5-mini",
-        messages=[{"role": "user", "content": "hello"}],
-        max_tokens=123,
-    )
-    
-    # Should have tried twice: first with max_completion_tokens (fails), then max_tokens (succeeds)
-    assert len(client.chat.completions.payloads) == 2
+    try:
+        create_chat_completion(
+            client,
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=123,
+        )
+        assert False, "Expected TypeError for unsupported max_completion_tokens in old SDK"
+    except TypeError as exc:
+        assert "max_completion_tokens" in str(exc)
+
+    # Should only try once (max_completion_tokens) and fail fast.
+    assert len(client.chat.completions.payloads) == 1
     assert client.chat.completions.payloads[0]["max_completion_tokens"] == 123
-    assert client.chat.completions.payloads[1]["max_tokens"] == 123
-    
-    # The successful result should have max_tokens
-    assert result["max_tokens"] == 123
-    assert "max_completion_tokens" not in result
 
 
 def test_legacy_chat_completion_keeps_legacy_sampling_params():
@@ -139,16 +142,15 @@ def test_legacy_models_use_max_tokens_directly():
 
 def test_answer_model_candidates_alias_invalid_recommendations_and_keep_stable_fallbacks():
     # These models don't have aliases, so they're returned as-is with fallbacks
-    assert _answer_model_candidates("gpt-5.5") == ["gpt-5.5", "gpt-4-turbo", "gpt-4o", "gpt-4"]
-    assert _answer_model_candidates("gpt-5.4-mini") == ["gpt-5.4-mini", "gpt-4-turbo", "gpt-4o", "gpt-4"]
+    assert _answer_model_candidates("gpt-5.5") == ["gpt-5.5", "gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4"]
+    assert _answer_model_candidates("gpt-5.4-mini") == ["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4"]
     # Test aliasing works for known models
-    assert _answer_model_candidates("gpt-4.1") == ["gpt-4-turbo", "gpt-4o", "gpt-4"]
-    assert _answer_model_candidates("gpt-4.1-mini") == ["gpt-4o-mini", "gpt-4-turbo", "gpt-4o", "gpt-4"]
+    assert _answer_model_candidates("gpt-4.1") == ["gpt-4-turbo", "gpt-4o-mini", "gpt-4o", "gpt-4"]
+    assert _answer_model_candidates("gpt-4.1-mini") == ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4"]
 
 
 class _BadRequestError(Exception):
     """Mock BadRequestError from OpenAI API."""
-    pass
 
 
 class _APIErrorCompletions:

@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v5.6.4
+ * Analytics Add-on for Ask Mirror Talk Widget v5.8.7
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -15,13 +15,42 @@
     let currentQALogId = null;
     let productEventTrackingEnabled = true;
     let productEventEndpointMissing = false;
+    const recentProductEventSignatures = new Map();
+    const PRODUCT_EVENT_SANITY = {
+        enabled: true,
+        defaultSampleRate: 1,
+        defaultDedupeWindowMs: 0,
+        // Keep launch analytics clean for high-frequency UI taps.
+        policies: {
+            trust_capsule_opened: {
+                sampleRate: 1,
+                dedupeWindowMs: 120000,
+                dedupeFields: ['fallback_mode', 'support_level']
+            },
+            referral_cta_shown: {
+                sampleRate: 1,
+                dedupeWindowMs: 180000,
+                dedupeFields: ['context', 'theme']
+            },
+            referral_cta_used: {
+                sampleRate: 1,
+                dedupeWindowMs: 0,
+                dedupeFields: ['context', 'guardrail']
+            },
+            referral_cta_dismissed: {
+                sampleRate: 1,
+                dedupeWindowMs: 60000,
+                dedupeFields: ['context']
+            }
+        }
+    };
     
     // Store original fetch at module scope so trackCitationClick and submitFeedback can use it
     const originalFetch = window.fetch.bind(window);
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.8.5 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v5.8.7 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -148,6 +177,64 @@
             trackProductEvent(eventName, detail.metadata || {});
         });
     }
+
+    function getEventPolicy(eventName) {
+        if (!PRODUCT_EVENT_SANITY.enabled) return null;
+        const specific = PRODUCT_EVENT_SANITY.policies[eventName] || {};
+        return {
+            sampleRate: typeof specific.sampleRate === 'number' ? specific.sampleRate : PRODUCT_EVENT_SANITY.defaultSampleRate,
+            dedupeWindowMs: typeof specific.dedupeWindowMs === 'number' ? specific.dedupeWindowMs : PRODUCT_EVENT_SANITY.defaultDedupeWindowMs,
+            dedupeFields: Array.isArray(specific.dedupeFields) ? specific.dedupeFields : []
+        };
+    }
+
+    function buildEventSignature(eventName, metadata, dedupeFields) {
+        const fields = Array.isArray(dedupeFields) ? dedupeFields : [];
+        if (!fields.length) return '';
+        const parts = fields.map((field) => {
+            const value = metadata && Object.prototype.hasOwnProperty.call(metadata, field) ? metadata[field] : '';
+            return `${field}:${String(value || '')}`;
+        });
+        return `${eventName}|${parts.join('|')}`;
+    }
+
+    function pruneRecentEventSignatures(nowMs) {
+        const horizon = nowMs - 15 * 60 * 1000;
+        for (const [signature, ts] of recentProductEventSignatures.entries()) {
+            if (ts < horizon) {
+                recentProductEventSignatures.delete(signature);
+            }
+        }
+    }
+
+    function shouldTrackProductEvent(eventName, metadata) {
+        const policy = getEventPolicy(eventName);
+        if (!policy) return true;
+
+        const sampleRate = Math.max(0, Math.min(1, policy.sampleRate));
+        if (sampleRate < 1 && Math.random() > sampleRate) {
+            return false;
+        }
+
+        if (!policy.dedupeWindowMs) {
+            return true;
+        }
+
+        const nowMs = Date.now();
+        pruneRecentEventSignatures(nowMs);
+        const signature = buildEventSignature(eventName, metadata, policy.dedupeFields);
+        if (!signature) {
+            return true;
+        }
+
+        const lastSeenMs = recentProductEventSignatures.get(signature) || 0;
+        if (lastSeenMs && nowMs - lastSeenMs < policy.dedupeWindowMs) {
+            return false;
+        }
+
+        recentProductEventSignatures.set(signature, nowMs);
+        return true;
+    }
     
     /**
      * Add click tracking to all citation links
@@ -214,6 +301,10 @@
 
     async function trackProductEvent(eventName, metadata = {}) {
         if (!productEventTrackingEnabled) {
+            return;
+        }
+
+        if (!shouldTrackProductEvent(eventName, metadata)) {
             return;
         }
 

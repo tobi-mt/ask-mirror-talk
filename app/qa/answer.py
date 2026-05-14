@@ -5,7 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_ANSWER_MODEL_FALLBACKS = ("gpt-4-turbo", "gpt-4o", "gpt-4")
+_ANSWER_MODEL_FALLBACKS = ("gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4")
 _MODEL_ALIASES = {
     "gpt-4.1": "gpt-4-turbo",
     "gpt-4.1-mini": "gpt-4o-mini",
@@ -450,72 +450,76 @@ def _generate_follow_up_questions(question: str, answer: str, chunks: list[dict]
                 c["episode"]["title"] for c in chunks if c.get("episode")
             ))[:4]
             episodes_str = ", ".join(f'"{t}"' for t in episode_titles)
-
-            response = create_chat_completion(
-                client,
-                model=settings.answer_followup_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "Generate exactly 3 short, natural follow-up questions a listener might ask "
-                            "after hearing this answer from the Mirror Talk podcast Q&A. "
-                            "Questions should be curious, personal-growth oriented, and conversational. "
-                            "Return ONLY a JSON array of 3 strings."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Original question: {question}\n"
-                            f"Answer excerpt: {answer[:400]}\n"
-                            f"Episodes referenced: {episodes_str}"
-                        ),
-                    },
-                ],
-                temperature=0.9,
-                max_tokens=200,
-            )
-
             import json
-            message = response.choices[0].message
-            
-            # Check for refusal (GPT-5 models may refuse)
-            if hasattr(message, 'refusal') and message.refusal:
-                logger.warning("Follow-up generation refused by model: %s", message.refusal)
-                return []
-            
-            # Check if content is None or empty
-            raw = message.content
-            if not raw:
-                logger.warning("Follow-up generation returned empty content")
-                return []
-            
-            raw = raw.strip()
-            logger.info("Follow-up raw response: %s", raw[:300])
-            
-            # Strip markdown code fences if present (```json ... ```)
-            cleaned = raw
-            if cleaned.startswith("```"):
-                cleaned = cleaned.split("\n", 1)[-1]  # remove first line
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                cleaned = cleaned.strip()
-            
-            # Parse JSON array
-            questions = json.loads(cleaned)
-            if isinstance(questions, list) and len(questions) > 0:
-                # Coerce all items to complete, user-facing questions.
-                str_questions = [
-                    cleaned
-                    for q in questions
-                    if (cleaned := _polish_follow_up_question(str(q)))
-                ]
-                if str_questions:
-                    logger.info("Generated %d OpenAI follow-up questions", len(str_questions))
-                    return str_questions[:3]
-            
-            logger.warning("Follow-up parsed but unexpected format: %s", type(questions))
+            for model in _answer_model_candidates(settings.answer_followup_model):
+                try:
+                    response = create_chat_completion(
+                        client,
+                        model=model,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "Generate exactly 3 short, natural follow-up questions a listener might ask "
+                                    "after hearing this answer from the Mirror Talk podcast Q&A. "
+                                    "Questions should be curious, personal-growth oriented, and conversational. "
+                                    "Return ONLY a JSON array of 3 strings."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Original question: {question}\n"
+                                    f"Answer excerpt: {answer[:400]}\n"
+                                    f"Episodes referenced: {episodes_str}"
+                                ),
+                            },
+                        ],
+                        temperature=0.9,
+                        max_tokens=200,
+                    )
+
+                    message = response.choices[0].message
+                    if hasattr(message, 'refusal') and message.refusal:
+                        logger.warning("Follow-up generation model %s refused: %s", model, message.refusal)
+                        continue
+
+                    raw = message.content
+                    if not raw:
+                        logger.warning("Follow-up generation model %s returned empty content", model)
+                        continue
+
+                    raw = raw.strip()
+                    logger.info("Follow-up raw response (%s): %s", model, raw[:300])
+
+                    # Strip markdown code fences if present (```json ... ```)
+                    cleaned = raw
+                    if cleaned.startswith("```"):
+                        cleaned = cleaned.split("\n", 1)[-1]
+                        if cleaned.endswith("```"):
+                            cleaned = cleaned[:-3]
+                        cleaned = cleaned.strip()
+
+                    questions = json.loads(cleaned)
+                    if isinstance(questions, list) and len(questions) > 0:
+                        # Coerce all items to complete, user-facing questions.
+                        str_questions = [
+                            polished
+                            for q in questions
+                            if (polished := _polish_follow_up_question(str(q)))
+                        ]
+                        if str_questions:
+                            if model != settings.answer_followup_model:
+                                logger.warning(
+                                    "Follow-up generation used fallback model %s after primary model issue",
+                                    model,
+                                )
+                            logger.info("Generated %d OpenAI follow-up questions", len(str_questions))
+                            return str_questions[:3]
+
+                    logger.warning("Follow-up parsed but unexpected format from model %s: %s", model, type(questions))
+                except Exception as model_exc:
+                    logger.warning("Follow-up generation model %s failed: %s", model, model_exc)
         except Exception as e:
             logger.warning("Follow-up generation failed: %s", e, exc_info=True)
 
@@ -641,6 +645,21 @@ def sanitize_shareable_headline(headline: str, answer: str = "") -> str:
     cleaned = headline.strip().strip('"').strip("'").strip()
     if not cleaned:
         return ""
+
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(
+        r"^(?:for\s+instance|for\s+example|for\s+one|for\s+me)\s*,\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(
+        r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+",
+        "",
+        cleaned,
+    ).strip()
+    if cleaned:
+        cleaned = cleaned[0].upper() + cleaned[1:]
     
     lower = cleaned.lower()
     
@@ -696,8 +715,33 @@ def generate_shareable_headline(question: str, answer: str, chunks: list[dict]) 
     through compose_answer and can do so in parallel with other work.
     """
     headline = _generate_shareable_headline(question, answer, chunks)
-    # Always sanitize before returning
-    return sanitize_shareable_headline(headline, answer)
+    # Always sanitize before returning. If still empty, guarantee a complete,
+    # inspirational fallback sentence so reflection cards remain share-ready.
+    sanitized = sanitize_shareable_headline(headline, answer)
+    if sanitized:
+        return sanitized
+    return _build_inspirational_headline(question, answer)
+
+
+def _build_inspirational_headline(question: str, answer: str) -> str:
+    """Return a deterministic, complete fallback headline when extraction fails."""
+    theme = _infer_follow_up_theme(f"{question} {answer}")
+    lines = {
+        "relationships": "Protect what is true between you, and let honesty keep the connection steady.",
+        "healing": "Healing becomes possible when you honor what hurts and still choose a gentler next step.",
+        "courage": "Courage grows when you take the next honest step before you feel completely ready.",
+        "purpose": "Purpose becomes clearer when you follow what keeps calling you forward with integrity.",
+        "habits": "Lasting change begins with one small choice you can repeat with compassion and consistency.",
+        "faith": "Faith deepens when you stay open to truth, even while your questions are still unfolding.",
+        "peace": "Peace returns when you release the noise and listen for what is still true within you.",
+        "leadership": "Leadership is strongest when clarity and humility guide the way you care for people.",
+        "reflection": "Carry forward the truth that your next honest step can reshape this entire season.",
+    }
+    fallback = lines.get(theme, lines["reflection"])
+    # Keep within headline quality bounds used by the card pipeline.
+    if len(fallback.split()) < 6:
+        fallback = "Carry forward the truth that your next honest step can reshape this entire season."
+    return fallback
 
 
 def _generate_shareable_headline(question: str, answer: str, chunks: list[dict]) -> str:
@@ -730,94 +774,72 @@ def _generate_shareable_headline(question: str, answer: str, chunks: list[dict])
                 if citation_text:
                     citation_excerpt = f'From "{episode_title}": {citation_text}'
 
-            response = create_chat_completion(
-                client,
-                model=settings.answer_followup_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You create shareable reflection card headlines for Mirror Talk podcast wisdom. "
-                            "Write ONE complete, insightful sentence that:\n"
-                            "- Captures a SPECIFIC insight from the episode wisdom (not generic advice)\n"
-                            "- Is grounded in what was actually said (reference concrete ideas)\n"
-                            "- Is memorable and deep (not surface-level or vague)\n"
-                            "- Is 8-22 words (50-140 characters)\n"
-                            "- Is a complete, standalone sentence (not a fragment)\n"
-                            "- Does NOT start with: But, And, Or, So, Because, If, When, Where, What, How, Why\n"
-                            "- Is NOT a question (no ? at end)\n"
-                            "- Sounds natural, not scripted or forced\n"
-                            "- Avoids phrases like 'this reflection,' 'the key is,' 'remember to'\n\n"
-                            "Good examples:\n"
-                            "- \"What you have in this relationship right now is already worth protecting.\"\n"
-                            "- \"Grief asks for space, not solutions—permission to feel whatever comes.\"\n\n"
-                            "Bad examples:\n"
-                            "- \"But where do I feel even the tiniest spark of quiet joy?\" (fragment + question)\n"
-                            "- \"Return to the kind of connection you want to build.\" (vague)\n\n"
-                            "Return ONLY the headline text, nothing else."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Question: {question}\n\n"
-                            f"Answer excerpt: {answer[:500]}\n\n"
-                            f"{citation_excerpt}\n\n"
-                            "Write the shareable headline:"
-                        ),
-                    },
-                ],
-                temperature=0.8,
-                max_tokens=80,
-            )
+            for model in _answer_model_candidates(settings.answer_followup_model):
+                try:
+                    response = create_chat_completion(
+                        client,
+                        model=model,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You create shareable reflection card headlines for Mirror Talk podcast wisdom. "
+                                    "Write ONE complete, insightful sentence that:\n"
+                                    "- Captures a SPECIFIC insight from the episode wisdom (not generic advice)\n"
+                                    "- Is grounded in what was actually said (reference concrete ideas)\n"
+                                    "- Is memorable and deep (not surface-level or vague)\n"
+                                    "- Is 8-22 words (50-140 characters)\n"
+                                    "- Is a complete, standalone sentence (not a fragment)\n"
+                                    "- Does NOT start with: But, And, Or, So, Because, If, When, Where, What, How, Why\n"
+                                    "- Is NOT a question (no ? at end)\n"
+                                    "- Sounds natural, not scripted or forced\n"
+                                    "- Avoids phrases like 'this reflection,' 'the key is,' 'remember to'\n\n"
+                                    "Good examples:\n"
+                                    "- \"What you have in this relationship right now is already worth protecting.\"\n"
+                                    "- \"Grief asks for space, not solutions—permission to feel whatever comes.\"\n\n"
+                                    "Bad examples:\n"
+                                    "- \"But where do I feel even the tiniest spark of quiet joy?\" (fragment + question)\n"
+                                    "- \"Return to the kind of connection you want to build.\" (vague)\n\n"
+                                    "Return ONLY the headline text, nothing else."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Question: {question}\n\n"
+                                    f"Answer excerpt: {answer[:500]}\n\n"
+                                    f"{citation_excerpt}\n\n"
+                                    "Write the shareable headline:"
+                                ),
+                            },
+                        ],
+                        temperature=0.8,
+                        max_tokens=80,
+                    )
 
-            message = response.choices[0].message
-            
-            # Check for refusal
-            if hasattr(message, 'refusal') and message.refusal:
-                logger.warning("Headline generation refused by model: %s", message.refusal)
-                return _extract_best_sentence_headline(answer)
-            
-            # Check if content is None or empty
-            raw = message.content
-            if not raw:
-                logger.warning("Headline generation returned empty content")
-                return _extract_best_sentence_headline(answer)
-            
-            headline = raw.strip().strip('"').strip()
-            
-            # Validate the headline meets quality criteria
-            words = headline.split()
-            lower = headline.lower()
-            
-            # Check for sentence fragments (starting with coordinating conjunctions)
-            is_fragment = any(
-                lower.startswith(frag) for frag in ("but ", "and ", "or ", "so ", "because ", "if ", "when ")
-            )
-            
-            # Check if it's actually a question
-            # Allow declarative sentences like "What you have..." but reject "What is..." questions
-            is_actual_question = (
-                headline.endswith("?") 
-                or lower.startswith(("how do", "how can", "how should", "how would"))
-                or lower.startswith(("what is", "what are", "what should", "what would", "what can"))
-                or lower.startswith(("why ", "when should", "when do", "when can"))
-                or lower.startswith(("where ", "who ", "which ", "whose "))
-            )
-            
-            if (
-                len(headline) >= 40
-                and len(headline) <= 180
-                and len(words) >= 6
-                and len(words) <= 26
-                and not is_actual_question
-                and not is_fragment
-                and headline[-1] in ".!?"
-            ):
-                logger.info("Generated shareable headline: %s", headline[:100])
-                return headline
-            
-            logger.warning("Generated headline did not meet quality criteria, using fallback: %s", headline)
+                    message = response.choices[0].message
+                    if hasattr(message, 'refusal') and message.refusal:
+                        logger.warning("Headline generation model %s refused: %s", model, message.refusal)
+                        continue
+
+                    raw = message.content
+                    if not raw:
+                        logger.warning("Headline generation model %s returned empty content", model)
+                        continue
+
+                    headline = sanitize_shareable_headline(raw, answer)
+                    if headline:
+                        if model != settings.answer_followup_model:
+                            logger.warning(
+                                "Headline generation used fallback model %s after primary model issue",
+                                model,
+                            )
+                        logger.info("Generated shareable headline: %s", headline[:100])
+                        return headline
+
+                    logger.warning("Generated headline did not meet quality criteria from model %s", model)
+                except Exception as model_exc:
+                    logger.warning("Headline generation model %s failed: %s", model, model_exc)
         except Exception as e:
             logger.warning("Headline generation failed: %s", e, exc_info=True)
 
@@ -840,6 +862,18 @@ def _extract_best_sentence_headline(answer: str) -> str:
         cleaned = sentence.strip().strip('"').strip("'").strip()
         if not cleaned:
             continue
+
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        cleaned = re.sub(r"^(?:for\s+instance|for\s+example)\s*,\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+",
+            "",
+            cleaned,
+        ).strip()
+        if cleaned:
+            cleaned = cleaned[0].upper() + cleaned[1:]
+        if not cleaned:
+            continue
             
         score = 0
         lower = cleaned.lower()
@@ -853,7 +887,7 @@ def _extract_best_sentence_headline(answer: str) -> str:
             score += 2
         
         # Strongly penalize sentences that start with weak phrases or fragments
-        if any(lower.startswith(phrase) for phrase in ["this reflection", "this is", "there is", "there are", "it is", "it can", "sometimes", "often", "but ", "and ", "or ", "so ", "because ", "if "]):
+        if any(lower.startswith(phrase) for phrase in ["this reflection", "this is", "there is", "there are", "it is", "it can", "sometimes", "often", "but ", "and ", "or ", "so ", "because ", "if ", "for instance", "for example", "for one"]):
             score -= 10
         
         # Strongly penalize questions (both those ending with ? and those starting with question words)

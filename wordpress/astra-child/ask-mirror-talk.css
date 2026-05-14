@@ -32,6 +32,155 @@ body {
   box-sizing: border-box;
 }
 
+.amt-launch-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(212, 168, 87, 0.22), transparent 42%),
+    radial-gradient(circle at 86% 20%, rgba(139, 115, 85, 0.24), transparent 48%),
+    linear-gradient(160deg, #f8f4ee 0%, #f1ece4 42%, #ebe2d8 100%);
+  backdrop-filter: blur(3px);
+  transition: opacity 0.45s ease, visibility 0.45s ease, transform 0.45s ease;
+}
+
+.amt-launch-splash.amt-launch-splash-exit {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
+.amt-launch-splash-inner {
+  width: min(100%, 420px);
+  padding: 22px 20px;
+  border: 1px solid rgba(139, 115, 85, 0.26);
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.9);
+  box-shadow: 0 16px 36px rgba(46, 42, 36, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  text-align: center;
+}
+
+.amt-launch-mark {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 7px;
+  height: 22px;
+  margin-bottom: 12px;
+}
+
+.amt-launch-mark span {
+  width: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #a6845f 0%, #4b3f33 100%);
+  animation: amtLaunchPulse 1.2s ease-in-out infinite;
+}
+
+.amt-launch-mark span:nth-child(1) {
+  height: 10px;
+  animation-delay: 0s;
+}
+
+.amt-launch-mark span:nth-child(2) {
+  height: 18px;
+  animation-delay: 0.16s;
+}
+
+.amt-launch-mark span:nth-child(3) {
+  height: 13px;
+  animation-delay: 0.32s;
+}
+
+.amt-launch-eyebrow {
+  margin: 0 0 8px;
+  color: #7d664b;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-launch-splash h3 {
+  margin: 0;
+  color: #2e2a24;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.amt-launch-status {
+  margin: 10px 0 0;
+  color: #6b665d;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-launch-actions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.amt-launch-audio-toggle {
+  border: 1px solid #cab79c;
+  background: rgba(255, 255, 255, 0.94);
+  color: #4b3f33;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.amt-launch-audio-toggle:hover,
+.amt-launch-audio-toggle:focus-visible {
+  outline: none;
+  border-color: #8b7355;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(75, 63, 51, 0.16);
+}
+
+.amt-launch-audio-toggle[aria-pressed="true"] {
+  border-color: #806747;
+  background: linear-gradient(135deg, #f9f2e8, #efe3d2);
+}
+
+.amt-launch-audio-toggle-secondary {
+  border-color: #d8cdbf;
+  background: rgba(255, 255, 255, 0.7);
+  color: #6d5f4f;
+}
+
+.amt-launch-audio-toggle-secondary[aria-pressed="true"] {
+  border-color: #8b7355;
+  background: rgba(239, 227, 210, 0.72);
+  color: #4b3f33;
+}
+
+@keyframes amtLaunchPulse {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
 /* Subtle top accent bar */
 .ask-mirror-talk::before {
   content: '';
@@ -105,6 +254,134 @@ body {
   font-size: 12px;
   line-height: 1.5;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-starter-journeys {
+  margin: 8px 0 10px;
+  padding: 12px;
+  border: 1px solid rgba(212, 206, 198, 0.9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.amt-starter-journeys-head {
+  margin: 0 0 8px;
+  color: #6b665d;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-starter-journeys-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-starter-journey-btn {
+  border: 1px solid #d7c9b7;
+  background: linear-gradient(135deg, #fffdf9, #f6efe3);
+  color: #3e3428;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.amt-starter-journey-btn:hover,
+.amt-starter-journey-btn:focus-visible {
+  outline: none;
+  border-color: #8b7355;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(46, 42, 36, 0.12);
+}
+
+.amt-activation-checklist {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid rgba(139, 115, 85, 0.2);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,0.82), transparent 45%),
+    linear-gradient(135deg, rgba(250, 246, 239, 0.92), rgba(244, 236, 226, 0.86));
+}
+
+.amt-activation-checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.amt-activation-checklist-title {
+  margin: 0;
+  color: #4d4337;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.amt-activation-checklist-progress {
+  color: #8b7355;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.amt-activation-checklist-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amt-activation-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #665e53;
+  font-size: 13px;
+}
+
+.amt-activation-checklist-item strong {
+  color: #3f362b;
+}
+
+.amt-activation-checklist-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #cab79c;
+  flex-shrink: 0;
+}
+
+.amt-activation-checklist-item.done .amt-activation-checklist-dot {
+  background: #2c8b5e;
+}
+
+.amt-activation-checklist-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amt-activation-checklist-btn {
+  border: 1px solid #8b7355;
+  background: #fff;
+  color: #4b3f33;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
 }
 
 .amt-question-coach {
@@ -4033,6 +4310,27 @@ body {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.70);
 }
 
+.amt-referral-cta {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(139, 115, 85, 0.16);
+}
+
+.amt-referral-cta-text {
+  margin: 0;
+  color: #66553f;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.amt-referral-cta-actions {
+  margin-top: 9px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .amt-workflow-focus-pulse {
   animation: amtWorkflowPulse 0.9s ease;
 }
@@ -4938,6 +5236,49 @@ body.amt-light-mode .amt-suggestions-label {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.amt-answer-trust-toggle {
+  margin-top: 10px;
+  border: 1px solid rgba(139, 115, 85, 0.35);
+  background: rgba(255, 255, 255, 0.74);
+  color: #5f513f;
+  border-radius: 999px;
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.amt-answer-trust-toggle:hover,
+.amt-answer-trust-toggle:focus-visible {
+  border-color: rgba(111, 90, 66, 0.62);
+  background: rgba(255, 255, 255, 0.94);
+  color: #2e2a24;
+}
+
+.amt-answer-trust-capsule {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 206, 198, 0.95);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.amt-answer-trust-capsule ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.amt-answer-trust-capsule li {
+  color: #5b544b;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .amt-answer-pill {

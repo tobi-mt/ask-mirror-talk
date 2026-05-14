@@ -14,6 +14,12 @@ from app.qa.answer import compose_answer, sanitize_shareable_headline
 from app.qa.cache import get_answer_cache, normalize_question, _is_incomplete_answer
 from app.storage.repository import log_qa
 
+# Quality and reliability imports
+from app.qa.quality import validate_answer_quality, should_retry_generation
+from app.qa.resilience import CircuitBreakerOpenError, is_transient_error
+from app.qa.preprocessing import preprocess_query, optimize_for_retrieval
+from app.qa.citation_validation import ensure_citation_quality
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +64,153 @@ def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], ext
         "flow": flow,
         "question_preview": question[:80],
         **timings_ms,
+    }
+    if extra:
+        payload.update(extra)
+    logger.info("QA phase timings: %s", payload)
+
+
+def _generate_answer_with_quality_checks(
+    question: str,
+    chunks: list[dict],
+    citation_override: list[dict] = None,
+    max_retries: int = 2,
+) -> dict:
+    """
+    Generate answer with quality validation and retry logic.
+    
+    This wraps compose_answer with:
+    - Quality scoring and validation
+    - Automatic retry on poor quality
+    - Circuit breaker protection
+    - Enhanced error handling
+    
+    Args:
+        question: User's question
+        chunks: Retrieved chunks for context
+        citation_override: Optional citation chunks
+        max_retries: Maximum generation attempts
+    
+    Returns:
+        Answer dict with quality metadata
+    """
+    attempt = 0
+    last_response = None
+    last_quality = None
+    
+    while attempt < max_retries:
+    from app.qa.answer import _generate_degraded_answer
+    
+    attempt = 0
+    last_response = None
+    last_quality = None
+    
+    while attempt < max_retries:
+        try:
+            logger.info("Answer generation attempt %d/%d", attempt + 1, max_retries)
+            
+            # Generate answer (with circuit breaker protection handled by compose_answer)
+            response = compose_answer(
+                question,
+                chunks,
+                citation_override=citation_override,
+                include_followups=False  # Add later to avoid regenerating
+            )
+            
+            # Skip quality check for fallback answers
+            if response.get("answer_source") == "basic_fallback":
+                logger.info("Skipping quality check for fallback answer")
+                return response
+            
+            # Validate answer quality
+            quality = validate_answer_quality(
+                question=question,
+                answer=response["answer"],
+                citations=response.get("citations", []),
+                min_score=70.0
+            )
+            
+            # Add quality metadata
+            response["quality_score"] = quality.overall_score
+            response["quality_grade"] = quality.grade
+            response["generation_attempts"] = attempt + 1
+            
+            # Check if quality is acceptable
+            if quality.passed:
+                logger.info(
+                    "Answer quality acceptable: %s (score=%.1f) on attempt %d",
+                    quality.grade, quality.overall_score, attempt + 1
+                )
+                return response
+            
+            # Store for potential retry
+            last_response = response
+            last_quality = quality
+            
+            # Decide if we should retry
+            if should_retry_generation(quality, attempt, max_retries):
+                attempt += 1
+                logger.warning(
+                    "Answer quality insufficient: %s (score=%.1f, issues=%s). Retrying... (attempt %d/%d)",
+                    quality.grade, quality.overall_score, quality.issues, attempt + 1, max_retries
+                )
+                time.sleep(0.5)  # Brief pause before retry
+                continue
+            else:
+                # Quality not great but we've hit limit or it's acceptable enough
+                logger.info(
+                    "Accepting answer with grade %s (no more retries, attempt %d)",
+                    quality.grade, attempt + 1
+                )
+                return response
+                
+        except CircuitBreakerOpenError as e:
+            # Circuit breaker is open - fail fast
+            logger.error("Circuit breaker open: %s", e)
+            return {
+                "answer": _generate_degraded_answer(question),
+                "citations": [],
+                "answer_source": "basic_fallback",
+                "answer_status": "circuit_breaker_open",
+                "fallback_reason": "circuit_breaker_open",
+                "generation_attempts": attempt + 1,
+            }
+            
+        except Exception as e:  # noqa: BLE001
+            attempt += 1
+            logger.error("Answer generation failed on attempt %d: %s", attempt, e, exc_info=True)
+            
+            # Check if error is transient and worth retrying
+            if attempt < max_retries and is_transient_error(e):
+                logger.info("Transient error detected, will retry (attempt %d)", attempt + 1)
+                time.sleep(1.0 * attempt)  # Exponential backoff
+                continue
+            else:
+                # Non-transient error or out of retries
+                logger.error("Giving up after %d attempts", attempt)
+                return {
+                    "answer": _generate_degraded_answer(question),
+                    "citations": [],
+                    "answer_source": "basic_fallback",
+                    "answer_status": "generation_failed",
+                    "fallback_reason": type(e).__name__,
+                    "generation_attempts": attempt,
+                }
+    
+    # Fallback: return last response if we have one
+    if last_response:
+        grade = last_quality.grade if last_quality else 'unknown'
+        logger.warning("Using best attempt (grade %s)", grade)
+        return last_response
+    
+    # Should never reach here, but just in case
+    return {
+        "answer": _generate_degraded_answer(question),
+        "citations": [],
+        "answer_source": "basic_fallback",
+        "answer_status": "generation_failed",
+        "fallback_reason": "max_retries_exceeded",
+        "generation_attempts": max_retries,
     }
     if extra:
         payload.update(extra)
@@ -210,7 +363,24 @@ def answer_question(
                 return exact_cached_response
 
     embed_started_at = time.perf_counter()
-    query_embedding = embed_text(question)
+    
+    # ── Query Preprocessing for Better Retrieval ──
+    processed_query = preprocess_query(question)
+    
+    # Log query insights
+    if processed_query.key_terms:
+        logger.info("Query key terms: %s, intent: %s", processed_query.key_terms, processed_query.intent)
+    
+    if not processed_query.is_clear:
+        logger.warning("Vague query detected: %s", processed_query.suggestions)
+        # Note: We still proceed with generation but log the issue
+    
+    # Use optimized query for retrieval (may include synonym expansion)
+    retrieval_query = optimize_for_retrieval(processed_query)
+    if retrieval_query != question:
+        logger.info("Using expanded query for retrieval: '%s'", retrieval_query[:100])
+    
+    query_embedding = embed_text(retrieval_query)
     embed_ms = int((time.perf_counter() - embed_started_at) * 1000)
 
     if not bypass_cache:
@@ -317,10 +487,33 @@ def answer_question(
 
     # ── Phase 2: Answer generation (OpenAI) — no DB needed ──
     answer_started_at = time.perf_counter()
-    response = compose_answer(question, chunk_payloads,
-                              citation_override=citation_payloads if use_smart_citations else None,
-                              include_followups=False)
+    
+    # Use quality-checked answer generation with retries
+    response = _generate_answer_with_quality_checks(
+        question,
+        chunk_payloads,
+        citation_override=citation_payloads if use_smart_citations else None,
+        max_retries=2
+    )
+    
     answer_ms = int((time.perf_counter() - answer_started_at) * 1000)
+    
+    # ── Validate and improve citation quality ──
+    if response.get("citations"):
+        validated_citations, citations_ok = ensure_citation_quality(
+            answer=response["answer"],
+            citations=response["citations"],
+            min_count=2,
+            min_relevance=60.0
+        )
+        
+        if citations_ok:
+            logger.info("Citation validation passed: %d high-quality citations", len(validated_citations))
+            response["citations"] = validated_citations
+        else:
+            logger.warning("Citation validation flagged quality issues")
+            # Keep original citations but log the issue
+            response["citations_validated"] = False
 
     # Follow-up and headline generation are useful but not part of the core answer itself.
     # Run them in parallel with citation refinement and logging so the non-stream
@@ -498,7 +691,15 @@ def answer_question_stream(
             return
 
     embed_started_at = time.perf_counter()
-    query_embedding = embed_text(question)
+    
+    # ── Query Preprocessing for Better Retrieval ──
+    processed_query = preprocess_query(question)
+    retrieval_query = optimize_for_retrieval(processed_query)
+    
+    if processed_query.key_terms:
+        logger.info("Stream query key terms: %s", processed_query.key_terms)
+    
+    query_embedding = embed_text(retrieval_query)
     embed_ms = int((time.perf_counter() - embed_started_at) * 1000)
 
     cached_response = cache.get(norm_q, query_embedding) if not bypass_cache else None

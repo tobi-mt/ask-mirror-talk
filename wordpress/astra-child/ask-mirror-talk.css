@@ -5110,27 +5110,6 @@ body.amt-light-mode .amt-suggestions-label {
   background: #fff;
 }
 
-.amt-settings-btn {
-  padding: 8px 14px;
-  border: 1px solid #d9cbb3;
-  background: #f5ede0;
-  color: #6d5a42;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.amt-settings-btn:hover {
-  border-color: #2e2a24;
-  color: #2e2a24;
-  background: #fff;
-}
-
 .amt-journal-btn,
 .amt-note-btn,
 .amt-about-btn {

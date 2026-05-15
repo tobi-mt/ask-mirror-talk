@@ -104,6 +104,10 @@ def track_client_event(
 
     user_ip = get_client_ip(request)
 
+    device_id = None
+    if payload.metadata and isinstance(payload.metadata, dict):
+        device_id = payload.metadata.get("device_id")
+
     try:
         log_product_event(
             db,
@@ -111,6 +115,7 @@ def track_client_event(
             user_ip=user_ip,
             qa_log_id=payload.qa_log_id,
             metadata=payload.metadata or {},
+            device_id=device_id,
         )
         return {"status": "ok"}
     except Exception as e:
@@ -121,6 +126,7 @@ def track_client_event(
                 "qa_log_id": payload.qa_log_id,
                 "user_ip": user_ip,
                 "metadata": payload.metadata or {},
+                "device_id": device_id,
                 "error": str(e),
             },
         )

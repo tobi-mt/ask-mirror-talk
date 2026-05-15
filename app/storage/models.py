@@ -126,6 +126,7 @@ class ProductEvent(Base):
     event_name: Mapped[str] = mapped_column(String(80), index=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_ip: Mapped[str] = mapped_column(String(100), index=True)
+    device_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
 
 
 class PushSubscription(Base):

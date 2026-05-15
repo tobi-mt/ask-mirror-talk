@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.2 loaded');
+  log('Ask Mirror Talk Widget v5.9.13 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -59,30 +59,16 @@
 
   // Check if we're in test mode before checking for form
   const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
-  const LAUNCH_AUDIO_AUTOPLAY_KEY = 'amt_launch_audio_autoplay';
+  // Intro audio intentionally disabled globally due unreliable autoplay behavior across devices.
+  const ENABLE_LAUNCH_AUDIO = false;
   const ACTIVATION_CHECKLIST_KEY = 'amt_activation_checklist_v1';
-  // Splash state persistence: use sessionStorage so re-shows don't happen on reload
-  const SPLASH_SHOWN_SESSION_KEY = 'amt_splash_shown_session';
-  
-  function wasSplashShownThisSession() {
-    try {
-      return sessionStorage.getItem(SPLASH_SHOWN_SESSION_KEY) === '1';
-    } catch (e) {
-      return false;
-    }
-  }
-  
-  function markSplashShownThisSession() {
-    try {
-      sessionStorage.setItem(SPLASH_SHOWN_SESSION_KEY, '1');
-    } catch (e) {}
-  }
 
-  let hasHiddenLaunchSplash = wasSplashShownThisSession();
+  let hasHiddenLaunchSplash = false;
   let launchSplashAudioStop = null;
+  let launchSplashAudioStarting = false;
   let launchSplashMood = 'Calm';
 
-  if (hasHiddenLaunchSplash || !launchSplash) launchSplash.style.display = 'none';
+  if (hasHiddenLaunchSplash && launchSplash) launchSplash.style.display = 'none';
   if (!form && !ENABLE_TEST_EXPORTS) {
     if (launchSplash) launchSplash.style.display = 'none';
     warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -92,7 +78,6 @@
   function hideLaunchSplash(message) {
     if (hasHiddenLaunchSplash || !launchSplash) return;
     hasHiddenLaunchSplash = true;
-    markSplashShownThisSession();
 
     if (launchSplashStatus && message) {
       launchSplashStatus.textContent = String(message).slice(0, 120);
@@ -227,24 +212,24 @@
     const presets = {
       Calm: {
         cycleMs: 520,
-        masterGain: 0.038,
-        padGain: 0.026,
+        masterGain: 0.30,
+        padGain: 0.18,
         pulsePattern: [0.65, 0, 0.32, 0, 0.55, 0, 0.22, 0],
         melodyPattern: [392.0, 349.23, 329.63, 349.23, 392.0, 440.0, 392.0, 349.23],
         chordPattern: [[196.0, 246.94], [174.61, 220.0], [146.83, 196.0], [174.61, 220.0]],
       },
       Warm: {
         cycleMs: 500,
-        masterGain: 0.042,
-        padGain: 0.028,
+        masterGain: 0.34,
+        padGain: 0.20,
         pulsePattern: [0.8, 0, 0.45, 0, 0.72, 0, 0.38, 0],
         melodyPattern: [392.0, 440.0, 493.88, 440.0, 392.0, 349.23, 329.63, 349.23],
         chordPattern: [[196.0, 246.94], [220.0, 261.63], [174.61, 220.0], [196.0, 246.94]],
       },
       Hopeful: {
         cycleMs: 470,
-        masterGain: 0.045,
-        padGain: 0.03,
+        masterGain: 0.38,
+        padGain: 0.22,
         pulsePattern: [1, 0, 0.6, 0, 0.86, 0, 0.5, 0],
         melodyPattern: [392.0, 440.0, 493.88, 523.25, 493.88, 440.0, 392.0, 349.23],
         chordPattern: [[196.0, 246.94], [220.0, 277.18], [246.94, 293.66], [220.0, 277.18]],
@@ -254,26 +239,31 @@
   }
 
   function readLaunchAutoplayPreference() {
-    try {
-      return localStorage.getItem(LAUNCH_AUDIO_AUTOPLAY_KEY) === '1';
-    } catch (e) {
-      return false;
-    }
+    return !!ENABLE_LAUNCH_AUDIO;
   }
 
-  function writeLaunchAutoplayPreference(enabled) {
-    try {
-      localStorage.setItem(LAUNCH_AUDIO_AUTOPLAY_KEY, enabled ? '1' : '0');
-    } catch (e) {}
-  }
-
-  function createLaunchSplashAmbientTrack(mood) {
+  async function createLaunchSplashAmbientTrack(mood) {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) return null;
 
     const preset = getMoodPresetConfig(mood);
 
     const context = new AudioContextCtor();
+
+    // Resume first and only continue if the context is actually running.
+    // If autoplay is blocked, return null so user-gesture retries can proceed.
+    if (typeof context.resume === 'function') {
+      try {
+        await context.resume();
+      } catch (err) {
+        console.warn('AudioContext.resume() failed:', err && err.message ? err.message : err);
+      }
+    }
+    if (context.state !== 'running') {
+      try { context.close(); } catch (e) {}
+      return null;
+    }
+
     const master = context.createGain();
     const padGain = context.createGain();
     const rhythmGain = context.createGain();
@@ -319,8 +309,10 @@
     // Intro: slower ramp so the sound blooms in softly.
     master.gain.linearRampToValueAtTime(preset.masterGain, now + 1.4);
     padGain.gain.linearRampToValueAtTime(preset.padGain, now + 1.1);
-    rhythmGain.gain.linearRampToValueAtTime(0.0001, now + 1.2);
-    melodyGain.gain.linearRampToValueAtTime(0.0001, now + 1.2);
+    // Keep rhythmic/melody layers audible during intro so sound is noticeable
+    // on small mobile speakers where low pads alone can be too subtle.
+    rhythmGain.gain.linearRampToValueAtTime(0.022, now + 1.2);
+    melodyGain.gain.linearRampToValueAtTime(0.028, now + 1.2);
 
     let step = 0;
     const cycleMs = preset.cycleMs;
@@ -339,22 +331,18 @@
 
       pulse.frequency.setTargetAtTime(chord[0] / 2, t, 0.08);
       rhythmGain.gain.cancelScheduledValues(t);
-      rhythmGain.gain.setValueAtTime(0.012, t);
-      rhythmGain.gain.linearRampToValueAtTime(0.02 + (preset.masterGain * pulseStrength), t + 0.08);
-      rhythmGain.gain.linearRampToValueAtTime(0.01, t + 0.38);
+      rhythmGain.gain.setValueAtTime(0.018, t);
+      rhythmGain.gain.linearRampToValueAtTime(0.032 + (preset.masterGain * pulseStrength), t + 0.08);
+      rhythmGain.gain.linearRampToValueAtTime(0.014, t + 0.38);
 
       melody.frequency.setTargetAtTime(melodyFreq, t, 0.06);
       melodyGain.gain.cancelScheduledValues(t);
-      melodyGain.gain.setValueAtTime(0.0001, t);
-      melodyGain.gain.linearRampToValueAtTime(0.012, t + 0.12);
-      melodyGain.gain.linearRampToValueAtTime(0.0001, t + 0.42);
+      melodyGain.gain.setValueAtTime(0.006, t);
+      melodyGain.gain.linearRampToValueAtTime(0.02, t + 0.12);
+      melodyGain.gain.linearRampToValueAtTime(0.004, t + 0.42);
 
       step += 1;
     }, cycleMs);
-
-    if (typeof context.resume === 'function') {
-      context.resume().catch(() => {});
-    }
 
     return () => {
       window.clearInterval(interval);
@@ -376,12 +364,8 @@
   function initLaunchSplash() {
     if (!launchSplash) return;
 
-    // If the splash was already shown in this session (e.g., page reloaded),
-    // skip re-initialization and don't show it again.
-    if (wasSplashShownThisSession()) {
-      launchSplash.style.display = 'none';
-      return;
-    }
+    // Always show splash on each real app launch.
+    launchSplash.style.display = '';
 
     launchSplashMood = resolveLaunchMoodPreset();
 
@@ -421,16 +405,54 @@
     }
 
     // Autoplay: trigger audio playback automatically if user has enabled it.
-    // The audio is now controlled from the Settings panel, not the splash.
-    // This timeout allows the context a moment to initialize before we try audio.
-    if (autoplayEnabled && !hasHiddenLaunchSplash) {
-      window.setTimeout(() => {
-        if (launchSplashAudioStop || hasHiddenLaunchSplash) return;
-        const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
+    // The audio is now controlled from the Settings panel, but defaults to on.
+    // Try to start audio immediately, then again on first user interaction as fallback.
+    async function tryStartAudio() {
+      if (launchSplashAudioStop || hasHiddenLaunchSplash || launchSplashAudioStarting) return false;
+      launchSplashAudioStarting = true;
+      try {
+        const stopAudio = await createLaunchSplashAmbientTrack(launchSplashMood);
         if (stopAudio) {
           launchSplashAudioStop = stopAudio;
+          return true;
         }
-      }, 60);
+        return false;
+      } finally {
+        launchSplashAudioStarting = false;
+      }
+    }
+
+    if (autoplayEnabled && !hasHiddenLaunchSplash) {
+      // Try immediately (may work on non-iOS or if user interacted with page)
+      window.setTimeout(tryStartAudio, 60);
+
+      // Fallback: if user touches/clicks the splash, try audio again.
+      // This handles iOS autoplay policy which requires user gesture.
+      const removeAudioFallbackListeners = () => {
+        if (launchSplash) launchSplash.removeEventListener('click', fallbackHandler);
+        if (launchSplash) launchSplash.removeEventListener('touchstart', fallbackHandler);
+        window.removeEventListener('pointerdown', fallbackHandler);
+        window.removeEventListener('keydown', fallbackHandler);
+      };
+
+      const fallbackHandler = async () => {
+        const started = await tryStartAudio();
+        if (started || hasHiddenLaunchSplash) {
+          removeAudioFallbackListeners();
+        }
+      };
+      if (launchSplash && autoplayEnabled) {
+        launchSplash.addEventListener('click', fallbackHandler);
+        launchSplash.addEventListener('touchstart', fallbackHandler);
+        window.addEventListener('pointerdown', fallbackHandler);
+        window.addEventListener('keydown', fallbackHandler);
+
+        window.setTimeout(() => {
+          if (!launchSplashAudioStop) {
+            removeAudioFallbackListeners();
+          }
+        }, 10000);
+      }
     }
   }
 
@@ -583,9 +605,28 @@
     };
   }
 
+  // Device ID helpers
+  function getOrCreateDeviceId() {
+    const STORAGE_KEY = 'amt_device_id';
+    let id = null;
+    try {
+      id = localStorage.getItem(STORAGE_KEY);
+    } catch (e) {}
+    if (id && typeof id === 'string' && id.length >= 16) return id;
+    // Generate a new random device ID (UUID v4-like)
+    id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+    try {
+      localStorage.setItem(STORAGE_KEY, id);
+    } catch (e) {}
+    return id;
+  }
+
   function emitProductEvent(name, metadata) {
     try {
-      const merged = Object.assign({}, getCampaignMetadata(), metadata || {});
+      const deviceId = getOrCreateDeviceId();
+      const merged = Object.assign({}, getCampaignMetadata(), metadata || {}, { device_id: deviceId });
       window.dispatchEvent(new CustomEvent('amt:product-event', {
         detail: {
           eventName: name,
@@ -1333,6 +1374,14 @@
     const nightReflection = params.get('night_reflection');
     const middayReflection = params.get('midday_reflection');
     const inviteReflection = params.get('invite_reflection');
+    const inviteIntent = String(params.get('intent') || '').toLowerCase();
+    const inviteRef = String(params.get('ref') || '').toLowerCase();
+    const hasInviteQuestion = !!String(params.get('q') || '').trim();
+    const hasInviteTheme = !!String(params.get('theme') || '').trim();
+    const inferredInviteReflection =
+      inviteIntent === 'friend_invite' ||
+      inviteRef === 'save_share_referral' ||
+      inviteRef === 'invite_friend';
     // Cap length before any processing to prevent oversized input
     const question = raw ? raw.slice(0, 500) : null;
     if (question) {
@@ -1345,21 +1394,17 @@
 
     if (nightReflection === '1') {
       removeAutoStartParams(['night_reflection']);
-      if (markAutoStartProcessed(`night_reflection:${todayStr()}`)) {
-        runWhenReady(() => autoStartNightReflection(), 120);
-      }
+      runWhenReady(() => autoStartNightReflection(), 120);
       return;
     }
 
     if (middayReflection === '1') {
       removeAutoStartParams(['midday_reflection']);
-      if (markAutoStartProcessed(`midday_reflection:${todayStr()}`)) {
-        runWhenReady(() => autoStartMiddayReflection(), 120);
-      }
+      runWhenReady(() => autoStartMiddayReflection(), 120);
       return;
     }
 
-    if (inviteReflection === '1') {
+    if (inviteReflection === '1' || (inferredInviteReflection && (hasInviteQuestion || hasInviteTheme))) {
       removeAutoStartParams(['invite_reflection']);
       const inviteKey = `invite_reflection:${params.get('q') || params.get('theme') || todayStr()}`;
       if (markAutoStartProcessed(inviteKey)) {
@@ -5614,6 +5659,7 @@
       const qotd     = panel.querySelector('#amt-nmp-qotd').checked;
       const midday   = panel.querySelector('#amt-nmp-midday').checked;
       const episodes = panel.querySelector('#amt-nmp-episodes').checked;
+      
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
       const ok = await updatePushPreferences(qotd, midday, episodes);
@@ -10857,67 +10903,6 @@
   // ========================================
   // FEATURE: Settings Modal (Audio & Sound)
   // ========================================
-
-  (function initSettingsModal() {
-    const btn = document.getElementById('amt-settings-btn');
-    const modal = document.getElementById('amt-settings-modal');
-    const checkbox = document.getElementById('amt-audio-autoplay-toggle');
-    const statusLabel = document.getElementById('amt-audio-autoplay-status');
-    const closeBtn = modal?.querySelector('.amt-settings-close');
-
-    if (!btn || !modal) return;
-
-    // Initialize checkbox state from localStorage
-    function updateCheckboxState() {
-      const autoplayEnabled = readLaunchAutoplayPreference();
-      checkbox.checked = autoplayEnabled;
-      statusLabel.textContent = autoplayEnabled ? 'On' : 'Off';
-    }
-
-    updateCheckboxState();
-
-    // Handle checkbox change
-    if (checkbox) {
-      checkbox.addEventListener('change', () => {
-        const newValue = checkbox.checked;
-        writeLaunchAutoplayPreference(newValue);
-        statusLabel.textContent = newValue ? 'On' : 'Off';
-      });
-    }
-
-    const closeSettings = () => {
-      modal.classList.remove('amt-settings-visible');
-      modal.style.display = 'none';
-      btn.setAttribute('aria-expanded', 'false');
-    };
-
-    // Show settings when button clicked
-    btn.addEventListener('click', () => {
-      modal.style.display = '';
-      modal.classList.add('amt-settings-visible');
-      btn.setAttribute('aria-expanded', 'true');
-      updateCheckboxState(); // Sync state on open
-    });
-
-    // Close button
-    if (closeBtn) {
-      closeBtn.addEventListener('click', closeSettings);
-    }
-
-    // Click backdrop to close
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeSettings();
-      }
-    });
-
-    // Escape key to close
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modal.style.display !== 'none') {
-        closeSettings();
-      }
-    });
-  })();
 
   // ========================================
   // FEATURE 7: Auto-Open Explore Panel on First Visit

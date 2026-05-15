@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.9.2';
+    return '5.9.13';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -42,7 +42,6 @@ function ask_mirror_talk_shortcode() {
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
                 <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
                 <button type="button" id="amt-note-btn" class="amt-note-btn" title="Jot a private note" aria-label="Jot a private note">✍️</button>
-                <button type="button" id="amt-settings-btn" class="amt-settings-btn" title="Settings" aria-label="Settings" aria-expanded="false">⚙️</button>
                 <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
                 <div class="amt-heading-controls-note">Jot with <strong>✍️</strong>. Saved notes live in <strong>📓</strong></div>
             </div>
@@ -104,30 +103,6 @@ function ask_mirror_talk_shortcode() {
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
-        <!-- Settings modal -->
-        <div id="amt-settings-modal" class="amt-settings-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Settings">
-            <div class="amt-settings-content">
-                <div class="amt-settings-header">
-                    <h3>Settings</h3>
-                    <button type="button" class="amt-settings-close" aria-label="Close settings" title="Close">✕</button>
-                </div>
-                <div class="amt-settings-body">
-                    <div class="amt-settings-section">
-                        <h4>Audio & Sound</h4>
-                        <div class="amt-setting-item">
-                            <label for="amt-audio-autoplay-toggle" class="amt-setting-label">
-                                Enable intro sound on startup
-                            </label>
-                            <div class="amt-setting-control">
-                                <input type="checkbox" id="amt-audio-autoplay-toggle" class="amt-setting-checkbox" aria-label="Enable intro sound on startup" />
-                                <span class="amt-setting-status" id="amt-audio-autoplay-status">Off</span>
-                            </div>
-                        </div>
-                        <p class="amt-setting-description">When enabled, a calm ambient sound will play when you open the app.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
         <!-- Journal modal -->
         <div id="amt-journal-modal" class="amt-journal-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="My reflection notes"></div>
 
@@ -319,6 +294,7 @@ add_action( 'init', function() {
  */
 function ask_mirror_talk_pwa_head() {
     $theme_uri = get_stylesheet_directory_uri();
+    $ver = ask_mirror_talk_theme_version();
     ?>
     <!--
         PWA instant-paint: inline style applied before any external CSS loads.
@@ -326,13 +302,14 @@ function ask_mirror_talk_pwa_head() {
         Sets both html/body AND the widget container so there's no white/black flash
         between the OS launching the WebView and the first meaningful paint.
     -->
-    <style>
-      html, body { background-color: #f1ece4 !important; }
-      .ask-mirror-talk { background-color: #f1ece4 !important; }
-    </style>
+        <style>
+            html, body { background-color: #f1ece4 !important; }
+            .ask-mirror-talk { background-color: #f1ece4 !important; }
+            #amt-launch-splash { display: flex; }
+        </style>
 
     <!-- PWA Manifest — served dynamically from /manifest.json with correct icon URLs -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/manifest.json?v=<?php echo esc_attr($ver); ?>">
 
     <!-- Explicit viewport keeps iOS standalone/PWA rendering pinned to device width -->
     <!-- maximum-scale=1 prevents unwanted zoom when focusing inputs (prevents PWA resize) -->
@@ -651,7 +628,10 @@ function ask_mirror_talk_serve_manifest() {
 
     http_response_code(200);
     header('Content-Type: application/manifest+json; charset=UTF-8');
-    header('Cache-Control: no-cache, must-revalidate');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('X-LiteSpeed-Cache-Control: no-cache');
     header('X-Content-Type-Options: nosniff');
     echo json_encode( $manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT );
     exit;

@@ -10,8 +10,8 @@
  * FORCE UPDATE: Build timestamp to ensure browser detects changes
  */
 
-const BUILD_TIMESTAMP = '2026-05-15T06:00:00.000Z';  // Update this to force SW refresh
-const CACHE_VERSION = 'amt-v5.9.2';
+const BUILD_TIMESTAMP = '2026-05-15T07:00:00.000Z';  // Update this to force SW refresh
+const CACHE_VERSION = 'amt-v5.9.13';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const NAVIGATION_TIMEOUT_MS = 5000;
@@ -773,6 +773,20 @@ self.addEventListener('notificationclick', (event) => {
     const cleanBase = base.replace(/([?&])autoask=[^&]*/g, '').replace(/[?&]$/, '');
     const sep = cleanBase.includes('?') ? '&' : '?';
     targetUrl = `${cleanBase}${sep}autoask=${encodeURIComponent(question)}${hash}`;
+  } else if (notificationType === 'midday_motivation') {
+    const cleanBase = base
+      .replace(/([?&])midday_reflection=[^&]*/g, '')
+      .replace(/([?&])night_reflection=[^&]*/g, '')
+      .replace(/[?&]$/, '');
+    const sep = cleanBase.includes('?') ? '&' : '?';
+    targetUrl = `${cleanBase}${sep}midday_reflection=1${hash}`;
+  } else if (notificationType === 'night_reflection') {
+    const cleanBase = base
+      .replace(/([?&])night_reflection=[^&]*/g, '')
+      .replace(/([?&])midday_reflection=[^&]*/g, '')
+      .replace(/[?&]$/, '');
+    const sep = cleanBase.includes('?') ? '&' : '?';
+    targetUrl = `${cleanBase}${sep}night_reflection=1${hash}`;
   }
 
   event.waitUntil(
@@ -801,7 +815,7 @@ self.addEventListener('notificationclick', (event) => {
             });
         }
         if (notificationType === 'midday_motivation') {
-          return targetClient.navigate(base + hash)
+          return targetClient.navigate(targetUrl)
             .then(navigated => { if (navigated) navigated.focus(); })
             .catch(() => {
               targetClient.postMessage({ type: 'AUTO_START_MIDDAY_REFLECTION' });
@@ -809,7 +823,7 @@ self.addEventListener('notificationclick', (event) => {
             });
         }
         if (notificationType === 'night_reflection') {
-          return targetClient.navigate(base + hash)
+          return targetClient.navigate(targetUrl)
             .then(navigated => { if (navigated) navigated.focus(); })
             .catch(() => {
               targetClient.postMessage({ type: 'AUTO_START_NIGHT_REFLECTION' });

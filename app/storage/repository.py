@@ -117,12 +117,14 @@ def log_product_event(
     user_ip: str,
     qa_log_id: int | None = None,
     metadata: dict | None = None,
+    device_id: str | None = None,
 ):
     event = models.ProductEvent(
         qa_log_id=qa_log_id,
         event_name=event_name,
         metadata_json=json.dumps(metadata or {}, ensure_ascii=True),
         user_ip=user_ip,
+        device_id=device_id,
     )
     db.add(event)
     db.commit()

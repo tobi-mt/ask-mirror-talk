@@ -374,7 +374,8 @@ def analyze_prompt_origin_usage(db, days=30):
         SELECT
             COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin,
             COUNT(*) AS event_count,
-            COUNT(DISTINCT user_ip) AS unique_users
+            COUNT(DISTINCT user_ip) AS unique_users,
+            COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) AS unique_devices
         FROM product_events
         WHERE created_at >= :cutoff
           AND event_name = 'question_submitted'
@@ -403,7 +404,8 @@ def analyze_feature_engagement(db, days=30):
                 '—'
             ) AS detail,
             COUNT(*) AS event_count,
-            COUNT(DISTINCT user_ip) AS unique_users
+            COUNT(DISTINCT user_ip) AS unique_users,
+            COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) AS unique_devices
         FROM product_events
         WHERE created_at >= :cutoff
           AND event_name IN (
@@ -434,7 +436,8 @@ def analyze_product_event_mix(db, days=30):
         SELECT
             event_name,
             COUNT(*) AS event_count,
-            COUNT(DISTINCT user_ip) AS unique_users
+            COUNT(DISTINCT user_ip) AS unique_users,
+            COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) AS unique_devices
         FROM product_events
         WHERE created_at >= :cutoff
         GROUP BY event_name

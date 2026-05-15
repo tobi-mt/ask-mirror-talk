@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  console.log('✨ Ask Mirror Talk Premium Features v5.9.2 loaded');
+  console.log('✨ Ask Mirror Talk Premium Features v5.9.13 loaded');
 
   // ═══════════════════════════════════════════════════════════════
   // ██ TRACK C: TECHNICAL FOUNDATION - DATA LAYER (IndexedDB)

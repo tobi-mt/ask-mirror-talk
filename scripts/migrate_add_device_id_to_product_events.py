@@ -26,6 +26,7 @@ def run_migration(engine: Engine):
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS ix_product_events_device_id ON product_events(device_id);
         """))
+        conn.commit()
         print("Migration complete.")
 
 if __name__ == "__main__":

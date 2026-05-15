@@ -524,7 +524,12 @@ def generate_summary_report(db, days=7):
         text(f"SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
-    
+
+    unique_devices = db.execute(
+        text("SELECT COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) FROM product_events WHERE created_at >= :cutoff AND event_name = 'question_submitted'"),
+        {"cutoff": cutoff}
+    ).scalar()
+
     avg_latency = db.execute(
         text(f"SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
@@ -535,7 +540,8 @@ def generate_summary_report(db, days=7):
     
     print(f"\n📈 Overall Metrics:")
     print(f"   Total Questions: {total_questions or 0}")
-    print(f"   Unique Users: {unique_users or 0}")
+    print(f"   Unique Users (by IP): {unique_users or 0}")
+    print(f"   Unique Devices: {unique_devices or 0}")
     print(f"   Avg Response Time: {round(avg_latency, 2) if avg_latency else 0}ms")
     print(f"   Total Episodes: {total_episodes or 0}")
     print(f"   Total Chunks: {total_chunks or 0}")

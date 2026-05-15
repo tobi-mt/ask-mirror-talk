@@ -49,6 +49,20 @@ body {
   transition: opacity 0.45s ease, visibility 0.45s ease, transform 0.45s ease;
 }
 
+/*
+ * PWA standalone mode: make the splash cover the entire viewport, not just
+ * the widget box. This ensures it appears full-screen when the app is opened
+ * from the home screen or via a notification tap — even if the widget is
+ * smaller than the viewport or the page hasn't fully reflowed yet.
+ */
+@media all and (display-mode: standalone), (display-mode: fullscreen) {
+  .amt-launch-splash {
+    position: fixed;
+    border-radius: 0;
+    z-index: 99999;
+  }
+}
+
 .amt-launch-splash.amt-launch-splash-exit {
   opacity: 0;
   visibility: hidden;
@@ -5096,6 +5110,27 @@ body.amt-light-mode .amt-suggestions-label {
   background: #fff;
 }
 
+.amt-settings-btn {
+  padding: 8px 14px;
+  border: 1px solid #d9cbb3;
+  background: #f5ede0;
+  color: #6d5a42;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amt-settings-btn:hover {
+  border-color: #2e2a24;
+  color: #2e2a24;
+  background: #fff;
+}
+
 .amt-journal-btn,
 .amt-note-btn,
 .amt-about-btn {
@@ -6439,7 +6474,153 @@ body.amt-light-mode .amt-suggestions-label {
   }
 }
 
-/* ── My Reflection Notes Journal ──────────────────────────── */
+/* ── Settings Modal ───────────────────────────────────────── */
+
+.amt-settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: none;
+  background: rgba(0,0,0,0) !important;
+  transition: background 0.3s ease;
+}
+
+.amt-settings-modal:not([style*="display: none"]) {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0,0,0,0.55) !important;
+}
+
+.amt-settings-content {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: linear-gradient(to bottom, #faf8f4, #fff);
+  border-radius: 24px 24px 0 0;
+  padding: 0;
+  box-sizing: border-box;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.18);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+}
+
+.amt-settings-modal:not([style*="display: none"]) .amt-settings-content,
+.amt-settings-visible .amt-settings-content {
+  transform: translateY(0);
+}
+
+.amt-settings-header {
+  position: relative;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e8dcc8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.amt-settings-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #2e2a24;
+  flex: 1;
+  text-align: left;
+}
+
+.amt-settings-close {
+  width: 32px;
+  height: 32px;
+  background: #f2e6d6;
+  border: 1px solid #dbc8ae;
+  font-size: 18px;
+  color: #6d5a42;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.amt-settings-close:hover {
+  background: #e8dcc8;
+  border-color: #2e2a24;
+  color: #2e2a24;
+}
+
+.amt-settings-body {
+  padding: 20px 24px 28px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.amt-settings-section {
+  margin-bottom: 24px;
+}
+
+.amt-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.amt-settings-section h4 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6d5a42;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.amt-setting-item {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(245,237,224,0.5);
+  border-radius: 12px;
+  border: 1px solid #e8dcc8;
+}
+
+.amt-setting-label {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: #2e2a24;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.amt-setting-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.amt-setting-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #943e08;
+}
+
+.amt-setting-status {
+  font-size: 13px;
+  color: #a08670;
+  font-weight: 500;
+}
+
+.amt-setting-description {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #8b7355;
+  line-height: 1.5;
+}
+
+/* ── My Reflection Notes Journal ──────────────────────────── -->
 
 /* journal button styled via shared .amt-text-size-btn / .amt-about-btn rules above */
 

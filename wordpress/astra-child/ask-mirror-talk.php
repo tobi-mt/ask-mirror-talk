@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.8.8';
+    return '5.9.2';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -30,10 +30,6 @@ function ask_mirror_talk_shortcode() {
                 <p class="amt-launch-eyebrow">ASK MIRROR TALK</p>
                 <h3>Preparing your reflection space</h3>
                 <p id="amt-launch-splash-status" class="amt-launch-status">Loading your premium experience...</p>
-                <div class="amt-launch-actions">
-                    <button type="button" id="amt-launch-splash-audio-toggle" class="amt-launch-audio-toggle" aria-pressed="false">Play calm intro</button>
-                    <button type="button" id="amt-launch-splash-audio-autoplay-toggle" class="amt-launch-audio-toggle amt-launch-audio-toggle-secondary" aria-pressed="false">Autoplay off</button>
-                </div>
             </div>
         </div>
         <div class="amt-heading-row">
@@ -46,6 +42,7 @@ function ask_mirror_talk_shortcode() {
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
                 <button type="button" id="amt-journal-btn" class="amt-journal-btn" title="My reflection notes" aria-label="My reflection notes">📓</button>
                 <button type="button" id="amt-note-btn" class="amt-note-btn" title="Jot a private note" aria-label="Jot a private note">✍️</button>
+                <button type="button" id="amt-settings-btn" class="amt-settings-btn" title="Settings" aria-label="Settings" aria-expanded="false">⚙️</button>
                 <button type="button" id="amt-about-btn" class="amt-about-btn" title="About this app" aria-label="About Mirror Talk">ⓘ</button>
                 <div class="amt-heading-controls-note">Jot with <strong>✍️</strong>. Saved notes live in <strong>📓</strong></div>
             </div>
@@ -107,6 +104,30 @@ function ask_mirror_talk_shortcode() {
         <div id="amt-milestone-toast" class="amt-milestone-toast" style="display:none;"></div>
         <!-- About modal -->
         <div id="amt-about-modal" class="amt-about-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="About Mirror Talk"></div>
+        <!-- Settings modal -->
+        <div id="amt-settings-modal" class="amt-settings-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="Settings">
+            <div class="amt-settings-content">
+                <div class="amt-settings-header">
+                    <h3>Settings</h3>
+                    <button type="button" class="amt-settings-close" aria-label="Close settings" title="Close">✕</button>
+                </div>
+                <div class="amt-settings-body">
+                    <div class="amt-settings-section">
+                        <h4>Audio & Sound</h4>
+                        <div class="amt-setting-item">
+                            <label for="amt-audio-autoplay-toggle" class="amt-setting-label">
+                                Enable intro sound on startup
+                            </label>
+                            <div class="amt-setting-control">
+                                <input type="checkbox" id="amt-audio-autoplay-toggle" class="amt-setting-checkbox" aria-label="Enable intro sound on startup" />
+                                <span class="amt-setting-status" id="amt-audio-autoplay-status">Off</span>
+                            </div>
+                        </div>
+                        <p class="amt-setting-description">When enabled, a calm ambient sound will play when you open the app.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Journal modal -->
         <div id="amt-journal-modal" class="amt-journal-modal" style="display:none;" role="dialog" aria-modal="true" aria-label="My reflection notes"></div>
 
@@ -299,6 +320,17 @@ add_action( 'init', function() {
 function ask_mirror_talk_pwa_head() {
     $theme_uri = get_stylesheet_directory_uri();
     ?>
+    <!--
+        PWA instant-paint: inline style applied before any external CSS loads.
+        Uses !important to override any competing WordPress theme defaults.
+        Sets both html/body AND the widget container so there's no white/black flash
+        between the OS launching the WebView and the first meaningful paint.
+    -->
+    <style>
+      html, body { background-color: #f1ece4 !important; }
+      .ask-mirror-talk { background-color: #f1ece4 !important; }
+    </style>
+
     <!-- PWA Manifest — served dynamically from /manifest.json with correct icon URLs -->
     <link rel="manifest" href="/manifest.json">
 
@@ -307,12 +339,15 @@ function ask_mirror_talk_pwa_head() {
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 
     <!-- Standard PWA meta tag (Android / Chrome) -->
-    <meta name="theme-color" content="#943e08">
+    <!-- theme-color matches the launch splash background so there is no colour mismatch -->
+    <!-- during app startup on Android (splash overlay uses this colour). -->
+    <meta name="theme-color" content="#f1ece4">
     <meta name="mobile-web-app-capable" content="yes">
 
     <!-- Apple PWA meta tags — makes "Add to Home Screen" launch as a standalone app -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- default gives a light status-bar that blends with our cream splash background -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Mirror Talk">
     <meta name="apple-touch-fullscreen" content="yes">
 

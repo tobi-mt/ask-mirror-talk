@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.8.8 loaded');
+  log('Ask Mirror Talk Widget v5.9.2 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -48,8 +48,6 @@
   const widgetRoot = form ? form.closest('.ask-mirror-talk') : document.querySelector('.ask-mirror-talk');
   const launchSplash = document.querySelector('#amt-launch-splash');
   const launchSplashStatus = document.querySelector('#amt-launch-splash-status');
-  const launchSplashAudioToggle = document.querySelector('#amt-launch-splash-audio-toggle');
-  const launchSplashAudioAutoplayToggle = document.querySelector('#amt-launch-splash-audio-autoplay-toggle');
   const workflowPanelsRoot = document.querySelector('#amt-workflow-panels');
   const workflowPanels = {
     ask: document.querySelector('#amt-workflow-panel-ask'),
@@ -63,10 +61,28 @@
   const ENABLE_TEST_EXPORTS = !!window.__AMT_ENABLE_TEST_EXPORTS__;
   const LAUNCH_AUDIO_AUTOPLAY_KEY = 'amt_launch_audio_autoplay';
   const ACTIVATION_CHECKLIST_KEY = 'amt_activation_checklist_v1';
-  let hasHiddenLaunchSplash = false;
+  // Splash state persistence: use sessionStorage so re-shows don't happen on reload
+  const SPLASH_SHOWN_SESSION_KEY = 'amt_splash_shown_session';
+  
+  function wasSplashShownThisSession() {
+    try {
+      return sessionStorage.getItem(SPLASH_SHOWN_SESSION_KEY) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  function markSplashShownThisSession() {
+    try {
+      sessionStorage.setItem(SPLASH_SHOWN_SESSION_KEY, '1');
+    } catch (e) {}
+  }
+
+  let hasHiddenLaunchSplash = wasSplashShownThisSession();
   let launchSplashAudioStop = null;
   let launchSplashMood = 'Calm';
 
+  if (hasHiddenLaunchSplash || !launchSplash) launchSplash.style.display = 'none';
   if (!form && !ENABLE_TEST_EXPORTS) {
     if (launchSplash) launchSplash.style.display = 'none';
     warn('⚠️ Ask Mirror Talk form not found on this page');
@@ -76,6 +92,7 @@
   function hideLaunchSplash(message) {
     if (hasHiddenLaunchSplash || !launchSplash) return;
     hasHiddenLaunchSplash = true;
+    markSplashShownThisSession();
 
     if (launchSplashStatus && message) {
       launchSplashStatus.textContent = String(message).slice(0, 120);
@@ -250,12 +267,6 @@
     } catch (e) {}
   }
 
-  function updateLaunchAutoplayToggleLabel(enabled) {
-    if (!launchSplashAudioAutoplayToggle) return;
-    launchSplashAudioAutoplayToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    launchSplashAudioAutoplayToggle.textContent = enabled ? 'Autoplay on' : 'Autoplay off';
-  }
-
   function createLaunchSplashAmbientTrack(mood) {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) return null;
@@ -365,86 +376,59 @@
   function initLaunchSplash() {
     if (!launchSplash) return;
 
+    // If the splash was already shown in this session (e.g., page reloaded),
+    // skip re-initialization and don't show it again.
+    if (wasSplashShownThisSession()) {
+      launchSplash.style.display = 'none';
+      return;
+    }
+
     launchSplashMood = resolveLaunchMoodPreset();
 
     if (launchSplashStatus) {
       launchSplashStatus.textContent = `Loading your premium ${launchSplashMood.toLowerCase()} mode...`;
     }
 
-    if (launchSplashAudioToggle) {
-      launchSplashAudioToggle.textContent = `Play ${launchSplashMood.toLowerCase()} intro`;
-    }
-
     const autoplayEnabled = readLaunchAutoplayPreference();
-    updateLaunchAutoplayToggleLabel(autoplayEnabled);
 
+    // Hard maximum: always dismiss after 9 seconds.
     window.setTimeout(() => {
       hideLaunchSplash('Ready to reflect');
     }, 9000);
 
-    window.addEventListener('load', () => {
-      hideLaunchSplash('Ready to reflect');
-    }, { once: true });
-
-    requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        hideLaunchSplash('Ready to reflect');
-      }, 320);
-    });
-
-    if (launchSplashAudioToggle) {
-      launchSplashAudioToggle.addEventListener('click', async () => {
-        if (launchSplashAudioStop) {
-          launchSplashAudioStop();
-          launchSplashAudioStop = null;
-          launchSplashAudioToggle.setAttribute('aria-pressed', 'false');
-          launchSplashAudioToggle.textContent = `Play ${launchSplashMood.toLowerCase()} intro`;
-          return;
-        }
-
-        const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
-        if (!stopAudio) {
-          launchSplashAudioToggle.textContent = 'Audio unavailable on this device';
-          launchSplashAudioToggle.disabled = true;
-          return;
-        }
-
-        launchSplashAudioStop = stopAudio;
-        launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
-        launchSplashAudioToggle.textContent = 'Stop calm intro';
-      });
+    // Minimum visible duration before any event-driven dismiss is honored.
+    // This prevents the splash from flashing for ~300ms on cached PWA loads
+    // where window.load fires almost instantly from the service worker cache.
+    const SPLASH_MIN_MS = 1800;
+    const _splashShowTime = Date.now();
+    function _hideSplashAfterMin(msg) {
+      const remaining = Math.max(0, SPLASH_MIN_MS - (Date.now() - _splashShowTime));
+      window.setTimeout(() => hideLaunchSplash(msg), remaining);
     }
 
-    if (launchSplashAudioAutoplayToggle) {
-      launchSplashAudioAutoplayToggle.addEventListener('click', () => {
-        const next = !readLaunchAutoplayPreference();
-        writeLaunchAutoplayPreference(next);
-        updateLaunchAutoplayToggleLabel(next);
-
-        if (next && !launchSplashAudioStop && !hasHiddenLaunchSplash) {
-          const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
-          if (stopAudio) {
-            launchSplashAudioStop = stopAudio;
-            if (launchSplashAudioToggle) {
-              launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
-              launchSplashAudioToggle.textContent = 'Stop calm intro';
-            }
-          }
-        }
-      });
+    // Check multiple ready states to ensure we never dismiss too early:
+    // - If the document is already fully loaded, apply the minimum timeout
+    // - If it's interactive (DOMContentLoaded), also apply minimum
+    // - If it's loading, wait for the load event and apply minimum
+    if (document.readyState === 'complete') {
+      _hideSplashAfterMin('Ready to reflect');
+    } else if (document.readyState === 'interactive') {
+      _hideSplashAfterMin('Ready to reflect');
+    } else {
+      window.addEventListener('load', () => {
+        _hideSplashAfterMin('Ready to reflect');
+      }, { once: true });
     }
 
+    // Autoplay: trigger audio playback automatically if user has enabled it.
+    // The audio is now controlled from the Settings panel, not the splash.
+    // This timeout allows the context a moment to initialize before we try audio.
     if (autoplayEnabled && !hasHiddenLaunchSplash) {
-      // Browsers may still block this attempt; if blocked we keep the manual play button.
       window.setTimeout(() => {
         if (launchSplashAudioStop || hasHiddenLaunchSplash) return;
         const stopAudio = createLaunchSplashAmbientTrack(launchSplashMood);
         if (stopAudio) {
           launchSplashAudioStop = stopAudio;
-          if (launchSplashAudioToggle) {
-            launchSplashAudioToggle.setAttribute('aria-pressed', 'true');
-            launchSplashAudioToggle.textContent = 'Stop calm intro';
-          }
         }
       }, 60);
     }
@@ -6675,53 +6659,65 @@
     ctx.fillText(subline, 1080 / 2, subtextY);
     ctx.shadowColor = 'transparent';
 
-    // Optional saved insight quote - enhanced white panel
+    // Saved insight — open-air pull-quote directly on gradient.
+    // Per-template contrast: lighter-background templates (golden_hour, sunset_warmth)
+    // switch to dark text so white-on-light readability issues are avoided entirely.
+    // All other (dark/vibrant) templates keep white text with a strong drop-shadow.
     if (data.latestSavedInsight && data.latestSavedInsight.excerpt) {
-      const quoteY = subtextY + 70;
-      const quotePanel = {
-        x: 110,
-        y: quoteY,
-        width: 860,
-        height: 170
-      };
-      
-      // White quote panel with shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.25)';
-      ctx.shadowBlur = 30;
-      ctx.shadowOffsetY = 12;
-      const quoteGrad = ctx.createLinearGradient(quotePanel.x, quotePanel.y, quotePanel.x + quotePanel.width, quotePanel.y + quotePanel.height);
-      quoteGrad.addColorStop(0, 'rgba(255,255,255,0.95)');
-      quoteGrad.addColorStop(1, 'rgba(255,255,255,0.90)');
-      ctx.fillStyle = quoteGrad;
-      _roundRect(ctx, quotePanel.x, quotePanel.y, quotePanel.width, quotePanel.height, 24);
-      ctx.fill();
-      ctx.shadowColor = 'transparent';
-      
-      ctx.strokeStyle = 'rgba(255,255,255,0.40)';
-      ctx.lineWidth = 1.5;
-      _roundRect(ctx, quotePanel.x, quotePanel.y, quotePanel.width, quotePanel.height, 24);
+      const useDarkQuote   = template === 'golden_hour' || template === 'sunset_warmth';
+      const quoteTextColor   = useDarkQuote ? 'rgba(30,20,10,0.92)'  : 'rgba(255,255,255,0.97)';
+      const quoteShadowColor = useDarkQuote ? 'rgba(255,255,255,0.60)' : 'rgba(0,0,0,0.55)';
+      const quoteMarkColor   = useDarkQuote ? 'rgba(30,20,10,0.30)'  : 'rgba(255,255,255,0.45)';
+      const separatorColor   = useDarkQuote ? 'rgba(30,20,10,0.22)'  : 'rgba(255,255,255,0.28)';
+
+      const quoteY = subtextY + 58;
+
+      // Thin decorative separator
+      ctx.strokeStyle = separatorColor;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(200, quoteY);
+      ctx.lineTo(880, quoteY);
       ctx.stroke();
-      
-      // Opening quote mark - accent color matching the template
-      let quoteMarkColor = '#ff6b9d'; // default
-      if (template === 'neon_modern') quoteMarkColor = '#00d9ff';
-      else if (template === 'gradient_vibrant') quoteMarkColor = '#ff3366';
-      else if (template === 'prismatic_rainbow') quoteMarkColor = '#ff0080';
-      else if (template === 'sunset_warmth') quoteMarkColor = '#ff6b9d';
-      else if (template === 'ocean_depths') quoteMarkColor = '#00bcd4';
-      else if (template === 'purple_dream') quoteMarkColor = '#ab47bc';
-      else if (template === 'forest_vitality') quoteMarkColor = '#43a047';
-      else if (template === 'golden_hour') quoteMarkColor = '#ff8f00';
-      
-      ctx.fillStyle = quoteMarkColor;
-      ctx.font = '72px Georgia, serif';
+
+      // Pre-process excerpt to a meaningful boundary so the visible text always
+      // ends on a complete sentence or clause, not mid-word.
+      const _raw = String(data.latestSavedInsight.excerpt || '').trim();
+      const MAX_CHARS = 165;
+      let excerpt = _raw;
+      if (_raw.length > MAX_CHARS) {
+        const chunk = _raw.slice(0, MAX_CHARS);
+        const sentEnd = Math.max(
+          chunk.lastIndexOf('. '), chunk.lastIndexOf('! '), chunk.lastIndexOf('? ')
+        );
+        if (sentEnd > MAX_CHARS * 0.45) {
+          excerpt = _raw.slice(0, sentEnd + 1);
+        } else {
+          const clauseEnd = chunk.lastIndexOf(', ');
+          excerpt = clauseEnd > MAX_CHARS * 0.45
+            ? _raw.slice(0, clauseEnd) + '\u2026'
+            : chunk.trimEnd().replace(/[.,;:-]+$/, '') + '\u2026';
+        }
+      }
+
+      // Strong shadow for both quote mark and text — guarantees legibility on
+      // all gradient hues without needing a background panel.
+      ctx.shadowColor    = quoteShadowColor;
+      ctx.shadowBlur     = 22;
+      ctx.shadowOffsetY  = 4;
+
+      // Large decorative open-quote mark
+      ctx.fillStyle  = quoteMarkColor;
+      ctx.font       = '700 80px Georgia, serif';
+      ctx.textAlign  = 'left';
+      ctx.fillText('\u201C', 110, quoteY + 96);
+
+      // Quote text — 3 lines max (more complete than 2), italic serif, colour-safe per template
+      ctx.fillStyle = quoteTextColor;
+      ctx.font      = 'italic 400 29px Georgia, serif';
       ctx.textAlign = 'left';
-      ctx.fillText('"', quotePanel.x + 32, quotePanel.y + 76);
-      
-      // Quote text - dark on white panel
-      ctx.fillStyle = '#2e3a38';
-      ctx.font = '400 30px Georgia, serif';
-      wrapCanvasText(ctx, data.latestSavedInsight.excerpt, quotePanel.x + 78, quotePanel.y + 94, quotePanel.width - 110, 44, 3, 'left');
+      wrapCanvasText(ctx, excerpt, 168, quoteY + 58, 800, 44, 3, 'left');
+      ctx.shadowColor = 'transparent';
     }
 
     // Footer with QR code and "Scan to reflect" (uses our new card template system)
@@ -10855,6 +10851,71 @@
       document.addEventListener('keydown', function escHandler(e) {
         if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
       }, { once: true });
+    });
+  })();
+
+  // ========================================
+  // FEATURE: Settings Modal (Audio & Sound)
+  // ========================================
+
+  (function initSettingsModal() {
+    const btn = document.getElementById('amt-settings-btn');
+    const modal = document.getElementById('amt-settings-modal');
+    const checkbox = document.getElementById('amt-audio-autoplay-toggle');
+    const statusLabel = document.getElementById('amt-audio-autoplay-status');
+    const closeBtn = modal?.querySelector('.amt-settings-close');
+
+    if (!btn || !modal) return;
+
+    // Initialize checkbox state from localStorage
+    function updateCheckboxState() {
+      const autoplayEnabled = readLaunchAutoplayPreference();
+      checkbox.checked = autoplayEnabled;
+      statusLabel.textContent = autoplayEnabled ? 'On' : 'Off';
+    }
+
+    updateCheckboxState();
+
+    // Handle checkbox change
+    if (checkbox) {
+      checkbox.addEventListener('change', () => {
+        const newValue = checkbox.checked;
+        writeLaunchAutoplayPreference(newValue);
+        statusLabel.textContent = newValue ? 'On' : 'Off';
+      });
+    }
+
+    const closeSettings = () => {
+      modal.classList.remove('amt-settings-visible');
+      modal.style.display = 'none';
+      btn.setAttribute('aria-expanded', 'false');
+    };
+
+    // Show settings when button clicked
+    btn.addEventListener('click', () => {
+      modal.style.display = '';
+      modal.classList.add('amt-settings-visible');
+      btn.setAttribute('aria-expanded', 'true');
+      updateCheckboxState(); // Sync state on open
+    });
+
+    // Close button
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeSettings);
+    }
+
+    // Click backdrop to close
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeSettings();
+      }
+    });
+
+    // Escape key to close
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display !== 'none') {
+        closeSettings();
+      }
     });
   })();
 

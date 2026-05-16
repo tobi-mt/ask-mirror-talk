@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.18 loaded');
+  log('Ask Mirror Talk Widget v5.9.19 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -6725,25 +6725,19 @@
     };
     
     // Header with shadow for visibility on colorful backgrounds
-    ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.35)';
     ctx.shadowBlur = 16;
     ctx.shadowOffsetY = 4;
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
-    ctx.fillText('ASK MIRROR TALK', 96, 114);
-
-    ctx.fillStyle = style.textSoft;
-    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Your weekly reflection recap', 96, 156);
-    ctx.shadowColor = 'transparent';
-
-    // Theme pill (if available) - enhanced for colorful backgrounds
+    
+    // Theme pill (if available) - enhanced for colorful backgrounds - now on LEFT
+    let pillWidth = 0;
     if (data.topTheme) {
       const themeLabel = truncateText(data.topTheme, 24);
       ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      const pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
-      const pillX = 1080 - pillWidth - 96;
+      pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
+      const pillX = 96;
       const pillY = 96;
       
       // Enhanced pill with better visibility
@@ -6773,6 +6767,21 @@
       ctx.textBaseline = 'alphabetic';
       ctx.shadowColor = 'transparent';
     }
+    
+    // "ASK MIRROR TALK" on the RIGHT
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = style.accent;
+    ctx.font = '600 22px Georgia, serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('ASK MIRROR TALK', 1080 - 96, 114);
+
+    ctx.fillStyle = style.textSoft;
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Your weekly reflection recap', 96, 156);
+    ctx.shadowColor = 'transparent';
 
     // Headline with shadow for better visibility
     ctx.shadowColor = 'rgba(0,0,0,0.40)';

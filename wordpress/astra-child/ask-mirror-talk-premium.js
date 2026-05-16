@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  console.log('✨ Ask Mirror Talk Premium Features v5.9.17 loaded');
+  console.log('✨ Ask Mirror Talk Premium Features v5.9.18 loaded');
 
   // ═══════════════════════════════════════════════════════════════
   // ██ TRACK C: TECHNICAL FOUNDATION - DATA LAYER (IndexedDB)
@@ -722,7 +722,7 @@
       const patterns = await getCachedPatterns();
 
       const exportData = {
-        version: '5.9.17',
+        version: '5.9.18',
         exportedAt: new Date().toISOString(),
         reflections: history,
         patterns: patterns,

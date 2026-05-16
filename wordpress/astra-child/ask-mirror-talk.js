@@ -8727,11 +8727,15 @@
 
     ctx.fillStyle = '#fffaf4';
     ctx.font = '800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('Scan to reflect', textX, textTop);
+    ctx.fillText('ASK MIRROR TALK', textX, textTop - 12);
+
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = '#fffaf4';
+    ctx.fillText('Scan to reflect', textX, textTop + 20);
 
     ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,250,244,0.78)';
-    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 29);
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 49);
 
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_FOOTER_DEBUG__ = {

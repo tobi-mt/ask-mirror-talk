@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.13 loaded');
+  log('Ask Mirror Talk Widget v5.9.14 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -7671,6 +7671,158 @@
     return new File([blob], filename, { type: 'image/png' });
   }
 
+  async function _loadImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
+  function _downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'mirror-talk-motion.webm';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function _recordTheatricalMotionClip(dataUrl, options) {
+    const opts = options || {};
+    const durationMs = Number(opts.durationMs || 4200);
+    const fps = Number(opts.fps || 30);
+    const width = Number(opts.width || 1080);
+    const height = Number(opts.height || 1350);
+    const image = await _loadImage(dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx || typeof canvas.captureStream !== 'function' || typeof MediaRecorder === 'undefined') {
+      throw new Error('Animated export is not supported in this browser.');
+    }
+
+    const stream = canvas.captureStream(fps);
+    const mimeTypes = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ];
+    const recorderOptions = {};
+    const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+    if (supportedMimeType) {
+      recorderOptions.mimeType = supportedMimeType;
+    }
+
+    const recorder = new MediaRecorder(stream, recorderOptions);
+    const chunks = [];
+    recorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) chunks.push(event.data);
+    };
+
+    const scene = {
+      titleBars: ['static', 'theatrical'],
+      glowX: width * 0.18,
+      glowY: height * 0.2,
+      sweep: -0.35
+    };
+
+    const start = performance.now();
+    let rafId = 0;
+
+    const drawFrame = (now) => {
+      const elapsed = Math.max(0, now - start);
+      const progress = Math.min(1, elapsed / durationMs);
+      const phase = progress * Math.PI * 2;
+      const float = Math.sin(phase * 1.25) * 0.012;
+      const zoom = 1.02 + (Math.sin(phase * 0.5) * 0.018);
+      const shiftX = Math.sin(phase * 0.85) * 16;
+      const shiftY = Math.cos(phase * 0.72) * 12;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#0f0b09';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-width / 2 + shiftX, -height / 2 + shiftY + (height * float));
+      ctx.drawImage(image, 0, 0, width, height);
+      ctx.restore();
+
+      const sweepX = ((elapsed / durationMs) * (width + 480)) - 240;
+      const sweepGrad = ctx.createLinearGradient(sweepX - 180, 0, sweepX + 180, height);
+      sweepGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      sweepGrad.addColorStop(0.45, 'rgba(255,255,255,0.06)');
+      sweepGrad.addColorStop(0.5, 'rgba(255,255,255,0.28)');
+      sweepGrad.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+      sweepGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = sweepGrad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      const pulseRadius = 130 + Math.sin(phase * 2.1) * 20;
+      const pulseGrad = ctx.createRadialGradient(scene.glowX, scene.glowY, 0, scene.glowX, scene.glowY, pulseRadius);
+      pulseGrad.addColorStop(0, 'rgba(255,244,214,0.30)');
+      pulseGrad.addColorStop(0.45, 'rgba(255,180,88,0.14)');
+      pulseGrad.addColorStop(1, 'rgba(255,180,88,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = pulseGrad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      const orbRadius = 88 + Math.sin(phase * 1.7) * 10;
+      const orbGrad = ctx.createRadialGradient(width * 0.82, height * 0.18, 0, width * 0.82, height * 0.18, orbRadius);
+      orbGrad.addColorStop(0, 'rgba(118,226,255,0.24)');
+      orbGrad.addColorStop(0.55, 'rgba(118,226,255,0.12)');
+      orbGrad.addColorStop(1, 'rgba(118,226,255,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = orbGrad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.22, width / 2, height / 2, height * 0.76);
+      vignette.addColorStop(0, 'rgba(0,0,0,0)');
+      vignette.addColorStop(0.72, 'rgba(0,0,0,0.06)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(54, 54, width - 108, height - 108);
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(drawFrame);
+      } else {
+        try { recorder.stop(); } catch (e) {}
+      }
+    };
+
+    const finished = new Promise((resolve, reject) => {
+      recorder.onerror = () => reject(new Error('Animated export recording failed.'));
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+        resolve(blob);
+      };
+    });
+
+    recorder.start();
+    rafId = requestAnimationFrame(drawFrame);
+
+    const blob = await finished;
+    cancelAnimationFrame(rafId);
+    return blob;
+  }
+
   /**
    * Trigger image download programmatically.
    */
@@ -7713,8 +7865,30 @@
     const invitePrompt = modalOptions.invitePrompt || 'Start with one person who may need this reflection today, or save it to keep close.';
     const previewText = String(modalOptions.previewText || '').trim();
     const nativeShareLabel = modalOptions.nativeShareLabel || 'Share card now';
+    const animatedShareLabel = modalOptions.animatedShareLabel || 'Share animated clip';
+    const animatedDownloadLabel = modalOptions.animatedDownloadLabel || 'Download animated clip';
     const copyTextLabel = modalOptions.copyTextLabel || 'Copy ready caption';
     const copyLinkLabel = modalOptions.copyLinkLabel || 'Copy reflection link';
+    const animationPrefKey = 'amt_share_card_animation_preview';
+    const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const animationAllowed = modalOptions.animation !== false;
+    let animationEnabled = false;
+
+    try {
+      const storedPreference = localStorage.getItem(animationPrefKey);
+      if (storedPreference === '1') animationEnabled = true;
+      if (storedPreference === '0') animationEnabled = false;
+    } catch (e) {}
+
+    if (prefersReducedMotion) {
+      animationEnabled = false;
+    }
+
+    const animationToggleLabel = () => animationEnabled
+      ? '↩ Static preview'
+      : '✨ Animated preview';
+
+    const animatedShareSupported = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream);
 
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
@@ -7753,12 +7927,22 @@
         <button class="amt-scm-close" aria-label="Close">&times;</button>
         <h3 class="amt-scm-title">${escapeHtml(modalTitle)}</h3>
         <p class="amt-scm-context">${escapeHtml(shareContextLabel)}</p>
-        <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
+        <div class="amt-scm-preview-shell" aria-hidden="true">
+          <span class="amt-scm-preview-orb amt-scm-preview-orb-a"></span>
+          <span class="amt-scm-preview-orb amt-scm-preview-orb-b"></span>
+          <div class="amt-scm-preview-stage">
+            <img class="amt-scm-preview" src="${dataUrl}" alt="Share card preview" />
+            <span class="amt-scm-preview-shine"></span>
+          </div>
+        </div>
         ${previewText ? `<p class="amt-scm-preview-line">“${escapeHtml(previewText)}”</p>` : ''}
         <p class="amt-scm-hint">${escapeHtml(modalHint)}</p>
         <p class="amt-scm-invite">${escapeHtml(invitePrompt)}</p>
         <div class="amt-scm-buttons">
           ${nativeShareBtn}
+          ${animationAllowed ? `<button class="amt-scm-btn amt-scm-toggle-animation" type="button" aria-pressed="${animationEnabled ? 'true' : 'false'}">${escapeHtml(animationToggleLabel())}</button>` : ''}
+          ${animatedShareSupported ? `<button class="amt-scm-btn amt-scm-animated-share" type="button">🎬 ${escapeHtml(animatedShareLabel)}</button>` : ''}
+          ${animatedShareSupported ? `<button class="amt-scm-btn amt-scm-animated-download" type="button">⬇️ ${escapeHtml(animatedDownloadLabel)}</button>` : ''}
           <button class="amt-scm-btn amt-scm-copy-link">
             🔗 ${escapeHtml(copyLinkLabel)}
           </button>
@@ -7773,7 +7957,36 @@
     requestAnimationFrame(() => modal.classList.add('amt-scm-visible'));
 
     const note = modal.querySelector('.amt-scm-platform-note');
+    const toggleAnimationBtn = modal.querySelector('.amt-scm-toggle-animation');
+    const animatedShareBtn = modal.querySelector('.amt-scm-animated-share');
+    const animatedDownloadBtn = modal.querySelector('.amt-scm-animated-download');
     let hasTrackedShare = false;
+
+    function syncAnimationState() {
+      const active = animationAllowed && animationEnabled && !prefersReducedMotion;
+      modal.classList.toggle('amt-scm-animated', active);
+      if (toggleAnimationBtn) {
+        toggleAnimationBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        toggleAnimationBtn.textContent = active ? '↩ Static preview' : '✨ Animated preview';
+        toggleAnimationBtn.title = active
+          ? 'Return to the static share preview'
+          : (prefersReducedMotion ? 'Your system prefers reduced motion' : 'Animate the preview without changing the downloadable image');
+        toggleAnimationBtn.disabled = prefersReducedMotion;
+      }
+    }
+
+    syncAnimationState();
+
+    if (toggleAnimationBtn) {
+      toggleAnimationBtn.addEventListener('click', () => {
+        if (prefersReducedMotion) return;
+        animationEnabled = !animationEnabled;
+        try {
+          localStorage.setItem(animationPrefKey, animationEnabled ? '1' : '0');
+        } catch (e) {}
+        syncAnimationState();
+      });
+    }
 
     function markShareComplete() {
       if (hasTrackedShare) return;
@@ -7791,6 +8004,53 @@
       markShareComplete();
       if (platformName) {
         note.textContent = `✅ Share sheet opened. Choose ${platformName} if it appears in your available apps.`;
+        note.style.display = '';
+      }
+    }
+
+    async function createAnimatedShareAsset() {
+      const motionFilename = downloadName.replace(/\.png$/i, '.webm');
+      const blob = await _recordTheatricalMotionClip(dataUrl, {
+        width: 1080,
+        height: 1350,
+        durationMs: 4200,
+        fps: 30
+      });
+      return { blob, motionFilename };
+    }
+
+    async function handleAnimatedExport(mode) {
+      try {
+        note.textContent = '🎬 Creating animated share clip…';
+        note.style.display = '';
+        const { blob, motionFilename } = await createAnimatedShareAsset();
+        const file = new File([blob], motionFilename, { type: blob.type || 'video/webm' });
+        const sharePayload = canNativeShareFiles && navigator.canShare && navigator.canShare({ files: [file] })
+          ? { files: [file], title: modalTitle, text: shareText, url: pageUrl }
+          : null;
+
+        if (mode === 'share' && sharePayload) {
+          await navigator.share(sharePayload);
+          markShareComplete();
+          note.textContent = '✅ Animated share sheet opened.';
+          note.style.display = '';
+          return;
+        }
+
+        if (mode === 'share' && !sharePayload) {
+          _downloadBlob(blob, motionFilename);
+          markShareComplete();
+          note.textContent = '📥 Animated clip downloaded — attach it to your social app or stories composer.';
+          note.style.display = '';
+          return;
+        }
+
+        _downloadBlob(blob, motionFilename);
+        note.textContent = '📥 Animated clip downloaded.';
+        note.style.display = '';
+      } catch (err) {
+        warn('Animated export failed, falling back to static image:', err);
+        note.textContent = '⚠️ Animated export is unavailable here, so the static image download remains available.';
         note.style.display = '';
       }
     }
@@ -7830,6 +8090,14 @@
           }
         }
       });
+    }
+
+    if (animatedShareBtn) {
+      animatedShareBtn.addEventListener('click', () => handleAnimatedExport('share'));
+    }
+
+    if (animatedDownloadBtn) {
+      animatedDownloadBtn.addEventListener('click', () => handleAnimatedExport('download'));
     }
 
     const copyLinkBtn = modal.querySelector('.amt-scm-copy-link');

@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.16 loaded');
+  log('Ask Mirror Talk Widget v5.9.17 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3067,7 +3067,8 @@
       })
       .filter(item => {
         if (!item.text || !isCompleteReflectionSentence(item.text)) return false;
-        return trimDanglingHeadlineTail(item.text).toLowerCase() !== headlineLower;
+        if (trimDanglingHeadlineTail(item.text).toLowerCase() === headlineLower) return false;
+        return !isDuplicateReflectionLine(item.text, headline);
       })
       .sort((a, b) => b.score - a.score)
       .map(item => item.text);
@@ -3075,7 +3076,7 @@
     const unique = [];
     ranked.forEach(candidate => {
       if (!candidate) return;
-      if (!unique.some(existing => areReflectionLinesTooSimilar(existing, candidate))) {
+      if (!unique.some(existing => isDuplicateReflectionLine(existing, candidate))) {
         unique.push(candidate);
       }
     });
@@ -3091,7 +3092,7 @@
     (candidates || []).forEach(candidate => {
       const clean = ensureReflectionSentence(candidate);
       if (!clean) return;
-      if (!unique.some(existing => areReflectionLinesTooSimilar(existing, clean))) unique.push(clean);
+      if (!unique.some(existing => isDuplicateReflectionLine(existing, clean))) unique.push(clean);
     });
 
     return unique.find(candidate =>
@@ -3267,7 +3268,9 @@
     return bestHero ? bestHero.text : buildThemeReflectionFallback(theme);
   }
 
-  function listCardHeadlineCandidates(text, theme) {
+  function listCardHeadlineCandidates(text, theme, options) {
+    const opts = options || {};
+    const includeFallback = opts.includeFallback !== false;
     const sentences = splitReflectionSentences(text);
     const themeKeywords = getThemeReflectionKeywords(theme);
     const ranked = sentences
@@ -3288,7 +3291,7 @@
     const compact = listCompactSourceReflectionCandidates(text);
     const fallback = buildThemeReflectionFallback(theme);
     const unique = [];
-    [...ranked, ...compact, fallback].forEach(item => {
+    [...ranked, ...compact, ...(includeFallback ? [fallback] : [])].forEach(item => {
       if (!item) return;
       if (!unique.includes(item)) unique.push(item);
     });
@@ -3373,6 +3376,62 @@
       if (rightWords.has(word)) overlap += 1;
     });
     const ratio = overlap / Math.max(1, Math.min(leftWords.size, rightWords.size));
+    return ratio >= 0.56 || (overlap >= 5 && ratio >= 0.45);
+  }
+
+  function isDuplicateReflectionLine(a, b) {
+    const normalize = (value) => trimDanglingHeadlineTail(ensureReflectionSentence(value) || value)
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    const left = normalize(a);
+    const right = normalize(b);
+    if (!left || !right) return false;
+    if (left === right) return true;
+
+    const leftBare = left.replace(/[^a-z0-9\s]/g, '').trim();
+    const rightBare = right.replace(/[^a-z0-9\s]/g, '').trim();
+    if (leftBare && rightBare && (leftBare === rightBare || leftBare.includes(rightBare) || rightBare.includes(leftBare))) {
+      return true;
+    }
+
+    if (areReflectionLinesTooSimilar(left, right)) return true;
+
+    const stopwords = new Set([
+      'about', 'after', 'again', 'also', 'already', 'before', 'being', 'between', 'could', 'does', 'doing',
+      'down', 'each', 'even', 'every', 'feels', 'from', 'have', 'into', 'itself', 'just', 'like', 'likely',
+      'more', 'most', 'need', 'other', 'others', 'perhaps', 'really', 'should', 'some', 'still', 'that',
+      'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those', 'through', 'today', 'toward',
+      'under', 'when', 'where', 'while', 'with', 'without', 'worth', 'would', 'your', 'youre', 'youve', 'yourself'
+    ]);
+    const stem = (term) => {
+      let value = String(term || '').toLowerCase();
+      if (value.endsWith('ing') && value.length > 6) value = value.slice(0, -3);
+      else if (value.endsWith('ed') && value.length > 5) value = value.slice(0, -2);
+      else if (value.endsWith('es') && value.length > 5) value = value.slice(0, -2);
+      else if (value.endsWith('s') && value.length > 4) value = value.slice(0, -1);
+      return value;
+    };
+    const significantTerms = (text) => {
+      const set = new Set();
+      const words = String(text || '').match(/[a-z][a-z']+/g) || [];
+      words.forEach(raw => {
+        const term = stem(raw.replace(/'/g, ''));
+        if (term.length < 4 || stopwords.has(term)) return;
+        set.add(term);
+      });
+      return set;
+    };
+
+    const leftTerms = significantTerms(left);
+    const rightTerms = significantTerms(right);
+    if (!leftTerms.size || !rightTerms.size) return false;
+
+    let overlap = 0;
+    leftTerms.forEach(term => {
+      if (rightTerms.has(term)) overlap += 1;
+    });
+    const ratio = overlap / Math.max(1, Math.min(leftTerms.size, rightTerms.size));
     return ratio >= 0.56 || (overlap >= 5 && ratio >= 0.45);
   }
 
@@ -3589,31 +3648,52 @@
   }
 
   function extractShareHeadline(insight) {
-    // Prioritize API-provided shareable headline (LLM-generated for quality)
-    if (insight.shareable_headline && typeof insight.shareable_headline === 'string') {
-      const apiHeadline = ensureReflectionSentence(insight.shareable_headline);
-      if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
-        return apiHeadline;
-      }
-    }
-
-    // Fallback to extraction from answer/excerpt if API headline not available
+    const theme = insight.theme || '';
+    const themeKeywords = getThemeReflectionKeywords(theme);
+    const fallback = buildThemeReflectionFallback(theme);
+    const allowSyntheticFallback = (insight.shareSource || '') === 'current_answer' || !(insight.shareSource || '').trim();
     const excerpt = ensureReflectionSentence(insight.excerpt || '');
-    const fallback = buildThemeReflectionFallback(insight.theme || '');
-    const answerHeadline = ensureReflectionSentence(extractCardHeadline(insight.answer || '', insight.theme || ''));
-    const answerExcerpt = ensureReflectionSentence(extractInsightExcerpt(insight.answer || '', insight.theme || ''));
-    if (!excerpt) {
-      return answerHeadline || answerExcerpt || fallback;
+    const answerHeadline = ensureReflectionSentence(extractCardHeadline(insight.answer || '', theme));
+    const answerExcerpt = ensureReflectionSentence(extractInsightExcerpt(insight.answer || '', theme));
+    const excerptHeadline = excerpt ? ensureReflectionSentence(extractCardHeadline(excerpt, theme) || excerpt) : '';
+    const apiHeadline = (insight.shareable_headline && typeof insight.shareable_headline === 'string')
+      ? ensureReflectionSentence(insight.shareable_headline)
+      : '';
+
+    const rawCandidates = [apiHeadline, excerptHeadline, answerHeadline, answerExcerpt, excerpt]
+      .filter(Boolean)
+      .map(value => ensureReflectionSentence(value))
+      .filter(Boolean);
+
+    const uniqueCandidates = [];
+    rawCandidates.forEach(candidate => {
+      if (!uniqueCandidates.some(existing => areReflectionLinesTooSimilar(existing, candidate))) {
+        uniqueCandidates.push(candidate);
+      }
+    });
+
+    const ranked = uniqueCandidates
+      .map(candidate => ({
+        text: candidate,
+        score: scoreShareHeadlineCandidate(candidate, themeKeywords)
+      }))
+      .filter(item => item.text && item.score > -Infinity && !isWeakShareHeadlineCandidate(item.text))
+      .sort((a, b) => b.score - a.score);
+
+    if (ranked.length) {
+      return ranked[0].text;
     }
 
-    let candidate = extractCardHeadline(excerpt, insight.theme || '');
-
-    candidate = ensureReflectionSentence(candidate || excerpt);
-    if (isWeakShareHeadlineCandidate(candidate) && answerExcerpt) {
-      candidate = answerHeadline || answerExcerpt;
+    if (!allowSyntheticFallback) {
+      return excerpt ||
+        selectReflectionLine(joinReflectionTextParts([insight.answer || '', insight.excerpt || '']), {
+          themeKeywords,
+          preferUniversal: true
+        }) ||
+        fallback;
     }
 
-    return ensureReflectionSentence(candidate) || answerHeadline || answerExcerpt || fallback;
+    return answerHeadline || answerExcerpt || excerpt || fallback;
   }
 
   function trimDanglingHeadlineTail(text) {
@@ -4552,6 +4632,8 @@
       continuationStrip.style.display = 'none';
       continuationStrip.innerHTML = '';
     }
+
+    window._amtLastShareableHeadline = '';
 
     setLoading(true);
 
@@ -7952,6 +8034,9 @@
       answer: answerBody || note || prompt,
       excerpt: note || sourceExcerpt || prompt,
       theme,
+      shareSource: 'journal_note',
+      sourceQuestion,
+      sourceExcerpt,
       savedAt: Number((entry && entry.savedAt) || Date.now())
     });
   }
@@ -8265,8 +8350,6 @@
     const answer = String((insight && insight.answer) || '').trim();
     const rawExcerpt = String((insight && insight.excerpt) || '').trim();
     const shareableHeadline = String((insight && insight.shareable_headline) || '').trim();
-    console.log('[Normalize] Input shareable_headline:', insight && insight.shareable_headline);
-    console.log('[Normalize] Cleaned shareable_headline:', shareableHeadline);
     const theme = inferReflectionArtifactTheme(
       question,
       `${answer} ${rawExcerpt}`,
@@ -8282,6 +8365,9 @@
       theme,
       excerpt,
       shareable_headline: shareableHeadline,
+      shareSource: String((insight && insight.shareSource) || '').trim(),
+      sourceQuestion: String((insight && insight.sourceQuestion) || '').trim(),
+      sourceExcerpt: String((insight && insight.sourceExcerpt) || '').trim(),
       savedAt: (insight && insight.savedAt) || Date.now()
     };
   }
@@ -8803,24 +8889,43 @@
     
     console.log('[selectFittingShareHeadline] normalized.shareable_headline:', normalized.shareable_headline);
     
-    // Prioritize API-generated shareable_headline if available and fits rendering constraints
+    // API headline is useful, but do not let it dominate if answer-derived candidates are stronger.
     const apiHeadline = normalized.shareable_headline && typeof normalized.shareable_headline === 'string' 
       ? ensureReflectionSentence(normalized.shareable_headline) 
       : '';
     
     console.log('[selectFittingShareHeadline] apiHeadline after ensureReflectionSentence:', apiHeadline);
 
-    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
-      addHeadlineCandidate(apiHeadline);
-    }
-
     const extractedCandidates = listCardHeadlineCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-      normalized.theme || ''
+      normalized.theme || '',
+      { includeFallback: (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim() }
     );
     extractedCandidates.forEach(addHeadlineCandidate);
 
+    if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
+      const bestExtractedScore = extractedCandidates.reduce((best, candidate) => {
+        const score = scoreHeadlinePresentation(candidate);
+        return Number.isFinite(score) ? Math.max(best, score) : best;
+      }, -Infinity);
+      const apiScore = scoreHeadlinePresentation(apiHeadline);
+
+      if (!extractedCandidates.length || apiScore >= (bestExtractedScore + 1.5)) {
+        addHeadlineCandidate(apiHeadline);
+      }
+    }
+
+    const allowSyntheticFallback = (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim();
+    const sourceRescueCandidates = !allowSyntheticFallback
+      ? listCompactSourceReflectionCandidates(joinReflectionTextParts([normalized.excerpt, normalized.answer]))
+      : [];
+
     if (!headlinePool.length) {
+      const sourceRescue = sourceRescueCandidates.find(candidate => fitsAnyProfile(candidate, fitProfiles));
+      if (sourceRescue) {
+        console.log('[Card] Recovered source-grounded headline candidate:', sourceRescue.substring(0, 80) + '...');
+        return sourceRescue;
+      }
       console.log('[Card] No usable headline candidates found, using fallback');
       return buildThemeReflectionFallback(normalized.theme || '');
     }
@@ -8868,6 +8973,12 @@
     if (chosen) {
       console.log('[Card] Selected headline candidate:', chosen.candidate.substring(0, 80) + '...');
       return chosen.candidate;
+    }
+
+    const sourceRescue = sourceRescueCandidates.find(candidate => fitsAnyProfile(candidate, fitProfiles));
+    if (sourceRescue) {
+      console.log('[Card] Recovered source-grounded headline candidate:', sourceRescue.substring(0, 80) + '...');
+      return sourceRescue;
     }
 
     console.log('[Card] Headline candidates available but none fit, using fallback');
@@ -9572,7 +9683,7 @@
       lineHeightRatio: 1.35
     };
     const supportingExcerpt = selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions);
-    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = !!supportingExcerpt && !isDuplicateReflectionLine(headline, supportingExcerpt);
 
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.fillRect(82, 86, W - 164, 2);
@@ -9666,7 +9777,7 @@
       lineHeightRatio: 1.35
     };
     const supportingExcerpt = selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions);
-    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = !!supportingExcerpt && !isDuplicateReflectionLine(headline, supportingExcerpt);
 
     const veil = ctx.createLinearGradient(0, H * 0.18, 0, H);
     veil.addColorStop(0, 'rgba(8,8,8,0.00)');
@@ -9905,7 +10016,7 @@
     const supportingExcerpt = headlineCanShareSpace
       ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
       : '';
-    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = !!supportingExcerpt && !isDuplicateReflectionLine(headline, supportingExcerpt);
     const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
       text: headline,
       maxWidth: headlineOptions.maxWidth,
@@ -10201,7 +10312,7 @@
     const supportingExcerpt = headlineCanShareSpace
       ? selectFittingReflectionLine(ctx, supportingCandidates, excerptFitOptions)
       : '';
-    const showExcerpt = !!supportingExcerpt && !areReflectionLinesTooSimilar(headline, supportingExcerpt);
+    const showExcerpt = !!supportingExcerpt && !isDuplicateReflectionLine(headline, supportingExcerpt);
     const headlineMetrics = getFittedCanvasTextMetrics(ctx, {
       text: headline,
       maxWidth: headlineOptions.maxWidth,
@@ -11322,7 +11433,8 @@
       answer: answerText,
       theme: themeHint || inferTheme(question, answerText),
       savedAt: Date.now(),
-      shareable_headline: window._amtLastShareableHeadline || ''
+      shareable_headline: window._amtLastShareableHeadline || '',
+      shareSource: 'current_answer'
     });
     reflectionInsight.answerMeta = answerMeta || {};
     const pageUrl = buildTrackedPageUrl({

@@ -135,6 +135,13 @@ class Settings(BaseSettings):
     quote_selector_max_weight: float = 3.0
     quote_selector_rollback_min_feedback_score: float = 0.0
 
+    # Card template A/B testing and variant controls
+    card_template_ab_testing_enabled: bool = True
+    card_template_bold_variant_enabled: bool = False  # Feature flag for bold/high-contrast variant
+    card_template_bold_variant_rollout_pct: int = 0  # Percentage of users (0-100) to receive bold variant
+    card_template_track_engagement_enabled: bool = True  # Enable tracking of template performance
+
+
     @field_validator("vapid_private_key")
     @classmethod
     def fix_vapid_pem(cls, v: str) -> str:

@@ -8463,11 +8463,21 @@
       ? ensureReflectionSentence(insight.shareable_headline) 
       : '';
     
+    // A/B test: Randomly assign some users to bold_vibrant variant for testing
+    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
+    const boldVariantEnabled = window.__AMT_AB_TEST_BOLD_VARIANT || false;
+    const boldVariantPct = window.__AMT_BOLD_VARIANT_PCT || 0;
+    const shouldUseBoldVariant = boldVariantEnabled && (seed % 100) < boldVariantPct;
+    
+    // If bold variant A/B test is enabled, use it for a percentage of renders
+    if (shouldUseBoldVariant) {
+      return 'bold_vibrant';
+    }
+    
     // If we have an API headline, prefer card families with more generous height limits
     if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
       const words = apiHeadline.split(/\s+/).filter(Boolean);
       const chars = apiHeadline.length;
-      const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
       
       // For longer API headlines, prefer families with larger canvas limits
       // spotlight: 620px height, 6 lines; poster: 520px, 6 lines
@@ -8489,7 +8499,6 @@
       return 'aura_poster';
     }
 
-    const seed = hashInsightShareSeed(`${insight.theme}|${insight.question}|${insight.excerpt}`);
     const families = ['aura_poster', 'gradient_immersive', 'aura_poster', 'prismatic_quote'];
     return families[seed % families.length];
   }
@@ -8747,6 +8756,127 @@
         qrRenderedSize: qrOuter,
         urlLabel: REFLECTION_CARD_URL_LABEL
       };
+    }
+  }
+
+  function buildBoldVibrantShareCard(ctx, normalized, style, W, H, variant) {
+    // High-contrast bold variant for A/B testing
+    // More vibrant colors, stronger accents, higher engagement appeal
+    const headline = selectFittingShareHeadline(ctx, normalized, {
+      maxWidth: W - 160,
+      maxHeight: 500,
+      maxLines: 5,
+      fontTemplate: '800 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      maxSize: 92,
+      minSize: 50,
+      lineHeightRatio: 1.1
+    });
+
+    const theme = String(normalized.theme || '').toLowerCase();
+    
+    // VIBRANT COLOR PALETTES - designed for high engagement and shareability
+    let bgGrad, accentColor, textColor;
+    
+    if (theme === 'courage' || theme === 'fear') {
+      bgGrad = { stops: ['#ff3d5a', '#ff6b4a', '#ffaa00'] };
+      accentColor = '#ffff00';
+      textColor = '#ffffff';
+    } else if (theme === 'healing' || theme === 'grief') {
+      bgGrad = { stops: ['#00d4aa', '#00b8ff', '#0088ff'] };
+      accentColor = '#ffffff';
+      textColor = '#ffffff';
+    } else if (theme === 'faith' || theme === 'forgiveness' || theme === 'inner peace') {
+      bgGrad = { stops: ['#9b59b6', '#8e44ad', '#c471ed'] };
+      accentColor = '#ffe066';
+      textColor = '#ffffff';
+    } else if (theme === 'leadership' || theme === 'boundaries') {
+      bgGrad = { stops: ['#2c3e50', '#3498db', '#00d9ff'] };
+      accentColor = '#00ff99';
+      textColor = '#ffffff';
+    } else if (theme === 'gratitude' || theme === 'empowerment') {
+      bgGrad = { stops: ['#ff6b35', '#ff8c42', '#ffa500'] };
+      accentColor = '#ffffff';
+      textColor = '#ffffff';
+    } else {
+      bgGrad = { stops: [style.bg[0] || '#2c3e50', style.bg[1] || '#3498db', style.bg[2] || '#00d9ff'] };
+      accentColor = '#ffff00';
+      textColor = '#ffffff';
+    }
+    
+    // Strong background gradient
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, bgGrad.stops[0]);
+    grad.addColorStop(0.5, bgGrad.stops[1]);
+    grad.addColorStop(1, bgGrad.stops[2]);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Add bold geometric elements for visual interest
+    const overlay = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.9);
+    overlay.addColorStop(0, 'rgba(0,0,0,0)');
+    overlay.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Bold decorative circles - high contrast
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath();
+    ctx.arc(W * 0.1, H * 0.15, 140, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(W * 0.9, H * 0.8, 180, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // TOP ACCENT BAR - bold and eye-catching
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, W, 8);
+    
+    // Theme label - bold, high-contrast
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, 90);
+    
+    // DIVIDER LINE - accent color
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.25, 110);
+    ctx.lineTo(W * 0.75, 110);
+    ctx.stroke();
+    
+    // Main quote - BOLD, LARGE, HIGH CONTRAST
+    ctx.fillStyle = textColor;
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 32;
+    ctx.shadowOffsetY = 12;
+    
+    const quoteMetrics = drawFittedCanvasText(ctx, {
+      text: headline,
+      x: W / 2,
+      y: H / 2 - 80,
+      maxWidth: W - 160,
+      maxHeight: 500,
+      maxLines: 5,
+      align: 'center',
+      fontTemplate: '800 __SIZE__px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      maxSize: 92,
+      minSize: 50,
+      lineHeightRatio: 1.1
+    });
+    
+    ctx.shadowColor = 'transparent';
+    
+    // Bottom accent bar
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, H - 8, W, 8);
+    
+    // Footer with branding and QR
+    const footerStyle = { ...style, text: textColor, accent: accentColor };
+    drawShareFooter(ctx, footerStyle, W, H - 180, 'center');
+    
+    if (ENABLE_TEST_EXPORTS) {
+      window.__AMT_LAST_RENDER_DEBUG__ = { family: 'bold_vibrant', headline };
     }
   }
 
@@ -10108,6 +10238,8 @@
     }
     if (family === 'aura_poster') {
       buildAuraPosterShareCard(ctx, normalized, style, W, H, variant);
+    } else if (family === 'bold_vibrant') {
+      buildBoldVibrantShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'poster') {
       buildPosterInsightShareCard(ctx, normalized, style, W, H, variant);
     } else if (family === 'gradient_immersive') {

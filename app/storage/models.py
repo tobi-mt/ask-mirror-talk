@@ -221,6 +221,26 @@ class PushQotdQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class CardTemplateVariant(Base):
+    """Track which card template variant was shown and engagement metrics for A/B testing."""
+    __tablename__ = "card_template_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    user_ip: Mapped[str] = mapped_column(String(100), index=True)
+    device_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    template_family: Mapped[str] = mapped_column(String(50), index=True)  # 'editorial', 'aura_poster', 'poster', 'spotlight', 'minimal', 'bold_vibrant'
+    template_variant: Mapped[int] = mapped_column(Integer)  # visual variant 0-3
+    qa_log_id: Mapped[int | None] = mapped_column(ForeignKey("qa_logs.id"), nullable=True)
+    question_theme: Mapped[str] = mapped_column(String(100), nullable=True)
+    was_shared: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    was_liked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    was_skipped: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    shares_count: Mapped[int] = mapped_column(Integer, default=0)
+    engagement_score: Mapped[float] = mapped_column(Float, default=0.0)  # share=2.0, like=1.0, skip=-1.0
+    ab_test_group: Mapped[str] = mapped_column(String(50), default="control", index=True)  # 'control' or 'bold_variant'
+
+
 class QuoteSelectorWeightVersion(Base):
     """Versioned quote selector weights with active pointer for safe rollback."""
     __tablename__ = "quote_selector_weight_versions"

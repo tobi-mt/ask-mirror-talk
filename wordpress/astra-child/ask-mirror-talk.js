@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.14 loaded');
+  log('Ask Mirror Talk Widget v5.9.15 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -3109,6 +3109,47 @@
     ) || '';
   }
 
+  function scoreShareHeadlineCandidate(text, themeKeywords) {
+    const clean = ensureReflectionSentence(stripSpeakerAttribution(text) || text);
+    if (!clean) return -Infinity;
+
+    const words = clean.split(/\s+/).filter(Boolean);
+    const length = clean.length;
+    let score = scoreReflectionSentence(clean, {
+      themeKeywords: themeKeywords || [],
+      preferUniversal: true
+    });
+
+    if (isWeakShareHeadlineCandidate(clean)) score -= 35;
+
+    if (length >= 60 && length <= 150) score += 10;
+    else if (length >= 45 && length <= 180) score += 6;
+    else if (length < 38) score -= 8;
+    else if (length > 220) score -= 6;
+
+    if (words.length >= 9 && words.length <= 22) score += 8;
+    else if (words.length >= 7 && words.length <= 26) score += 4;
+    else if (words.length > 30) score -= 5;
+    else if (words.length < 5) score -= 8;
+
+    if (/\b(you|your|we|our|this|today|season|truth|heart|self|growth|courage|healing|peace|faith|grace|worth|clarity|wisdom|change|choice|honesty|patience|resilience|connection|trust|strength)\b/i.test(clean)) {
+      score += 3;
+    }
+
+    if (/\b(remind|teaches?|shows?|helps?|invites?|allows?|requires?|protects?|releases?|restores?|grounds?|becomes?|carries?|chooses?|trusts?|honors?|listens?|speaks?|leads?|holds?|returns?|stays?|reveals?|shapes?|guides?)\b/i.test(clean)) {
+      score += 2;
+    }
+
+    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) score -= 8;
+    if (/^(what|how|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) score -= 10;
+    if (/^(in this reflection|this reflection|one thing that stood out|here are grounded reflections|i found a few mirror talk moments|the clearest thread is this|one source moment says)\b/i.test(clean.toLowerCase())) score -= 15;
+
+    if (/[,:;]$/.test(clean)) score -= 4;
+    if (/[,;:]/.test(clean)) score += 1;
+
+    return score;
+  }
+
   function inferReflectionArtifactTheme(questionText, bodyText, providedTheme) {
     const provided = String(providedTheme || '').trim();
     if (provided && provided.toLowerCase() !== 'reflection') return provided;
@@ -3211,21 +3252,15 @@
     const ranked = sentences
       .map(sentence => {
         const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
-        const score = scoreReflectionSentence(cleaned, {
-          themeKeywords,
-          preferUniversal: true,
-          preferShort: true
-        });
+        const score = scoreShareHeadlineCandidate(cleaned, themeKeywords);
         const words = cleaned.split(/\s+/).filter(Boolean);
-        const lengthPenalty = cleaned.length > 126 ? 6 : cleaned.length > 112 ? 3 : 0;
-        const wordPenalty = words.length > 18 ? 4 : words.length > 15 ? 2 : 0;
         return {
           text: cleaned,
-          score: score - lengthPenalty - wordPenalty,
+          score,
           fitsHero: cleaned.length >= 38 && cleaned.length <= 170 && words.length >= 6 && words.length <= 26
         };
       })
-      .filter(item => item.text && isCompleteReflectionSentence(item.text))
+      .filter(item => item.text && item.score >= 0 && isCompleteReflectionSentence(item.text))
       .sort((a, b) => b.score - a.score);
 
     const bestHero = ranked.find(item => item.fitsHero && item.score >= 3);
@@ -3239,16 +3274,10 @@
       .map(sentence => {
         const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
         const words = cleaned.split(/\s+/).filter(Boolean);
-        const score = scoreReflectionSentence(cleaned, {
-          themeKeywords,
-          preferUniversal: true,
-          preferShort: true
-        });
-        const lengthPenalty = cleaned.length > 126 ? 6 : cleaned.length > 112 ? 3 : 0;
-        const wordPenalty = words.length > 18 ? 4 : words.length > 15 ? 2 : 0;
+        const score = scoreShareHeadlineCandidate(cleaned, themeKeywords);
         return {
           text: cleaned,
-          score: score - lengthPenalty - wordPenalty,
+          score,
           fitsHero: cleaned.length >= 38 && cleaned.length <= 170 && words.length >= 6 && words.length <= 26
         };
       })
@@ -7739,28 +7768,57 @@
       const elapsed = Math.max(0, now - start);
       const progress = Math.min(1, elapsed / durationMs);
       const phase = progress * Math.PI * 2;
-      const float = Math.sin(phase * 1.25) * 0.012;
-      const zoom = 1.02 + (Math.sin(phase * 0.5) * 0.018);
-      const shiftX = Math.sin(phase * 0.85) * 16;
-      const shiftY = Math.cos(phase * 0.72) * 12;
+      const slowPhase = progress * Math.PI * 2 * 0.55;
 
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = '#0f0b09';
+      const bg = ctx.createLinearGradient(0, 0, width, height);
+      bg.addColorStop(0, '#0b0806');
+      bg.addColorStop(0.42, '#15100d');
+      bg.addColorStop(1, '#090705');
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
 
+      const bloomA = ctx.createRadialGradient(width * 0.14, height * 0.18, 0, width * 0.14, height * 0.18, 300);
+      bloomA.addColorStop(0, 'rgba(255,208,144,0.22)');
+      bloomA.addColorStop(0.5, 'rgba(255,208,144,0.10)');
+      bloomA.addColorStop(1, 'rgba(255,214,156,0)');
       ctx.save();
-      ctx.translate(width / 2, height / 2);
-      ctx.scale(zoom, zoom);
-      ctx.translate(-width / 2 + shiftX, -height / 2 + shiftY + (height * float));
-      ctx.drawImage(image, 0, 0, width, height);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = bloomA;
+      ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
-      const sweepX = ((elapsed / durationMs) * (width + 480)) - 240;
-      const sweepGrad = ctx.createLinearGradient(sweepX - 180, 0, sweepX + 180, height);
+      const bloomB = ctx.createRadialGradient(width * 0.86, height * 0.76, 0, width * 0.86, height * 0.76, 320);
+      bloomB.addColorStop(0, 'rgba(122,206,255,0.16)');
+      bloomB.addColorStop(0.5, 'rgba(122,206,255,0.07)');
+      bloomB.addColorStop(1, 'rgba(122,206,255,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = bloomB;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      const backGlow = ctx.createRadialGradient(width / 2, height * 0.55, 0, width / 2, height * 0.55, height * 0.82);
+      backGlow.addColorStop(0, 'rgba(255,255,255,0.01)');
+      backGlow.addColorStop(0.64, 'rgba(0,0,0,0.04)');
+      backGlow.addColorStop(1, 'rgba(0,0,0,0.26)');
+      ctx.fillStyle = backGlow;
+      ctx.fillRect(0, 0, width, height);
+
+      const cardScale = 1.0;
+      const cardX = 0;
+      const cardY = 0;
+      ctx.save();
+      ctx.globalAlpha = 0.94;
+      ctx.drawImage(image, cardX, cardY, width * cardScale, height * cardScale);
+      ctx.restore();
+
+      const sweepX = ((elapsed / durationMs) * (width + 700)) - 350;
+      const sweepGrad = ctx.createLinearGradient(sweepX - 320, 0, sweepX + 260, height);
       sweepGrad.addColorStop(0, 'rgba(255,255,255,0)');
-      sweepGrad.addColorStop(0.45, 'rgba(255,255,255,0.06)');
-      sweepGrad.addColorStop(0.5, 'rgba(255,255,255,0.28)');
-      sweepGrad.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+      sweepGrad.addColorStop(0.42, 'rgba(255,255,255,0.01)');
+      sweepGrad.addColorStop(0.5, 'rgba(255,240,210,0.14)');
+      sweepGrad.addColorStop(0.58, 'rgba(255,255,255,0.01)');
       sweepGrad.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
@@ -7768,21 +7826,23 @@
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
-      const pulseRadius = 130 + Math.sin(phase * 2.1) * 20;
-      const pulseGrad = ctx.createRadialGradient(scene.glowX, scene.glowY, 0, scene.glowX, scene.glowY, pulseRadius);
-      pulseGrad.addColorStop(0, 'rgba(255,244,214,0.30)');
-      pulseGrad.addColorStop(0.45, 'rgba(255,180,88,0.14)');
-      pulseGrad.addColorStop(1, 'rgba(255,180,88,0)');
+      const haloRadius = 160 + Math.sin(slowPhase) * 20;
+      const haloGrad = ctx.createRadialGradient(scene.glowX, scene.glowY, 0, scene.glowX, scene.glowY, haloRadius);
+      haloGrad.addColorStop(0, 'rgba(255,246,224,0.18)');
+      haloGrad.addColorStop(0.44, 'rgba(255,206,122,0.10)');
+      haloGrad.addColorStop(1, 'rgba(255,206,122,0)');
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      ctx.fillStyle = pulseGrad;
+      ctx.fillStyle = haloGrad;
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
-      const orbRadius = 88 + Math.sin(phase * 1.7) * 10;
-      const orbGrad = ctx.createRadialGradient(width * 0.82, height * 0.18, 0, width * 0.82, height * 0.18, orbRadius);
-      orbGrad.addColorStop(0, 'rgba(118,226,255,0.24)');
-      orbGrad.addColorStop(0.55, 'rgba(118,226,255,0.12)');
+      const orbRadius = 104 + Math.sin(phase * 0.95) * 10;
+      const orbX = width * 0.78 + Math.sin(slowPhase * 0.8) * 22;
+      const orbY = height * 0.22 + Math.cos(slowPhase * 0.75) * 18;
+      const orbGrad = ctx.createRadialGradient(orbX, orbY, 0, orbX, orbY, orbRadius);
+      orbGrad.addColorStop(0, 'rgba(118,226,255,0.18)');
+      orbGrad.addColorStop(0.55, 'rgba(118,226,255,0.07)');
       orbGrad.addColorStop(1, 'rgba(118,226,255,0)');
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
@@ -7790,15 +7850,55 @@
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
-      const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.22, width / 2, height / 2, height * 0.76);
+      const emberX = width * 0.18 + Math.cos(slowPhase * 0.9) * 18;
+      const emberY = height * 0.78 + Math.sin(slowPhase * 0.7) * 16;
+      const emberGrad = ctx.createRadialGradient(emberX, emberY, 0, emberX, emberY, 90);
+      emberGrad.addColorStop(0, 'rgba(255,178,96,0.16)');
+      emberGrad.addColorStop(0.58, 'rgba(255,178,96,0.06)');
+      emberGrad.addColorStop(1, 'rgba(255,178,96,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = emberGrad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      const fineGrain = ctx.createLinearGradient(0, 0, width, 0);
+      fineGrain.addColorStop(0, 'rgba(255,255,255,0.018)');
+      fineGrain.addColorStop(0.5, 'rgba(255,255,255,0)');
+      fineGrain.addColorStop(1, 'rgba(255,255,255,0.012)');
+      ctx.fillStyle = fineGrain;
+      ctx.fillRect(0, 0, width, height);
+
+      const dustCount = 24;
+      for (let i = 0; i < dustCount; i += 1) {
+        const seed = i * 97.13;
+        const px = (width * (0.08 + ((seed % 73) / 100))) + Math.sin(phase * (0.35 + (i % 5) * 0.06) + seed) * 22;
+        const py = (height * (0.12 + ((seed % 61) / 100))) + Math.cos(phase * (0.28 + (i % 7) * 0.05) + seed) * 18;
+        const size = 0.8 + ((i % 4) * 0.25);
+        const alpha = 0.04 + ((Math.sin(phase * 1.1 + seed) + 1) * 0.018);
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.fillRect(px, py, size, size);
+      }
+
+      const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.28, width / 2, height / 2, height * 0.78);
       vignette.addColorStop(0, 'rgba(0,0,0,0)');
-      vignette.addColorStop(0.72, 'rgba(0,0,0,0.06)');
-      vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+      vignette.addColorStop(0.68, 'rgba(0,0,0,0.08)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.36)');
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, width, height);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      ctx.fillRect(54, 54, width - 108, height - 108);
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(56, 56, width - 112, height - 112);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = 'rgba(255,239,212,0.08)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(width * 0.5, height * 0.52, height * 0.34 + Math.sin(slowPhase) * 8, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+      ctx.restore();
 
       if (progress < 1) {
         rafId = requestAnimationFrame(drawFrame);
@@ -8634,6 +8734,66 @@
 
   function selectFittingShareHeadline(ctx, normalized, fitOptions) {
     const opts = fitOptions || {};
+    const headlinePool = [];
+
+    const addHeadlineCandidate = (value) => {
+      const clean = ensureReflectionSentence(value);
+      if (!clean) return;
+      if (!headlinePool.some(existing => trimDanglingHeadlineTail(existing).toLowerCase() === trimDanglingHeadlineTail(clean).toLowerCase())) {
+        headlinePool.push(clean);
+      }
+    };
+
+    const scoreHeadlinePresentation = (text) => {
+      return scoreShareHeadlineCandidate(text, getThemeReflectionKeywords(normalized.theme || ''));
+    };
+
+    const fitsAnyProfile = (candidate, profiles) => profiles.some(profile => canRenderCanvasTextFully(
+      ctx,
+      candidate,
+      profile.maxWidth,
+      profile.maxHeight,
+      profile.maxLines,
+      profile.fontTemplate,
+      profile.maxSize,
+      profile.minSize,
+      profile.lineHeightRatio
+    ));
+
+    const fitProfiles = [
+      {
+        maxWidth: opts.maxWidth,
+        maxHeight: opts.maxHeight,
+        maxLines: opts.maxLines,
+        fontTemplate: opts.fontTemplate,
+        maxSize: opts.maxSize,
+        minSize: opts.minSize,
+        lineHeightRatio: opts.lineHeightRatio
+      },
+      {
+        maxWidth: opts.maxWidth,
+        maxHeight: opts.maxHeight * 1.15,
+        maxLines: Math.min(7, opts.maxLines + 1),
+        fontTemplate: opts.fontTemplate,
+        maxSize: opts.maxSize,
+        minSize: Math.max(28, Math.floor(opts.minSize * 0.85)),
+        lineHeightRatio: opts.lineHeightRatio
+      }
+    ];
+
+    const bestCandidate = headlinePool
+      .map(candidate => ({
+        candidate,
+        score: scoreHeadlinePresentation(candidate),
+        fits: fitsAnyProfile(candidate, fitProfiles)
+      }))
+      .filter(item => item.fits)
+      .sort((a, b) => b.score - a.score || b.candidate.length - a.candidate.length)[0];
+
+    if (bestCandidate) {
+      console.log('[Card] Selected headline candidate:', bestCandidate.candidate.substring(0, 80) + '...');
+      return bestCandidate.candidate;
+    };
     
     console.log('[selectFittingShareHeadline] normalized.shareable_headline:', normalized.shareable_headline);
     
@@ -8643,84 +8803,24 @@
       : '';
     
     console.log('[selectFittingShareHeadline] apiHeadline after ensureReflectionSentence:', apiHeadline);
-    
-    // Try API headline first if it's not weak and fits the canvas
+
     if (apiHeadline && !isWeakShareHeadlineCandidate(apiHeadline)) {
-      // First try: use provided constraints
-      if (canRenderCanvasTextFully(
-        ctx,
-        apiHeadline,
-        opts.maxWidth,
-        opts.maxHeight,
-        opts.maxLines,
-        opts.fontTemplate,
-        opts.maxSize,
-        opts.minSize,
-        opts.lineHeightRatio
-      )) {
-        console.log('[Card] Using API-generated headline:', apiHeadline.substring(0, 60) + '...');
-        return apiHeadline;
-      }
-      
-      // Second try: allow smaller font size (reduce minSize by 20%)
-      const flexibleMinSize = Math.max(28, Math.floor(opts.minSize * 0.8));
-      if (canRenderCanvasTextFully(
-        ctx,
-        apiHeadline,
-        opts.maxWidth,
-        opts.maxHeight,
-        opts.maxLines,
-        opts.fontTemplate,
-        opts.maxSize,
-        flexibleMinSize,
-        opts.lineHeightRatio
-      )) {
-        console.log('[Card] Using API headline with reduced font size (min:', flexibleMinSize + 'px)');
-        return apiHeadline;
-      }
-      
-      // Third try: allow one more line if we're close
-      const flexibleMaxLines = Math.min(7, opts.maxLines + 1);
-      if (canRenderCanvasTextFully(
-        ctx,
-        apiHeadline,
-        opts.maxWidth,
-        opts.maxHeight * 1.15,  // 15% more height
-        flexibleMaxLines,
-        opts.fontTemplate,
-        opts.maxSize,
-        flexibleMinSize,
-        opts.lineHeightRatio
-      )) {
-        console.log('[Card] Using API headline with extra line (max:', flexibleMaxLines, 'lines)');
-        return apiHeadline;
-      }
-      
-      console.log('[Card] API headline exists but doesn\'t fit canvas constraints, using fallback');
-    } else if (!apiHeadline) {
-      console.log('[Card] No API headline available, extracting from answer text');
-    } else {
-      console.log('[Card] API headline is weak/generic, using fallback');
+      addHeadlineCandidate(apiHeadline);
     }
-    
-    // Fallback to extraction from answer text if API headline not usable
-    const candidates = listCardHeadlineCandidates(
+
+    const extractedCandidates = listCardHeadlineCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || ''
     );
-    return candidates.find(candidate =>
-      canRenderCanvasTextFully(
-        ctx,
-        candidate,
-        opts.maxWidth,
-        opts.maxHeight,
-        opts.maxLines,
-        opts.fontTemplate,
-        opts.maxSize,
-        opts.minSize,
-        opts.lineHeightRatio
-      )
-    ) || buildThemeReflectionFallback(normalized.theme || '');
+    extractedCandidates.forEach(addHeadlineCandidate);
+
+    if (!headlinePool.length) {
+      console.log('[Card] No usable headline candidates found, using fallback');
+      return buildThemeReflectionFallback(normalized.theme || '');
+    }
+
+    console.log('[Card] Headline candidates available but none fit, using fallback');
+    return buildThemeReflectionFallback(normalized.theme || '');
   }
 
   function getInsightShareFamily(insight) {

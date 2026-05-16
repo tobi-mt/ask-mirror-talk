@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.15 loaded');
+  log('Ask Mirror Talk Widget v5.9.16 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -8735,6 +8735,7 @@
   function selectFittingShareHeadline(ctx, normalized, fitOptions) {
     const opts = fitOptions || {};
     const headlinePool = [];
+    const themeKeywords = getThemeReflectionKeywords(normalized.theme || '');
 
     const addHeadlineCandidate = (value) => {
       const clean = ensureReflectionSentence(value);
@@ -8745,7 +8746,26 @@
     };
 
     const scoreHeadlinePresentation = (text) => {
-      return scoreShareHeadlineCandidate(text, getThemeReflectionKeywords(normalized.theme || ''));
+      return scoreShareHeadlineCandidate(text, themeKeywords);
+    };
+
+    const scoreInsightDepth = (text) => {
+      const clean = ensureReflectionSentence(text);
+      if (!clean) return -Infinity;
+      const lower = clean.toLowerCase();
+      const words = clean.split(/\s+/).filter(Boolean);
+      let depth = 0;
+
+      // Signals of reflective reasoning depth.
+      if (/\b(because|so that|which means|this means|therefore|instead of|rather than|even when|even if|in the midst|without requiring|as you|when you)\b/i.test(lower)) depth += 5;
+      if (/\b(pattern|habit|truth|clarity|healing|growth|connection|resilience|compassion|grace|wisdom|defensiveness|boundaries|vulnerability|integrity|alignment|agency|identity|belonging)\b/i.test(lower)) depth += 4;
+      if (/\b(acknowledg|recogniz|discern|separate|release|repair|rebuild|transform|reconnect|honor|protect|choose|practice|cultivate|integrate|reflect)\w*\b/i.test(lower)) depth += 3;
+      if (/\b(you|your|we|our)\b/i.test(lower)) depth += 1;
+      if (words.length >= 10 && words.length <= 24) depth += 3;
+      else if (words.length >= 8 && words.length <= 28) depth += 1;
+      if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) depth -= 6;
+
+      return depth;
     };
 
     const fitsAnyProfile = (candidate, profiles) => profiles.some(profile => canRenderCanvasTextFully(
@@ -8780,20 +8800,6 @@
         lineHeightRatio: opts.lineHeightRatio
       }
     ];
-
-    const bestCandidate = headlinePool
-      .map(candidate => ({
-        candidate,
-        score: scoreHeadlinePresentation(candidate),
-        fits: fitsAnyProfile(candidate, fitProfiles)
-      }))
-      .filter(item => item.fits)
-      .sort((a, b) => b.score - a.score || b.candidate.length - a.candidate.length)[0];
-
-    if (bestCandidate) {
-      console.log('[Card] Selected headline candidate:', bestCandidate.candidate.substring(0, 80) + '...');
-      return bestCandidate.candidate;
-    };
     
     console.log('[selectFittingShareHeadline] normalized.shareable_headline:', normalized.shareable_headline);
     
@@ -8817,6 +8823,51 @@
     if (!headlinePool.length) {
       console.log('[Card] No usable headline candidates found, using fallback');
       return buildThemeReflectionFallback(normalized.theme || '');
+    }
+
+    const scoredCandidates = headlinePool
+      .map(candidate => ({
+        candidate,
+        score: scoreHeadlinePresentation(candidate),
+        depth: scoreInsightDepth(candidate),
+        fits: fitsAnyProfile(candidate, fitProfiles)
+      }))
+      .filter(item => item.fits)
+      .sort((a, b) => b.score - a.score || b.depth - a.depth || b.candidate.length - a.candidate.length);
+
+    if (DEBUG) {
+      const preview = scoredCandidates
+        .slice(0, 5)
+        .map(item => ({
+          score: Number(item.score.toFixed(2)),
+          depth: item.depth,
+          fits: item.fits,
+          candidate: item.candidate
+        }));
+      console.log('[ShareHeadlineSelector] Candidate ranking (top 5):', preview);
+    }
+
+    const top = scoredCandidates[0];
+    const second = scoredCandidates[1];
+    const closeScoreThreshold = 2.0;
+    let chosen = top;
+
+    if (top && second && Math.abs(top.score - second.score) <= closeScoreThreshold && second.depth > top.depth) {
+      chosen = second;
+      if (DEBUG) {
+        console.log('[ShareHeadlineSelector] Close score tie-break by insight depth:', {
+          topScore: Number(top.score.toFixed(2)),
+          secondScore: Number(second.score.toFixed(2)),
+          topDepth: top.depth,
+          secondDepth: second.depth,
+          chosen: second.candidate
+        });
+      }
+    }
+
+    if (chosen) {
+      console.log('[Card] Selected headline candidate:', chosen.candidate.substring(0, 80) + '...');
+      return chosen.candidate;
     }
 
     console.log('[Card] Headline candidates available but none fit, using fallback');

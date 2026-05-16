@@ -20,6 +20,7 @@ openai>=1.0.0
 
 # Embedding
 sentence-transformers>=2.6.0
+transformers>=4.40.0
 
 # Push Notifications
 pywebpush>=2.0.0

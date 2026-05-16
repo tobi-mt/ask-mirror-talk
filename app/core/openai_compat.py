@@ -3,10 +3,29 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
+
+from transformers import pipeline
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+@lru_cache(maxsize=1)
+def _load_primary_model():
+    return pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english",
+    )
+
+
+@lru_cache(maxsize=1)
+def _load_secondary_model():
+    return pipeline(
+        "sentiment-analysis",
+        model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+    )
 
 def is_reasoning_chat_model(model: str | None) -> bool:
     """Return True for newer reasoning-style chat models with stricter params."""
@@ -137,4 +156,37 @@ def create_chat_completion(
             return client.chat.completions.create(**retry_payload)
         
         # Re-raise if it's not a parameter compatibility issue
+        raise
+
+
+def openai_semantic_score(text: str, context: dict = None) -> float:
+    """
+    Use a transformer model to score the semantic/emotional resonance of the text.
+    Returns a float between 0 and 1 (higher is more positive/engaging).
+    """
+    _ = context
+    if not settings.quote_selector_model_enabled:
+        return 0.5
+
+    if not text or not text.strip():
+        return 0.0
+
+    try:
+        result = _load_primary_model()(text)
+        label = str(result[0]["label"]).upper()
+        score = float(result[0]["score"])
+        primary_score = score if "POS" in label else 1.0 - score
+
+        if settings.quote_selector_ensemble_enabled:
+            second = _load_secondary_model()(text)
+            label2 = str(second[0]["label"]).upper()
+            score2 = float(second[0]["score"])
+            secondary_score = score2 if "POS" in label2 else 1.0 - score2
+            return (primary_score * 0.7) + (secondary_score * 0.3)
+
+        return primary_score
+    except Exception as exc:
+        if settings.quote_selector_fallback_enabled:
+            logger.warning("Semantic model failed; using fallback score: %s", exc)
+            return 0.5
         raise

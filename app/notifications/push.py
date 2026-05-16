@@ -19,7 +19,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.openai_compat import create_chat_completion
+from app.core.openai_compat import create_chat_completion, openai_semantic_score
+from app.core.quote_selector import QuoteSelector, QuoteCandidate
+from app.core.feedback_logger import log_quote_feedback
+from app.core.quote_selector import QuoteSelector, QuoteCandidate
+from app.core.quote_selector import QuoteSelector, QuoteCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -987,47 +991,30 @@ def send_qotd_notification(db: Session) -> dict:
         ).fetchall()
         seen_ids = {r[0] for r in seen_rows}
 
-        # Pick the first unseen question with intelligent theming:
-        # Priority 1: Holiday theme (if today is a special holiday)
-        # Priority 2: Weekday themes (e.g., Monday motivation)
-        # Priority 3: Normal rotation (any unseen question)
-        next_qotd = None
-        selection_strategy = "normal"  # Track which strategy was used
-        
-        # Try holiday theme first
-        if holiday_theme:
-            next_qotd = next(
-                (pool_by_id[qid] for qid in pool_ids 
-                 if qid not in seen_ids and pool_by_id[qid].get("theme") == holiday_theme),
-                None
-            )
-            if next_qotd:
-                selection_strategy = "holiday"
-                logger.debug("Subscriber %d: selected holiday-themed question (theme=%s)", sub_id, holiday_theme)
-        
-        # Try weekday themes (in priority order)
-        if next_qotd is None and weekday_themes:
-            for theme in weekday_themes:
-                next_qotd = next(
-                    (pool_by_id[qid] for qid in pool_ids 
-                     if qid not in seen_ids and pool_by_id[qid].get("theme") == theme),
-                    None
-                )
-                if next_qotd:
-                    selection_strategy = "weekday"
-                    logger.debug("Subscriber %d: selected weekday-themed question (theme=%s)", sub_id, theme)
-                    break
-        
-        # Fall back to first unseen question
-        if next_qotd is None:
-            next_qotd = next((pool_by_id[qid] for qid in pool_ids if qid not in seen_ids), None)
-
-        # Should never happen after the refill above, but guard anyway
-        if next_qotd is None:
+        # Gather all candidate questions (holiday, weekday, normal)
+        candidates = []
+        context = {
+            "theme": holiday_theme or (weekday_themes[0] if weekday_themes else None),
+            "user_ip": user_ip,
+            "recent_theme": _primary_theme_from_questions(_recent_user_questions(db, user_ip, days=21, limit=5)),
+        }
+        for qid in pool_ids:
+            if qid in seen_ids:
+                continue
+            q = pool_by_id[qid]
+            candidates.append(QuoteCandidate(
+                text=q["question"],
+                meta={"id": qid, "theme": q.get("theme"), "hook": q.get("hook"), "emoji": q.get("emoji")}
+            ))
+        # Use QuoteSelector to pick the best candidate
+        selector = QuoteSelector(nlp_model=openai_semantic_score, feedback_logger=log_quote_feedback)
+        best = selector.select_best(candidates, context)
+        if not best:
             logger.warning("Subscriber %d has seen all %d questions — skipping", sub_id, len(pool))
             continue
-
-        qotd = next_qotd
+        # Find the actual qotd dict
+        qotd = pool_by_id[best.meta["id"]]
+        selection_strategy = "smart"
         recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
         recent_theme = _primary_theme_from_questions(recent_questions)
         is_returning = bool(recent_questions)
@@ -1529,7 +1516,7 @@ def send_midday_motivation_notification(db: Session) -> dict:
                 db.flush()
                 logger.debug("Subscriber %d → personalized motivation (msg %d)", sub_id, msg_id)
 
-        # ── 2. Fall back to shared pool ─────────────────────────────────────
+        # ── 2. Fall back to shared pool (now with smart selection) ──────────
         if title is None:
             seen_ids = {
                 r[0] for r in db.execute(
@@ -1537,51 +1524,31 @@ def send_midday_motivation_notification(db: Session) -> dict:
                     {"sid": sub_id},
                 ).fetchall()
             }
-            
-            # Intelligent theme selection:
-            # Priority 1: Holiday theme (if today is a special holiday)
-            # Priority 2: Weekday themes (e.g., Monday motivation)
-            # Priority 3: Normal rotation (any unseen message)
-            next_msg = None
-            
-            # Try holiday theme first
-            if holiday_theme:
-                next_msg = next(
-                    (pool_by_id[mid] for mid in pool_ids 
-                     if mid not in seen_ids and pool_by_id[mid].get("theme", "").lower() == holiday_theme.lower()),
-                    None
-                )
-                if next_msg:
-                    selection_strategy = "holiday"
-                    logger.debug("Subscriber %d: selected holiday-themed motivation (theme=%s)", sub_id, holiday_theme)
-            
-            # Try weekday themes (in priority order)
-            if next_msg is None and weekday_themes:
-                for theme in weekday_themes:
-                    next_msg = next(
-                        (pool_by_id[mid] for mid in pool_ids 
-                         if mid not in seen_ids and pool_by_id[mid].get("theme", "").lower() == theme.lower()),
-                        None
-                    )
-                    if next_msg:
-                        selection_strategy = "weekday"
-                        logger.debug("Subscriber %d: selected weekday-themed motivation (theme=%s)", sub_id, theme)
-                        break
-            
-            # Fall back to first unseen message
-            if next_msg is None:
-                next_msg = next((pool_by_id[mid] for mid in pool_ids if mid not in seen_ids), None)
-            
-            if next_msg is None:
-                # All messages seen — restart from beginning
-                next_msg = pool_by_id[pool_ids[0]] if pool_ids else None
-            if next_msg is None:
+            candidates = []
+            context = {
+                "theme": holiday_theme or (weekday_themes[0] if weekday_themes else None),
+                "user_ip": user_ip,
+                "recent_theme": recent_theme,
+            }
+            for mid in pool_ids:
+                if mid in seen_ids:
+                    continue
+                m = pool_by_id[mid]
+                candidates.append(QuoteCandidate(
+                    text=m["body"],
+                    meta={"id": mid, "theme": m.get("theme"), "title": m.get("title")}
+                ))
+            selector = QuoteSelector(nlp_model=openai_semantic_score, feedback_logger=log_quote_feedback)
+            best = selector.select_best(candidates, context)
+            if not best:
                 logger.warning("Subscriber %d: motivation pool is empty — skipping", sub_id)
                 continue
+            next_msg = pool_by_id[best.meta["id"]]
             title = next_msg["title"]
             body = next_msg["body"]
             msg_id = next_msg["id"]
             message_theme = next_msg.get("theme", "unknown")
+            selection_strategy = "smart"
 
         subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
 
@@ -1900,7 +1867,31 @@ def send_nightly_reflection_notification(db: Session) -> dict:
         recent_questions = _recent_user_questions(db, user_ip, days=21, limit=5)
         recent_theme = _primary_theme_from_questions(recent_questions)
         is_returning = bool(recent_questions)
-        title, body = _night_reflection_copy(recent_theme=recent_theme, is_returning=is_returning)
+        # Gather all possible body options for the night reflection
+        variant = _stable_variant(datetime.now(timezone.utc).date().isoformat(), recent_theme, "night", is_returning, modulo=5)
+        theme_phrase = (recent_theme or "").strip().lower()
+        body_options = []
+        if is_returning and recent_theme:
+            body_options = [
+                f"Before sleep, let one quiet question meet what is still moving in {theme_phrase}.",
+                f"Let tonight hold the part of {theme_phrase} that still wants gentleness.",
+                f"Return to {theme_phrase} for one honest moment before the day closes.",
+                f"Before sleep, what did {theme_phrase} teach you today that deserves not to be rushed past?",
+                f"There may be one more tender truth inside {theme_phrase} before tomorrow begins.",
+            ]
+        elif is_returning:
+            body_options = list(_NIGHT_BODY_RETURNING)
+        else:
+            body_options = list(_NIGHT_BODY_NEW)
+
+        # Use QuoteSelector to pick the best body
+        candidates = [QuoteCandidate(text=body) for body in body_options]
+        context = {"theme": recent_theme, "user_ip": user_ip}
+        selector = QuoteSelector(nlp_model=openai_semantic_score, feedback_logger=log_quote_feedback)
+        best = selector.select_best(candidates, context)
+        body = best.text if best else body_options[variant]
+        title = _NIGHT_TITLES[variant]
+        body = _premium_push_body(body, 116)
         subscription_info = {"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}}
 
         result = send_push_notification(

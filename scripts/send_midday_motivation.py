@@ -97,6 +97,13 @@ def main():
     from app.core.db import get_session_local, safe_close_session
     from app.notifications.push import send_midday_motivation_notification
     from app.core.config import settings
+    from app.core.monitoring import monitoring_logger
+    from app.core.selector_state import (
+        get_active_version,
+        get_active_weights,
+        rollback_to_previous_version,
+        save_new_weight_version,
+    )
 
     logger.info("☀️ Starting midday motivation push notification check...")
     
@@ -112,6 +119,58 @@ def main():
         try:
             result = send_midday_motivation_notification(db)
             logger.info("✓ Midday motivation complete: %s", result)
+
+            # Safe auto-tuning (feature-flagged, bounded, versioned, rollback-capable)
+            if settings.quote_selector_tuning_enabled:
+                from app.core.quote_selector import QuoteSelector
+                from app.core.feedback_logger import collect_feedback_for_tuning, log_quote_feedback
+                from app.core.openai_compat import openai_semantic_score
+
+                logger.info("🤖 Running QuoteSelector tuning loop (safe mode)...")
+                active_weights = get_active_weights(db)
+                selector = QuoteSelector(
+                    nlp_model=openai_semantic_score,
+                    feedback_logger=log_quote_feedback,
+                    weights=active_weights,
+                    monitoring_logger=monitoring_logger,
+                    max_weight_delta=settings.quote_selector_max_weight_delta,
+                    min_weight=settings.quote_selector_min_weight,
+                    max_weight=settings.quote_selector_max_weight,
+                )
+
+                feedback_data = collect_feedback_for_tuning(db, days=7)
+                tuning_report = selector.update_feedback_weights(feedback_data)
+
+                if tuning_report.get("updated"):
+                    prior_version = get_active_version(db)
+                    new_version = save_new_weight_version(
+                        db,
+                        weights=tuning_report["weights_new"],
+                        metrics={
+                            "average_feedback_score": tuning_report.get("average_feedback_score", 0.0),
+                            "feedback_count": tuning_report.get("feedback_count", 0),
+                            "source": "send_midday_motivation",
+                        },
+                        rollback_from_version=None,
+                        activate=True,
+                    )
+                    logger.info(
+                        "✓ QuoteSelector weights versioned: v%s -> v%s",
+                        prior_version or 0,
+                        new_version,
+                    )
+
+                    if tuning_report.get("average_feedback_score", 0.0) < settings.quote_selector_rollback_min_feedback_score:
+                        rolled_back_to = rollback_to_previous_version(db)
+                        logger.warning(
+                            "↩ Rolled back selector weights due to low feedback score %.4f; active restored to v%s",
+                            tuning_report.get("average_feedback_score", 0.0),
+                            rolled_back_to,
+                        )
+
+                    db.commit()
+                else:
+                    logger.info("ℹ QuoteSelector tuning skipped: %s", tuning_report.get("reason", "unknown"))
 
             if result["sent"] > 0:
                 print(f"✓ Sent midday motivation to {result['sent']} subscribers")

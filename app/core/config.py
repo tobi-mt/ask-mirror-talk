@@ -46,9 +46,9 @@ class Settings(BaseSettings):
             v = v.replace("postgresql://", "postgresql+psycopg://", 1)
         
         if original != v:
-            logger.info(f"Database URL converted for psycopg3 compatibility")
-            logger.info(f"  From: {original.split('@')[0].split('//')[0]}://***")
-            logger.info(f"  To:   {v.split('@')[0].split('//')[0]}://***")
+            logger.info("Database URL converted for psycopg3 compatibility")
+            logger.info("  From: %s://***", original.split('@')[0].split('//')[0])
+            logger.info("  To:   %s://***", v.split('@')[0].split('//')[0])
         
         return v
 
@@ -122,6 +122,18 @@ class Settings(BaseSettings):
     vapid_claim_email: str = ""  # Contact email for VAPID claims (e.g. mailto:you@example.com)
     notify_new_episode_after_ingest: bool = True
     notify_new_episode_max_age_days: int = 14
+
+    # Quote selector safety and rollout controls
+    quote_selector_advanced_enabled: bool = True
+    quote_selector_tuning_enabled: bool = True
+    quote_selector_model_enabled: bool = True
+    quote_selector_ensemble_enabled: bool = False
+    quote_selector_fallback_enabled: bool = True
+    quote_selector_shadow_mode_enabled: bool = False
+    quote_selector_max_weight_delta: float = 0.03
+    quote_selector_min_weight: float = 0.1
+    quote_selector_max_weight: float = 3.0
+    quote_selector_rollback_min_feedback_score: float = 0.0
 
     @field_validator("vapid_private_key")
     @classmethod

@@ -219,3 +219,16 @@ class PushQotdQuestion(Base):
     hook: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(20), default="static")  # "static" | "generated"
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class QuoteSelectorWeightVersion(Base):
+    """Versioned quote selector weights with active pointer for safe rollback."""
+    __tablename__ = "quote_selector_weight_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, index=True)
+    weights_json: Mapped[str] = mapped_column(Text)
+    metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    rollback_from_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

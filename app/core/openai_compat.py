@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from importlib import import_module
 from typing import Any
-
-from transformers import pipeline
 
 from app.core.config import settings
 
@@ -14,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def _load_primary_model():
+    pipeline = getattr(import_module("transformers"), "pipeline")
     return pipeline(
         "sentiment-analysis",
         model="distilbert-base-uncased-finetuned-sst-2-english",
@@ -22,6 +22,7 @@ def _load_primary_model():
 
 @lru_cache(maxsize=1)
 def _load_secondary_model():
+    pipeline = getattr(import_module("transformers"), "pipeline")
     return pipeline(
         "sentiment-analysis",
         model="cardiffnlp/twitter-roberta-base-sentiment-latest",
@@ -185,6 +186,11 @@ def openai_semantic_score(text: str, context: dict = None) -> float:
             return (primary_score * 0.7) + (secondary_score * 0.3)
 
         return primary_score
+    except ModuleNotFoundError as exc:
+        if settings.quote_selector_fallback_enabled:
+            logger.warning("Transformers unavailable; semantic scoring fallback in use: %s", exc)
+            return 0.5
+        raise
     except Exception as exc:
         if settings.quote_selector_fallback_enabled:
             logger.warning("Semantic model failed; using fallback score: %s", exc)

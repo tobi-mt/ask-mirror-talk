@@ -37,6 +37,7 @@ RUN pip install --no-cache-dir \
     redis>=5.0.0 \
     pywebpush>=2.0.0 \
     py-vapid>=1.9.0 \
+    transformers>=4.40.0 \
     && rm -rf /root/.cache/pip /tmp/* /var/tmp/*
 
 # Copy application code

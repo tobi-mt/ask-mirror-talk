@@ -3660,6 +3660,33 @@
       ? ensureReflectionSentence(insight.shareable_headline)
       : '';
 
+    const scoreQuestionRelevance = (candidate) => {
+      const question = String(insight.question || '').toLowerCase();
+      const candidateLower = String(candidate || '').toLowerCase();
+      if (!question || !candidateLower) return 0;
+      
+      const stopwords = new Set([
+        'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'from', 'has', 'he', 'in',
+        'is', 'it', 'its', 'my', 'not', 'of', 'on', 'or', 'that', 'the', 'to', 'was', 'will', 'with'
+      ]);
+      
+      const extractKeyTerms = (text) => {
+        return text.split(/\s+/)
+          .map(word => word.replace(/[^a-z0-9]/g, '').toLowerCase())
+          .filter(word => word.length > 3 && !stopwords.has(word));
+      };
+      
+      const questionTerms = new Set(extractKeyTerms(question));
+      const candidateTerms = new Set(extractKeyTerms(candidateLower));
+      
+      let matches = 0;
+      questionTerms.forEach(term => {
+        if (candidateTerms.has(term)) matches += 1;
+      });
+      
+      return (matches / Math.max(1, questionTerms.size)) * 4;
+    };
+
     const rawCandidates = [apiHeadline, excerptHeadline, answerHeadline, answerExcerpt, excerpt]
       .filter(Boolean)
       .map(value => ensureReflectionSentence(value))
@@ -3675,10 +3702,16 @@
     const ranked = uniqueCandidates
       .map(candidate => ({
         text: candidate,
-        score: scoreShareHeadlineCandidate(candidate, themeKeywords)
+        score: scoreShareHeadlineCandidate(candidate, themeKeywords),
+        relevance: scoreQuestionRelevance(candidate)
       }))
       .filter(item => item.text && item.score > -Infinity && !isWeakShareHeadlineCandidate(item.text))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        // Primary: presentation score
+        if (Math.abs(a.score - b.score) > 0.5) return b.score - a.score;
+        // Tiebreak: question relevance
+        return b.relevance - a.relevance;
+      });
 
     if (ranked.length) {
       return ranked[0].text;
@@ -8854,6 +8887,35 @@
       return depth;
     };
 
+    const scoreQuestionRelevance = (candidate) => {
+      const question = String(normalized.question || '').toLowerCase();
+      const candidateLower = String(candidate || '').toLowerCase();
+      if (!question || !candidateLower) return 0;
+      
+      const stopwords = new Set([
+        'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'from', 'has', 'he', 'in',
+        'is', 'it', 'its', 'my', 'not', 'of', 'on', 'or', 'that', 'the', 'to', 'was', 'will', 'with'
+      ]);
+      
+      const extractKeyTerms = (text) => {
+        return text.split(/\s+/)
+          .map(word => word.replace(/[^a-z0-9]/g, '').toLowerCase())
+          .filter(word => word.length > 3 && !stopwords.has(word));
+      };
+      
+      const questionTerms = new Set(extractKeyTerms(question));
+      const candidateTerms = new Set(extractKeyTerms(candidateLower));
+      
+      let matches = 0;
+      questionTerms.forEach(term => {
+        if (candidateTerms.has(term)) matches += 1;
+      });
+      
+      // Score is the overlap ratio, boosted by question importance
+      const relevance = matches / Math.max(1, questionTerms.size);
+      return relevance * 4; // Scale to 0-4 range
+    };
+
     const fitsAnyProfile = (candidate, profiles) => profiles.some(profile => canRenderCanvasTextFully(
       ctx,
       candidate,
@@ -8935,10 +8997,20 @@
         candidate,
         score: scoreHeadlinePresentation(candidate),
         depth: scoreInsightDepth(candidate),
+        relevance: scoreQuestionRelevance(candidate),
         fits: fitsAnyProfile(candidate, fitProfiles)
       }))
       .filter(item => item.fits)
-      .sort((a, b) => b.score - a.score || b.depth - a.depth || b.candidate.length - a.candidate.length);
+      .sort((a, b) => {
+        // Primary sort: presentation score
+        if (Math.abs(a.score - b.score) > 0.5) return b.score - a.score;
+        // Tiebreak 1: question relevance (if close on score)
+        if (Math.abs(a.relevance - b.relevance) > 0.3) return b.relevance - a.relevance;
+        // Tiebreak 2: insight depth
+        if (a.depth !== b.depth) return b.depth - a.depth;
+        // Tiebreak 3: length (prefer mid-range)
+        return b.candidate.length - a.candidate.length;
+      });
 
     if (DEBUG) {
       const preview = scoredCandidates
@@ -8946,8 +9018,9 @@
         .map(item => ({
           score: Number(item.score.toFixed(2)),
           depth: item.depth,
+          relevance: Number(item.relevance.toFixed(2)),
           fits: item.fits,
-          candidate: item.candidate
+          candidate: item.candidate.substring(0, 60)
         }));
       console.log('[ShareHeadlineSelector] Candidate ranking (top 5):', preview);
     }
@@ -8957,16 +9030,32 @@
     const closeScoreThreshold = 2.0;
     let chosen = top;
 
-    if (top && second && Math.abs(top.score - second.score) <= closeScoreThreshold && second.depth > top.depth) {
-      chosen = second;
-      if (DEBUG) {
-        console.log('[ShareHeadlineSelector] Close score tie-break by insight depth:', {
-          topScore: Number(top.score.toFixed(2)),
-          secondScore: Number(second.score.toFixed(2)),
-          topDepth: top.depth,
-          secondDepth: second.depth,
-          chosen: second.candidate
-        });
+    if (top && second && Math.abs(top.score - second.score) <= closeScoreThreshold) {
+      // If scores are close, prefer better question relevance
+      if (second.relevance > top.relevance + 0.5) {
+        chosen = second;
+        if (DEBUG) {
+          console.log('[ShareHeadlineSelector] Close score, prefer higher question relevance:', {
+            topScore: Number(top.score.toFixed(2)),
+            topRelevance: Number(top.relevance.toFixed(2)),
+            secondScore: Number(second.score.toFixed(2)),
+            secondRelevance: Number(second.relevance.toFixed(2)),
+            chosen: second.candidate
+          });
+        }
+      }
+      // Otherwise tie-break by depth if relevance is similar
+      else if (Math.abs(top.relevance - second.relevance) <= 0.3 && second.depth > top.depth) {
+        chosen = second;
+        if (DEBUG) {
+          console.log('[ShareHeadlineSelector] Close score, tie-break by insight depth:', {
+            topScore: Number(top.score.toFixed(2)),
+            secondScore: Number(second.score.toFixed(2)),
+            topDepth: top.depth,
+            secondDepth: second.depth,
+            chosen: second.candidate
+          });
+        }
       }
     }
 
@@ -9612,13 +9701,19 @@
 
     ctx.fillStyle = 'rgba(255,255,255,0.86)';
     ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(theme.toUpperCase(), W / 2, 118);
+    ctx.textAlign = 'left';
+    ctx.fillText(theme.toUpperCase(), 98, 118);
+
+    ctx.textAlign = 'right';
+    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    ctx.fillText('ASK MIRROR TALK', W - 98, 118);
 
     ctx.shadowColor = 'rgba(0,0,0,0.24)';
     ctx.shadowBlur = 28;
     ctx.shadowOffsetY = 8;
     ctx.fillStyle = '#fffaf4';
+    ctx.textAlign = 'center';
     const metrics = drawFittedCanvasText(ctx, {
       text: headline,
       x: W / 2,
@@ -9633,22 +9728,6 @@
       lineHeightRatio: headlineOptions.lineHeightRatio
     });
     ctx.shadowColor = 'transparent';
-
-    const lineY = 445 + metrics.height + 82;
-    const lineGrad = ctx.createLinearGradient(W * 0.28, lineY, W * 0.72, lineY);
-    lineGrad.addColorStop(0, 'rgba(255,255,255,0)');
-    lineGrad.addColorStop(0.5, style.accent || 'rgba(255,255,255,0.75)');
-    lineGrad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.strokeStyle = lineGrad;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(W * 0.30, lineY);
-    ctx.lineTo(W * 0.70, lineY);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('ASK MIRROR TALK', W / 2, lineY + 44);
 
     drawShareFooter(ctx, style, W, H - 206, 'center', { chipWidth: 472 });
     if (ENABLE_TEST_EXPORTS) {
@@ -9794,9 +9873,9 @@
     ctx.fillStyle = style.accent;
     ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('ASK MIRROR TALK', 94, 112);
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 94, 112);
     ctx.textAlign = 'right';
-    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W - 94, 112);
+    ctx.fillText('ASK MIRROR TALK', W - 94, 112);
 
     ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.78)';
     ctx.font = '500 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -10347,19 +10426,19 @@
       maxBaseline: showExcerpt ? 390 : 610
     });
 
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'right';
     ctx.fillStyle = style.accent;
     ctx.font = '600 22px Georgia, serif';
-    ctx.fillText('ASK MIRROR TALK', 96, 114);
+    ctx.fillText('ASK MIRROR TALK', W - 96, 114);
 
     ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.76)';
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    wrapCanvasText(ctx, style.kicker, 96, 156, 520, 26, 2, 'left');
+    wrapCanvasText(ctx, style.kicker, W - 516, 156, 420, 26, 2, 'right');
 
     const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const pillWidth = Math.max(216, Math.ceil(ctx.measureText(themeLabel).width + 92));
-    const pillX = W - pillWidth - 96;
+    const pillX = 96;
     const pillY = 96;
     const themeGrad = ctx.createLinearGradient(pillX, pillY, pillX + pillWidth, pillY + 54);
     themeGrad.addColorStop(0, 'rgba(255,255,255,0.24)');

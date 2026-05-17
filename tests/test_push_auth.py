@@ -86,6 +86,23 @@ def test_push_subscribe_persists_sanitized_values(monkeypatch):
     assert params["ip"] == "10.0.0.5"
 
 
+def test_push_subscribe_invalid_timezone_falls_back_to_utc(monkeypatch):
+    monkeypatch.setattr(settings, "vapid_public_key", "public-key")
+    db = DummyPushDb(execute_results=[DummyExecuteResult(), DummyExecuteResult(scalar_value=1)])
+    payload = push_routes.PushSubscriptionRequest(
+        endpoint="https://example.com/sub-2",
+        keys={"p256dh": "key-a", "auth": "key-b"},
+        timezone="Mars/OlympusMons",
+        preferred_qotd_hour=8,
+    )
+
+    response = push_routes.push_subscribe(payload, _request("10.0.0.6"), db)
+
+    assert response == {"status": "subscribed", "total_subscribers": 1}
+    _, params = db.executed[0]
+    assert params["tz"] == "UTC"
+
+
 def test_push_preferences_returns_not_found_when_subscription_missing():
     db = DummyPushDb(execute_results=[DummyExecuteResult(rowcount=0)])
     payload = push_routes.PushPreferencesRequest(endpoint="missing-endpoint")

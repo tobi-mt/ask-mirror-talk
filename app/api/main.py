@@ -13,6 +13,7 @@ from app.api.routes.analytics import router as analytics_router
 from app.api.routes.push import router as push_router
 from app.api.routes.interactions import router as interactions_router
 from app.api.routes.system import router as system_router
+from app.api.routes.media import router as media_router
 from app.api.routes.ingest import router as ingest_router
 from app.api.routes.admin import router as admin_router
 from app.api.runtime import is_db_initialized, mark_db_initialized
@@ -153,6 +154,7 @@ app.include_router(analytics_router)
 app.include_router(push_router)
 app.include_router(interactions_router)
 app.include_router(system_router)
+app.include_router(media_router)
 app.include_router(ingest_router)
 app.include_router(admin_router)
 

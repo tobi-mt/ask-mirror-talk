@@ -1,4 +1,5 @@
 import logging
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasicCredentials
@@ -12,6 +13,18 @@ from app.core.db import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _sanitize_timezone(raw_timezone: str | None) -> str:
+    """Return a safe IANA timezone string, defaulting to UTC when invalid."""
+    candidate = (raw_timezone or "").strip()
+    if not candidate or len(candidate) > 100:
+        return "UTC"
+    try:
+        ZoneInfo(candidate)
+        return candidate
+    except (ZoneInfoNotFoundError, ValueError):
+        return "UTC"
 
 
 class PushSubscriptionRequest(BaseModel):
@@ -59,7 +72,7 @@ def push_subscribe(
         raise HTTPException(status_code=400, detail="Missing p256dh or auth key")
 
     try:
-        tz = payload.timezone if payload.timezone and len(payload.timezone) <= 100 else "UTC"
+        tz = _sanitize_timezone(payload.timezone)
         qotd_hour = max(0, min(23, payload.preferred_qotd_hour))
 
         db.execute(

@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.19 loaded');
+  log('Ask Mirror Talk Widget v5.9.26 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -7861,13 +7861,21 @@
     }
 
     const stream = canvas.captureStream(fps);
-    const mimeTypes = [
+    const defaultMimeTypes = [
+      'video/mp4;codecs=h264',
+      'video/mp4',
       'video/webm;codecs=vp9',
       'video/webm;codecs=vp8',
       'video/webm'
     ];
+    const mimeTypes = Array.isArray(opts.mimeTypes) && opts.mimeTypes.length
+      ? opts.mimeTypes
+      : defaultMimeTypes;
     const recorderOptions = {};
     const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+    if (opts.requireMimeType && !supportedMimeType) {
+      throw new Error('Requested animated export format is not supported in this browser.');
+    }
     if (supportedMimeType) {
       recorderOptions.mimeType = supportedMimeType;
     }
@@ -8034,7 +8042,7 @@
     const finished = new Promise((resolve, reject) => {
       recorder.onerror = () => reject(new Error('Animated export recording failed.'));
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
+        const blob = new Blob(chunks, { type: recorder.mimeType || supportedMimeType || 'video/webm' });
         resolve(blob);
       };
     });
@@ -8115,7 +8123,7 @@
       ? '↩ Static preview'
       : '✨ Animated preview';
 
-    const animatedShareSupported = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream);
+    const animatedShareSupported = !!(window.fetch && window.File && window.Blob);
 
     // Remove any existing modal
     const existing = document.getElementById('amt-share-card-modal');
@@ -8221,9 +8229,18 @@
       trackRewardEvent('share');
     }
 
+    function canShareFiles(files) {
+      if (!navigator.share || typeof navigator.canShare !== 'function') return false;
+      try {
+        return navigator.canShare({ files });
+      } catch (e) {
+        return false;
+      }
+    }
+
     async function shareViaSystemSheet(platformName) {
       const file = await _dataUrlToFile(dataUrl, downloadName);
-      const sharePayload = canNativeShareFiles && navigator.canShare({ files: [file] })
+      const sharePayload = canShareFiles([file])
         ? { files: [file] }
         : { title: modalTitle, text: shareText, url: pageUrl };
 
@@ -8235,45 +8252,140 @@
       }
     }
 
-    async function createAnimatedShareAsset() {
-      const motionFilename = downloadName.replace(/\.png$/i, '.webm');
-      const blob = await _recordTheatricalMotionClip(dataUrl, {
+    async function createAnimatedShareAsset(options) {
+      const opts = options || {};
+      const preferGif = opts.preferGif === true;
+      const skipWebmFallback = opts.skipWebmFallback === true;
+      const mp4Filename = downloadName.replace(/\.png$/i, '.mp4');
+      const gifFilename = downloadName.replace(/\.png$/i, '.gif');
+      const webmFilename = downloadName.replace(/\.png$/i, '.webm');
+      const mp4Endpoint = `${API_BASE}/api/share/animated-mp4`;
+      const gifEndpoint = `${API_BASE}/api/share/animated-gif`;
+
+      // Primary: server-encoded H.264 MP4.
+      if (!preferGif) {
+        try {
+          const response = await fetch(mp4Endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              image_data_url: dataUrl,
+              width: 720,
+              height: 900,
+              frame_count: 20,
+              duration_ms: 2800
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`MP4 export failed with status ${response.status}`);
+          }
+
+          const mp4Buffer = await response.arrayBuffer();
+          const mp4Blob = new Blob([mp4Buffer], { type: 'video/mp4' });
+          if (mp4Blob.size > 0) {
+            return { blob: mp4Blob, motionFilename: mp4Filename };
+          }
+          throw new Error('MP4 export returned an empty file');
+        } catch (mp4Error) {
+          console.warn('[Animated Share] MP4 generation unavailable, trying GIF fallback:', mp4Error);
+        }
+      }
+
+      // Fallback: GIF export from API.
+      try {
+        const response = await fetch(gifEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            image_data_url: dataUrl,
+            width: 540,
+            height: 675,
+            frame_count: 16,
+            duration_ms: 2800
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`GIF export failed with status ${response.status}`);
+        }
+
+        const gifBuffer = await response.arrayBuffer();
+        const gifBlob = new Blob([gifBuffer], { type: 'image/gif' });
+        if (gifBlob.size === 0) {
+          throw new Error('GIF export returned an empty file');
+        }
+
+        return { blob: gifBlob, motionFilename: gifFilename };
+      } catch (gifError) {
+        console.warn('[Animated Share] GIF export failed, trying WEBM capture as last resort:', gifError);
+      }
+
+      // Last resort: direct browser-captured WEBM.
+      if (skipWebmFallback) {
+        throw new Error('No share-safe animated format available for this browser.');
+      }
+      const webmBlob = await _recordTheatricalMotionClip(dataUrl, {
         width: 1080,
         height: 1350,
         durationMs: 4200,
-        fps: 30
+        fps: 30,
+        mimeTypes: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'],
+        requireMimeType: true
       });
-      return { blob, motionFilename };
+      return { blob: webmBlob, motionFilename: webmFilename };
     }
 
     async function handleAnimatedExport(mode) {
       try {
         note.textContent = '🎬 Creating animated share clip…';
         note.style.display = '';
-        const { blob, motionFilename } = await createAnimatedShareAsset();
-        const file = new File([blob], motionFilename, { type: blob.type || 'video/webm' });
-        const sharePayload = canNativeShareFiles && navigator.canShare && navigator.canShare({ files: [file] })
-          ? { files: [file], title: modalTitle, text: shareText, url: pageUrl }
-          : null;
+        let { blob, motionFilename } = await createAnimatedShareAsset();
+        const lowerName = motionFilename.toLowerCase();
+        const fileType = blob.type || (lowerName.endsWith('.gif') ? 'image/gif' : (lowerName.endsWith('.webm') ? 'video/webm' : 'video/mp4'));
+        let file = new File([blob], motionFilename, { type: fileType });
 
-        if (mode === 'share' && sharePayload) {
-          await navigator.share(sharePayload);
-          markShareComplete();
-          note.textContent = '✅ Animated share sheet opened.';
-          note.style.display = '';
-          return;
-        }
+        if (mode === 'share') {
+          if (navigator.share) {
+            try {
+              if (!canShareFiles([file]) && !lowerName.endsWith('.gif')) {
+                const gifAsset = await createAnimatedShareAsset({ preferGif: true, skipWebmFallback: true });
+                blob = gifAsset.blob;
+                motionFilename = gifAsset.motionFilename;
+                file = new File([blob], motionFilename, { type: 'image/gif' });
+              }
 
-        if (mode === 'share' && !sharePayload) {
+              if (canShareFiles([file])) {
+                // Keep file-share payload minimal for maximum app compatibility.
+                await navigator.share({ files: [file] });
+                markShareComplete();
+                note.textContent = '✅ Animated clip shared.';
+                note.style.display = '';
+                return;
+              }
+            } catch (shareErr) {
+              if (shareErr && shareErr.name === 'AbortError') {
+                note.textContent = 'Share canceled.';
+                note.style.display = '';
+                return;
+              }
+              warn('Animated native share failed, falling back to download:', shareErr);
+            }
+          }
+
           _downloadBlob(blob, motionFilename);
           markShareComplete();
-          note.textContent = '📥 Animated clip downloaded — attach it to your social app or stories composer.';
+          note.textContent = '📥 Animated file downloaded — upload it from your Photos/Files app into Instagram, WhatsApp, TikTok, or X.';
           note.style.display = '';
           return;
         }
 
         _downloadBlob(blob, motionFilename);
-        note.textContent = '📥 Animated clip downloaded.';
+        note.textContent = '📥 Animated file downloaded.';
         note.style.display = '';
       } catch (err) {
         warn('Animated export failed, falling back to static image:', err);
@@ -9351,28 +9463,22 @@
     ctx.shadowOffsetY = 0;
     drawReflectionQrCode(ctx, qrX, qrY, qrModuleSize, { quiet: qrQuiet, bg: '#ffffff', fg: '#000000' });
 
-    const textX = qrX + qrOuter + 20;
+    const textLeft = qrX + qrOuter + 20;
+    const textRight = chipX + chipW - 24;
     const textTop = chipY + Math.round(chipH / 2) - 8;
-    ctx.textAlign = 'left';
-
-    ctx.strokeStyle = style.accent || 'rgba(255,226,166,0.90)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(textX, textTop - 28);
-    ctx.lineTo(Math.min(chipX + chipW - 26, textX + 112), textTop - 26);
-    ctx.stroke();
+    ctx.textAlign = 'right';
 
     ctx.fillStyle = '#fffaf4';
-    ctx.font = '800 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('ASK MIRROR TALK', textX, textTop - 12);
+    ctx.font = '800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('ASK MIRROR TALK', textRight, textTop - 12);
 
     ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = '#fffaf4';
-    ctx.fillText('Scan to reflect', textX, textTop + 20);
+    ctx.fillText('Scan to reflect', textRight, textTop + 20);
 
     ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = 'rgba(255,250,244,0.78)';
-    ctx.fillText(REFLECTION_CARD_URL_LABEL, textX, textTop + 49);
+    ctx.fillText(REFLECTION_CARD_URL_LABEL, textRight, textTop + 49);
 
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_FOOTER_DEBUG__ = {
@@ -9384,6 +9490,35 @@
         qrRenderedSize: qrOuter,
         urlLabel: REFLECTION_CARD_URL_LABEL
       };
+    }
+  }
+
+  function drawShareCardCornerHeader(ctx, normalized, style, W, options) {
+    const opts = options || {};
+    const themeY = Number(opts.themeY || 112);
+    const brandY = Number(opts.brandY || themeY);
+    const lineY = Number(opts.lineY || 130);
+    const leftX = Number(opts.leftX || 94);
+    const rightX = Number(opts.rightX || (W - 94));
+    const lineW = Number(opts.lineWidth || 190);
+
+    ctx.fillStyle = style.accent || 'rgba(255,255,255,0.92)';
+    ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), leftX, themeY);
+
+    ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.90)';
+    ctx.font = '700 18px Georgia, serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('ASK MIRROR TALK', rightX, brandY);
+
+    if (opts.showLine !== false) {
+      ctx.strokeStyle = style.accent || 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(leftX, lineY);
+      ctx.lineTo(leftX + lineW, lineY);
+      ctx.stroke();
     }
   }
 
@@ -9459,19 +9594,12 @@
     ctx.fillStyle = accentColor;
     ctx.fillRect(0, 0, W, 8);
     
-    // Theme label - bold, high-contrast
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, 90);
-    
-    // DIVIDER LINE - accent color
-    ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(W * 0.25, 110);
-    ctx.lineTo(W * 0.75, 110);
-    ctx.stroke();
+    drawShareCardCornerHeader(ctx, normalized, { ...style, accent: accentColor, textSoft: 'rgba(255,255,255,0.90)' }, W, {
+      themeY: 92,
+      brandY: 92,
+      lineY: 112,
+      lineWidth: 210
+    });
     
     // Main quote - BOLD, LARGE, HIGH CONTRAST
     ctx.fillStyle = textColor;
@@ -9549,18 +9677,14 @@
     _roundRect(ctx, 28, 28, W - 56, H - 56, 38);
     ctx.stroke();
 
-    ctx.textAlign = 'left';
-    ctx.fillStyle = style.accent;
-    ctx.font = '600 21px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), 80, 105);
-    
-    // Subtle decorative line under theme
-    ctx.strokeStyle = style.accent;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(80, 125);
-    ctx.lineTo(280, 125);
-    ctx.stroke();
+    drawShareCardCornerHeader(ctx, normalized, style, W, {
+      themeY: 105,
+      brandY: 105,
+      lineY: 125,
+      leftX: 80,
+      rightX: W - 80,
+      lineWidth: 200
+    });
 
     // Render headline as unified text block - clean design without blue box
     ctx.fillStyle = style.text;
@@ -9625,18 +9749,14 @@
     _roundRect(ctx, 28, 28, W - 56, H - 56, 40);
     ctx.stroke();
 
-    ctx.textAlign = 'center';
-    ctx.fillStyle = style.accent;
-    ctx.font = '700 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(String(normalized.theme || 'Reflection').toUpperCase(), W / 2, 105);
-
-    // Subtle decorative line under theme
-    ctx.strokeStyle = style.accent;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(W / 2 - 40, 125);
-    ctx.lineTo(W / 2 + 40, 125);
-    ctx.stroke();
+    drawShareCardCornerHeader(ctx, normalized, style, W, {
+      themeY: 105,
+      brandY: 105,
+      lineY: 125,
+      leftX: 80,
+      rightX: W - 80,
+      lineWidth: 200
+    });
 
     // Render headline as unified text block with consistent typography
     ctx.fillStyle = style.text;
@@ -9714,8 +9834,8 @@
     ctx.fillText(theme.toUpperCase(), 98, 118);
 
     ctx.textAlign = 'right';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
+    ctx.font = '700 18px Georgia, serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
     ctx.fillText('ASK MIRROR TALK', W - 98, 118);
 
     ctx.shadowColor = 'rgba(0,0,0,0.24)';
@@ -10140,14 +10260,19 @@
       maxBaseline: showExcerpt ? 344 : 540
     });
 
-    ctx.fillStyle = style.accent;
-    ctx.font = '600 22px Georgia, serif';
-    ctx.textAlign = variant.questionAlign === 'left' ? 'left' : 'center';
-    ctx.fillText('ASK MIRROR TALK', variant.questionAlign === 'left' ? 98 : W / 2, 114);
+    drawShareCardCornerHeader(ctx, normalized, style, W, {
+      themeY: 114,
+      brandY: 114,
+      lineY: 134,
+      leftX: 94,
+      rightX: W - 94,
+      lineWidth: 210
+    });
 
     ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.fillStyle = style.textSoft || 'rgba(255,255,255,0.76)';
-    ctx.fillText(style.kicker, variant.questionAlign === 'left' ? 98 : W / 2, 150);
+    ctx.textAlign = 'left';
+    ctx.fillText(style.kicker, 98, 150);
 
     ctx.fillStyle = style.text;
     drawFittedCanvasText(ctx, {
@@ -10168,7 +10293,7 @@
     const themeLabel = truncateText(normalized.theme || 'Reflection', 24);
     ctx.font = '600 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const themeWidth = Math.max(228, Math.ceil(ctx.measureText(themeLabel).width + 92));
-    const themeX = variant.themeAlign === 'left' ? 94 : Math.round((W - themeWidth) / 2);
+    const themeX = 94;
     const themeY = questionBottom + themeGap;
 
     const pillGrad = ctx.createLinearGradient(themeX, themeY, themeX + themeWidth, themeY);
@@ -10182,9 +10307,9 @@
     _roundRect(ctx, themeX, themeY, themeWidth, 54, 27);
     ctx.stroke();
     ctx.fillStyle = style.accent;
-    ctx.textAlign = variant.themeAlign === 'left' ? 'left' : 'center';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(themeLabel, variant.themeAlign === 'left' ? themeX + 46 : themeX + (themeWidth / 2), themeY + 27);
+    ctx.fillText(themeLabel, themeX + (themeWidth / 2), themeY + 27);
     ctx.textBaseline = 'alphabetic';
 
     const excerptBoxY = themeY + panelGap;
@@ -10629,11 +10754,12 @@
     
     ctx.shadowColor = 'transparent';
     
-    // Theme label - minimal, top
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.font = '600 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, 84);
+    drawShareCardCornerHeader(ctx, normalized, style, W, {
+      themeY: 92,
+      brandY: 92,
+      lineY: 112,
+      lineWidth: 190
+    });
     
     drawShareFooter(ctx, style, W, H - 206, 'center');
     if (ENABLE_TEST_EXPORTS) {
@@ -10704,11 +10830,12 @@
     _roundRect(ctx, 82, panelY + 2, W - 164, panelH - 4, 35);
     ctx.stroke();
     
-    // Theme indicator - neon accent
-    ctx.fillStyle = neonColor;
-    ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, panelY + 68);
+    drawShareCardCornerHeader(ctx, normalized, { ...style, accent: neonColor, textSoft: 'rgba(255,255,255,0.84)' }, W, {
+      themeY: 100,
+      brandY: 100,
+      lineY: 122,
+      lineWidth: 210
+    });
     
     // Main quote
     ctx.fillStyle = '#ffffff';
@@ -10802,11 +10929,12 @@
     _roundRect(ctx, 156, containerY + 44, W - 312, 6, 3);
     ctx.fill();
     
-    // Theme label
-    ctx.fillStyle = '#1a1a2e';
-    ctx.font = '700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(normalized.theme || 'REFLECTION').toUpperCase(), W / 2, containerY + 110);
+    drawShareCardCornerHeader(ctx, normalized, { ...style, accent: 'rgba(255,255,255,0.92)', textSoft: 'rgba(255,255,255,0.84)' }, W, {
+      themeY: 102,
+      brandY: 102,
+      lineY: 124,
+      lineWidth: 210
+    });
     
     // Main quote - dark text on white
     ctx.fillStyle = '#1a1a2e';
@@ -10829,10 +10957,6 @@
     _roundRect(ctx, 156, containerY + containerH - 50, W - 312, 6, 3);
     ctx.fill();
     
-    ctx.fillStyle = 'rgba(26,26,46,0.75)';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText('ASK MIRROR TALK', W / 2, containerY + containerH - 24);
-
     drawShareFooter(ctx, style, W, H - 206, 'center');
     if (ENABLE_TEST_EXPORTS) {
       window.__AMT_LAST_RENDER_DEBUG__ = { family: 'prismatic_quote', headline };

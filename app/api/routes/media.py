@@ -6,8 +6,14 @@ import math
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from PIL import Image, ImageDraw, ImageEnhance
-import av
+
+try:
+    from PIL import Image, ImageDraw, ImageEnhance
+    import av
+    _MEDIA_LIBS_AVAILABLE = True
+except ImportError:
+    _MEDIA_LIBS_AVAILABLE = False
+    Image = ImageDraw = ImageEnhance = av = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -145,6 +151,8 @@ def _encode_h264_mp4(frames: list[Image.Image], fps: int) -> io.BytesIO:
 
 @router.post('/api/share/animated-gif')
 def build_animated_gif(payload: AnimatedGifRequest):
+    if not _MEDIA_LIBS_AVAILABLE:
+        raise HTTPException(status_code=503, detail='Animated export is not available on this server')
     try:
         raw_image = _decode_data_url(payload.image_data_url)
         with Image.open(io.BytesIO(raw_image)) as source_image:
@@ -181,6 +189,8 @@ def build_animated_gif(payload: AnimatedGifRequest):
 
 @router.post('/api/share/animated-mp4')
 def build_animated_mp4(payload: AnimatedGifRequest):
+    if not _MEDIA_LIBS_AVAILABLE:
+        raise HTTPException(status_code=503, detail='Animated export is not available on this server')
     try:
         raw_image = _decode_data_url(payload.image_data_url)
         with Image.open(io.BytesIO(raw_image)) as source_image:

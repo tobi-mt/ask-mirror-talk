@@ -9,11 +9,12 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# Install only essential runtime dependencies (minimal for API service)
+# Install runtime dependencies (libpq5 + ffmpeg for animated share endpoints)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq5 \
         curl \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/*
@@ -38,7 +39,29 @@ RUN pip install --no-cache-dir \
     pywebpush>=2.0.0 \
     py-vapid>=1.9.0 \
     transformers>=4.40.0 \
+    Pillow>=10.0.0 \
     && rm -rf /root/.cache/pip /tmp/* /var/tmp/*
+
+# Build PyAV against the system ffmpeg (build tools purged after install to keep image lean)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswresample-dev \
+        gcc \
+        python3-dev \
+    && pip install --no-cache-dir 'av>=12.0.0' \
+    && apt-get purge -y --auto-remove \
+        build-essential \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswresample-dev \
+        gcc \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/* /root/.cache/pip /tmp/* /var/tmp/*
 
 # Copy application code
 COPY app /app/app

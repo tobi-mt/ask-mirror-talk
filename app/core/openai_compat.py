@@ -11,6 +11,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+_semantic_model_state: dict[str, str | None] = {"disabled_reason": None}
+
 @lru_cache(maxsize=1)
 def _load_primary_model():
     pipeline = getattr(import_module("transformers"), "pipeline")
@@ -169,6 +171,9 @@ def openai_semantic_score(text: str, context: dict = None) -> float:
     if not settings.quote_selector_model_enabled:
         return 0.5
 
+    if _semantic_model_state["disabled_reason"]:
+        return 0.5
+
     if not text or not text.strip():
         return 0.0
 
@@ -188,11 +193,28 @@ def openai_semantic_score(text: str, context: dict = None) -> float:
         return primary_score
     except ModuleNotFoundError as exc:
         if settings.quote_selector_fallback_enabled:
-            logger.warning("Transformers unavailable; semantic scoring fallback in use: %s", exc)
+            _semantic_model_state["disabled_reason"] = str(exc)
+            logger.warning(
+                "Transformers unavailable; semantic scoring disabled for this process: %s",
+                exc,
+            )
+            return 0.5
+        raise
+    except NameError as exc:
+        if settings.quote_selector_fallback_enabled:
+            _semantic_model_state["disabled_reason"] = str(exc)
+            logger.warning(
+                "Semantic model dependency missing; semantic scoring disabled for this process: %s",
+                exc,
+            )
             return 0.5
         raise
     except Exception as exc:
         if settings.quote_selector_fallback_enabled:
-            logger.warning("Semantic model failed; using fallback score: %s", exc)
+            _semantic_model_state["disabled_reason"] = str(exc)
+            logger.warning(
+                "Semantic model failed; semantic scoring disabled for this process: %s",
+                exc,
+            )
             return 0.5
         raise

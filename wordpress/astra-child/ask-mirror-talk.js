@@ -62,6 +62,7 @@
   // Intro audio intentionally disabled globally due unreliable autoplay behavior across devices.
   const ENABLE_LAUNCH_AUDIO = false;
   const ACTIVATION_CHECKLIST_KEY = 'amt_activation_checklist_v1';
+  const SKIP_SPLASH_ONCE_KEY = 'amt_skip_launch_splash_once';
 
   let hasHiddenLaunchSplash = false;
   let launchSplashAudioStop = null;
@@ -363,6 +364,18 @@
 
   function initLaunchSplash() {
     if (!launchSplash) return;
+
+    // Service-worker loading fallback can request skipping this splash once
+    // so users do not see two consecutive splash screens.
+    try {
+      if (sessionStorage.getItem(SKIP_SPLASH_ONCE_KEY) === '1') {
+        sessionStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+        hasHiddenLaunchSplash = true;
+        launchSplash.style.display = 'none';
+        launchSplash.setAttribute('aria-hidden', 'true');
+        return;
+      }
+    } catch (e) {}
 
     // Always show splash on each real app launch.
     launchSplash.style.display = '';

@@ -22,8 +22,6 @@ from app.core.config import settings
 from app.core.openai_compat import create_chat_completion, openai_semantic_score
 from app.core.quote_selector import QuoteSelector, QuoteCandidate
 from app.core.feedback_logger import log_quote_feedback
-from app.core.quote_selector import QuoteSelector, QuoteCandidate
-from app.core.quote_selector import QuoteSelector, QuoteCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -338,6 +336,14 @@ def send_push_notification(
         return "sent"
     except WebPushException as e:
         status_code = e.response.status_code if e.response else None
+        if status_code is None:
+            msg = str(e)
+            code_match = re.search(r"\b(404|410)\b", msg)
+            if code_match:
+                status_code = int(code_match.group(1))
+            elif "unsubscribed" in msg.lower() or "expired" in msg.lower():
+                status_code = 410
+
         if status_code in (404, 410):
             logger.info("Push subscription expired (HTTP %s), marking for removal", status_code)
             return "expired"

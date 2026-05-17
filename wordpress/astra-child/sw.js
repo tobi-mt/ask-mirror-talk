@@ -10,11 +10,12 @@
  * FORCE UPDATE: Build timestamp to ensure browser detects changes
  */
 
-const BUILD_TIMESTAMP = '2026-05-17T08:55:00.000Z';  // Update this to force SW refresh
-const CACHE_VERSION = 'amt-v5.9.26';
+const BUILD_TIMESTAMP = '2026-05-17T12:05:00.000Z';  // Update this to force SW refresh
+const CACHE_VERSION = 'amt-v5.9.27';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
-const NAVIGATION_TIMEOUT_MS = 5000;
+const NAVIGATION_CACHE = `${CACHE_VERSION}-pages`;
+const NAVIGATION_TIMEOUT_MS = 1200;
 
 // App shell files to pre-cache on install
 // NOTE: '/' (homepage HTML) is intentionally excluded — the HTML must always
@@ -191,6 +192,7 @@ async function networkFirstWithCache(request, cacheName) {
 }
 
 async function networkPageWithOfflineFallback(request) {
+  const navCache = await caches.open(NAVIGATION_CACHE);
   const supportsAbort = typeof AbortController !== 'undefined';
   let timeoutId = null;
   const controller = supportsAbort ? new AbortController() : null;
@@ -205,9 +207,22 @@ async function networkPageWithOfflineFallback(request) {
       signal: controller ? controller.signal : undefined,
     });
     if (timeoutId) clearTimeout(timeoutId);
+
+    if (response && response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        navCache.put(request, response.clone()).catch(() => {});
+      }
+    }
+
     return response;
   } catch (err) {
     if (timeoutId) clearTimeout(timeoutId);
+
+    const cached = await navCache.match(request);
+    if (cached) {
+      return cached;
+    }
 
     if (err && err.name === 'AbortError') {
       return new Response(loadingHTML(), {
@@ -597,6 +612,9 @@ function loadingHTML() {
       }
 
       function retryNow() {
+        try {
+          sessionStorage.setItem('amt_skip_launch_splash_once', '1');
+        } catch (e) {}
         if (stopAudio) {
           stopAudio();
           stopAudio = null;

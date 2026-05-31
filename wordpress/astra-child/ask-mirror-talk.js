@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.30 loaded');
+  log('Ask Mirror Talk Widget v5.9.31 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -9139,7 +9139,7 @@
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || '',
       {
-        includeFallback: (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim(),
+        includeFallback: false,
         question: normalized.question || ''
       }
     );
@@ -10220,37 +10220,15 @@
     
     // Fallback to extraction from answer text if API headline not usable
     if (!headline) {
-      const headlineCandidates = listCardHeadlineCandidates(
-        joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-        normalized.theme || '',
-        { question: normalized.question || '' }
-      );
-
-      headline = headlineCandidates.find(candidate =>
-        canRenderCanvasTextFully(
-          ctx,
-          candidate,
-          headlineOptions.maxWidth,
-          headlineOptions.maxHeightWithExcerpt,
-          headlineOptions.maxLines,
-          headlineOptions.fontTemplate,
-          headlineOptions.maxSizeWithExcerpt,
-          headlineOptions.minSize,
-          headlineOptions.lineHeightRatio
-        )
-      ) || headlineCandidates.find(candidate =>
-        canRenderCanvasTextFully(
-          ctx,
-          candidate,
-          headlineOptions.maxWidth,
-          headlineOptions.maxHeightWithoutExcerpt,
-          headlineOptions.maxLines,
-          headlineOptions.fontTemplate,
-          headlineOptions.maxSizeWithoutExcerpt,
-          headlineOptions.minSize,
-          headlineOptions.lineHeightRatio
-        )
-      ) || buildThemeReflectionFallback(normalized.theme || '');
+      headline = selectFittingShareHeadline(ctx, normalized, {
+        maxWidth: headlineOptions.maxWidth,
+        maxHeight: headlineOptions.maxHeightWithoutExcerpt,
+        maxLines: headlineOptions.maxLines,
+        fontTemplate: headlineOptions.fontTemplate,
+        maxSize: headlineOptions.maxSizeWithoutExcerpt,
+        minSize: headlineOptions.minSize,
+        lineHeightRatio: headlineOptions.lineHeightRatio
+      }) || buildThemeReflectionFallback(normalized.theme || '');
     }
 
     const supportingCandidates = listSupportingReflectionCandidates(
@@ -10521,37 +10499,15 @@
     
     // Fallback to extraction from answer text if API headline not usable
     if (!headline) {
-      const headlineCandidates = listCardHeadlineCandidates(
-        joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-        normalized.theme || '',
-        { question: normalized.question || '' }
-      );
-
-      headline = headlineCandidates.find(candidate =>
-        canRenderCanvasTextFully(
-          ctx,
-          candidate,
-          headlineOptions.maxWidth,
-          headlineOptions.maxHeightWithExcerpt,
-          headlineOptions.maxLines,
-          headlineOptions.fontTemplate,
-          headlineOptions.maxSizeWithExcerpt,
-          headlineOptions.minSize,
-          headlineOptions.lineHeightRatio
-        )
-      ) || headlineCandidates.find(candidate =>
-        canRenderCanvasTextFully(
-          ctx,
-          candidate,
-          headlineOptions.maxWidth,
-          headlineOptions.maxHeightWithoutExcerpt,
-          headlineOptions.maxLines,
-          headlineOptions.fontTemplate,
-          headlineOptions.maxSizeWithoutExcerpt,
-          headlineOptions.minSize,
-          headlineOptions.lineHeightRatio
-        )
-      ) || buildThemeReflectionFallback(normalized.theme || '');
+      headline = selectFittingShareHeadline(ctx, normalized, {
+        maxWidth: headlineOptions.maxWidth,
+        maxHeight: headlineOptions.maxHeightWithoutExcerpt,
+        maxLines: headlineOptions.maxLines,
+        fontTemplate: headlineOptions.fontTemplate,
+        maxSize: headlineOptions.maxSizeWithoutExcerpt,
+        minSize: headlineOptions.minSize,
+        lineHeightRatio: headlineOptions.lineHeightRatio
+      }) || buildThemeReflectionFallback(normalized.theme || '');
     }
 
     const supportingCandidates = listSupportingReflectionCandidates(

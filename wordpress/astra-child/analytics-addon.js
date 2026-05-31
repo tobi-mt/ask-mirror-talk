@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v5.9.28
+ * Analytics Add-on for Ask Mirror Talk Widget v5.9.30
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -50,7 +50,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.9.28 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v5.9.30 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -310,11 +310,29 @@
 
         try {
             const params = new URLSearchParams(window.location.search);
+            const explicitQALogIdRaw = metadata && Object.prototype.hasOwnProperty.call(metadata, 'qa_log_id')
+                ? metadata.qa_log_id
+                : null;
+            const explicitQALogId = Number(explicitQALogIdRaw);
+            const qaLogIdForEvent = Number.isFinite(explicitQALogId) && explicitQALogId > 0
+                ? explicitQALogId
+                : currentQALogId;
+
+            // Keep rolling context in sync when a strongly linked completion event arrives.
+            if (eventName === 'question_answered' && qaLogIdForEvent) {
+                currentQALogId = qaLogIdForEvent;
+            }
+
+            const metadataPayload = Object.assign({}, metadata);
+            if (Object.prototype.hasOwnProperty.call(metadataPayload, 'qa_log_id')) {
+                delete metadataPayload.qa_log_id;
+            }
+
             const response = await originalFetch(`${API_BASE_URL}/api/client-event`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    qa_log_id: currentQALogId,
+                    qa_log_id: qaLogIdForEvent,
                     event_name: eventName,
                     metadata: Object.assign({
                         page_path: window.location.pathname,
@@ -325,7 +343,7 @@
                         utm_campaign: params.get('utm_campaign') || null,
                         utm_content: params.get('utm_content') || null,
                         referral_code: params.get('ref') || null,
-                    }, metadata)
+                    }, metadataPayload)
                 })
             });
 
@@ -342,7 +360,7 @@
                 throw new Error(`client-event returned ${response.status}`);
             }
 
-            console.log('✅ Product event tracked:', { eventName, metadata, qaLogId: currentQALogId });
+            console.log('✅ Product event tracked:', { eventName, metadata, qaLogId: qaLogIdForEvent });
         } catch (error) {
             console.error('❌ Product event tracking failed:', error);
         }

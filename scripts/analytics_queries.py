@@ -379,12 +379,13 @@ def analyze_prompt_origin_usage(db, days=30):
         FROM product_events
         WHERE created_at >= :cutoff
           AND event_name = 'question_submitted'
+          {{INTERNAL_FILTER}}
         GROUP BY origin
         ORDER BY event_count DESC, origin
     """
 
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Question Origin Breakdown (Last {days} Days)"
     )
 
@@ -408,6 +409,7 @@ def analyze_feature_engagement(db, days=30):
             COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) AS unique_devices
         FROM product_events
         WHERE created_at >= :cutoff
+                    {{INTERNAL_FILTER}}
           AND event_name IN (
               'question_origin_selected',
               'question_submitted',
@@ -423,7 +425,7 @@ def analyze_feature_engagement(db, days=30):
     """
 
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Feature Engagement Breakdown (Last {days} Days)"
     )
 
@@ -440,12 +442,13 @@ def analyze_product_event_mix(db, days=30):
             COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) AS unique_devices
         FROM product_events
         WHERE created_at >= :cutoff
+          {{INTERNAL_FILTER}}
         GROUP BY event_name
         ORDER BY event_count DESC, event_name
     """
 
     run_query(
-        db, query, {"cutoff": cutoff},
+        db, _with_internal_filter(query), {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
         f"Product Event Mix (Last {days} Days)"
     )
 
@@ -520,15 +523,46 @@ def generate_summary_report(db, days=7):
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
     ).scalar()
     
-    unique_users = db.execute(
-        text(f"SELECT COUNT(DISTINCT user_ip) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
-        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
-    ).scalar()
+    canonical_identity_query = """
+        WITH canonical_questions AS (
+            SELECT
+                q.id,
+                q.user_ip
+            FROM qa_logs q
+            WHERE q.created_at >= :cutoff
+              {{INTERNAL_FILTER}}
+              {{QUESTION_FILTER}}
+        ),
+        latest_question_submit_events AS (
+            SELECT DISTINCT ON (pe.qa_log_id)
+                pe.qa_log_id,
+                NULLIF(pe.device_id, '') AS device_id
+            FROM product_events pe
+            WHERE pe.created_at >= :cutoff
+                            AND pe.event_name IN ('question_submitted', 'question_answered')
+              AND pe.qa_log_id IS NOT NULL
+            ORDER BY pe.qa_log_id, pe.created_at DESC
+        )
+        SELECT
+            COUNT(*) AS canonical_question_count,
+            COUNT(DISTINCT canonical_questions.user_ip) AS unique_users_by_ip,
+            COUNT(DISTINCT COALESCE(latest_question_submit_events.device_id, canonical_questions.user_ip)) AS unique_devices,
+            COUNT(latest_question_submit_events.qa_log_id) AS linked_question_submits
+        FROM canonical_questions
+        LEFT JOIN latest_question_submit_events
+          ON latest_question_submit_events.qa_log_id = canonical_questions.id
+    """
 
-    unique_devices = db.execute(
-        text("SELECT COUNT(DISTINCT COALESCE(NULLIF(device_id, ''), user_ip)) FROM product_events WHERE created_at >= :cutoff AND event_name = 'question_submitted'"),
-        {"cutoff": cutoff}
-    ).scalar()
+    identity_metrics = db.execute(
+        text(_with_question_quality_filter(_with_internal_filter(canonical_identity_query, "q"), "q")),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP}
+    ).mappings().one()
+
+    unique_users = identity_metrics["unique_users_by_ip"]
+    unique_devices = identity_metrics["unique_devices"]
+    canonical_question_count = identity_metrics["canonical_question_count"]
+    linked_question_submits = identity_metrics["linked_question_submits"]
+    submit_link_coverage_pct = round((linked_question_submits * 100.0 / canonical_question_count), 2) if canonical_question_count else 0
 
     avg_latency = db.execute(
         text(f"SELECT AVG(latency_ms) FROM qa_logs WHERE created_at >= :cutoff AND COALESCE(user_ip, '') != :internal_user_ip {PLACEHOLDER_QUESTION_SQL}"),
@@ -541,7 +575,8 @@ def generate_summary_report(db, days=7):
     print(f"\n📈 Overall Metrics:")
     print(f"   Total Questions: {total_questions or 0}")
     print(f"   Unique Users (by IP): {unique_users or 0}")
-    print(f"   Unique Devices: {unique_devices or 0}")
+    print(f"   Unique Devices (qa-linked): {unique_devices or 0}")
+    print(f"   Submit Event Link Coverage: {linked_question_submits or 0}/{canonical_question_count or 0} ({submit_link_coverage_pct}%)")
     print(f"   Avg Response Time: {round(avg_latency, 2) if avg_latency else 0}ms")
     print(f"   Total Episodes: {total_episodes or 0}")
     print(f"   Total Chunks: {total_chunks or 0}")

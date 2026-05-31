@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.28 loaded');
+  log('Ask Mirror Talk Widget v5.9.30 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -2525,6 +2525,16 @@
           if (event.type === 'done') {
             // Expose qa_log_id for analytics addon
             window._amtLastQALogId = event.qa_log_id;
+
+            // Completion event carries qa_log_id for reliable event-to-answer linkage.
+            emitProductEvent('question_answered', {
+              qa_log_id: event.qa_log_id,
+              origin: pendingQuestionOrigin,
+              length: question.length,
+              latency_ms: event.latency_ms,
+              cached: event.cached || false,
+              answer_status: event.answer_status || event.answerStatus || 'generated'
+            });
             // Remove streaming class and add completion class for CSS animations
             responseContainer.classList.remove('amt-streaming');
             output.classList.add('amt-complete');
@@ -4695,7 +4705,6 @@
     event.preventDefault();
 
     const question = input.value.trim();
-    emitProductEvent('question_submitted', { origin: pendingQuestionOrigin, length: question.length });
     if (!question) {
       showError("Please enter a question.", 'generic');
       return;
@@ -4704,6 +4713,9 @@
       showError("Please enter a more detailed question.", 'generic');
       return;
     }
+
+    // Track only valid question submissions.
+    emitProductEvent('question_submitted', { origin: pendingQuestionOrigin, length: question.length });
 
     if (continuationStrip) {
       continuationStrip.style.display = 'none';

@@ -93,9 +93,14 @@ class Settings(BaseSettings):
     notification_generation_model: str = "gpt-4o-mini"  # QOTD/motivation copy generation
     answer_max_tokens: int = 800  # Maximum tokens for generated answers
     answer_temperature: float = 0.7  # 0.0 = deterministic, 1.0 = creative
+    low_match_retrieval_confidence_threshold: float = 0.42  # Trigger second-pass retrieval rewrite below this confidence
+    low_match_best_similarity_threshold: float = 0.36  # Trigger second-pass retrieval when top chunk similarity is weak
     cache_similarity_threshold: float = 0.89  # Minimum cosine similarity for cache hits (lowered from 0.92 to improve hit rate)
-    cache_ttl_seconds: int = 14400  # Cache TTL (default: 4 hours)
+    cache_ttl_seconds: int = 604800  # Cache TTL (default: 7 days) to improve repeat-question hit rate
     cache_namespace: str = "citations-v3"  # bump to invalidate stale persisted answers safely
+    weak_match_prewarm_enabled: bool = True
+    weak_match_prewarm_daily_limit: int = 12
+    weak_match_prewarm_lookback_days: int = 30
 
     # Persistent cache (optional Redis backend — survives restarts/deploys)
     redis_url: str | None = None  # e.g. redis://default:password@host:6379
@@ -105,6 +110,7 @@ class Settings(BaseSettings):
     rate_limit_per_day: int = 100  # Daily limit to prevent single IP domination
     rate_limit_burst_threshold: int = 5  # Identical questions in short time = suspicious
     rate_limit_burst_window: int = 300  # 5 minutes
+    rate_limit_same_question_per_day: int = 25  # Cap repeated identical prompts per IP/day
     
     # API
     allowed_origins: str = ""  # comma-separated origins for CORS

@@ -15,9 +15,11 @@ import threading
 import logging
 import math
 import json
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+INTERNAL_USER_IP = "cache-prewarm"
 
 
 def normalize_question(q: str) -> str:
@@ -537,6 +539,52 @@ def prewarm_from_db_history(cache: "AnswerCache", db, limit: int = 40) -> int:
 
     logger.info("Cache DB prewarm: loaded %d / %d historical entries", loaded, len(rows))
     return loaded
+
+
+def get_top_weak_match_questions(db, *, limit: int = 20, lookback_days: int = 30) -> list[str]:
+    """
+    Return top weak-match questions for analytics-driven prewarm.
+
+    Weak-match is inferred from unanswered logs or empty citations.
+    """
+    from sqlalchemy import text as sqla_text
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, int(lookback_days or 30)))
+
+    rows = db.execute(
+        sqla_text(
+            """
+            SELECT
+                question,
+                COUNT(*) AS weak_count,
+                AVG(latency_ms) AS avg_latency
+            FROM qa_logs
+            WHERE created_at >= :cutoff
+              AND COALESCE(user_ip, '') != :internal_user_ip
+              AND (
+                is_answered = FALSE
+                OR episode_ids IS NULL
+                OR episode_ids = ''
+              )
+              AND COALESCE(TRIM(question), '') != ''
+              AND LOWER(TRIM(question)) NOT IN ('{{question}}', '{question}', '[question]', '<question>', 'question')
+              AND TRIM(question) !~ '^\\{\\{[^}]+\\}\\}$'
+              AND TRIM(question) !~ '^\\{[^}]+\\}$'
+              AND TRIM(question) !~ '^\\[[^]]+\\]$'
+              AND TRIM(question) !~ '^<[^>]+>$'
+            GROUP BY question
+            ORDER BY weak_count DESC, avg_latency DESC
+            LIMIT :lim
+            """
+        ),
+        {
+            "cutoff": cutoff,
+            "internal_user_ip": INTERNAL_USER_IP,
+            "lim": max(1, int(limit or 20)),
+        },
+    ).fetchall()
+
+    return [str(row[0]) for row in rows if row and row[0]]
 
 
 # Global singleton

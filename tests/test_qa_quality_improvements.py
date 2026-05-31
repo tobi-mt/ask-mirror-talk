@@ -6,7 +6,7 @@ Run with: pytest tests/test_qa_quality_improvements.py -v
 
 import pytest
 from app.qa.quality import validate_answer_quality, should_retry_generation
-from app.qa.preprocessing import preprocess_query, optimize_for_retrieval
+from app.qa.preprocessing import preprocess_query, optimize_for_retrieval, build_low_match_rewrite
 from app.qa.citation_validation import validate_citations, ensure_citation_quality
 from app.qa.resilience import CircuitBreaker, CircuitBreakerConfig, is_transient_error
 
@@ -122,6 +122,33 @@ class TestQueryPreprocessing:
         assert clear_processed.is_clear is True
         assert vague_processed.is_clear is False
         assert len(vague_processed.suggestions) > 0
+
+    def test_brand_lead_in_stripping(self):
+        """Brand boilerplate should be removed from retrieval query text."""
+        query = "What does Mirror Talk teach about carrying inner peace with more honesty and peace?"
+        processed = preprocess_query(query)
+
+        assert processed.normalized.lower().startswith("carrying inner peace")
+        assert "mirror talk" not in processed.normalized.lower()
+
+    def test_example_query_gets_practical_expansion(self):
+        """Example-seeking prompts should get practical-context expansion."""
+        query = "What does courage look like in everyday life?"
+        processed = preprocess_query(query)
+        retrieval_query = optimize_for_retrieval(processed)
+
+        assert processed.intent == "example"
+        assert "daily practice" in retrieval_query.lower()
+
+    def test_low_match_rewrite_builder(self):
+        """Low-match rewrites should preserve intent and add practical hints."""
+        query = "What does courage look like in everyday life?"
+        processed = preprocess_query(query)
+        rewritten = build_low_match_rewrite(processed)
+
+        assert rewritten is not None
+        assert "practical real-life examples and steps" in rewritten.lower()
+        assert rewritten.endswith("?")
 
 
 class TestCitationValidation:

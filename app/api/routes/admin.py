@@ -55,6 +55,7 @@ class AdminDashboardData:
     cached_count: int | None
     top_unanswered: list
     top_episodes: list
+    origin_cohorts: list
     runs: list
     logs: list
 
@@ -111,6 +112,17 @@ def render_admin_dashboard_html(data: AdminDashboardData) -> str:
             lambda row: html.escape(str(row[1])),
         ],
     )
+    origin_rows = _table_rows(
+        data.origin_cohorts,
+        [
+            lambda row: html.escape(str(row[0])),
+            lambda row: html.escape(str(row[1])),
+            lambda row: html.escape(str(row[2])),
+            lambda row: html.escape(str(row[3])),
+            lambda row: html.escape(str(row[4])),
+            lambda row: html.escape(str(row[5])),
+        ],
+    )
 
     feedback_card = ""
     if data.fb_total > 0:
@@ -153,6 +165,7 @@ def render_admin_dashboard_html(data: AdminDashboardData) -> str:
 
           <div class="api-links">
             <a href="/api/analytics/summary?days=7" target="_blank">📊 Analytics API</a>
+                        <a href="/api/analytics/origins?days=30" target="_blank">🧭 Origin Cohorts API</a>
             <a href="/api/analytics/episodes" target="_blank">📚 Episode Analytics</a>
             <a href="/status" target="_blank">⚙️ System Status</a>
           </div>
@@ -172,6 +185,14 @@ def render_admin_dashboard_html(data: AdminDashboardData) -> str:
               <tbody>{top_episodes_rows if data.top_episodes else '<tr><td colspan="3">No data yet</td></tr>'}</tbody>
             </table>
           </div>
+
+                    <div class="section">
+                        <h2>🧭 Origin Cohorts (7 days)</h2>
+                        <table>
+                            <thead><tr><th>Origin</th><th>Questions</th><th>Avg Latency (ms)</th><th>P95 Latency (ms)</th><th>Weak Match %</th><th>Cache Hit %</th></tr></thead>
+                            <tbody>{origin_rows if data.origin_cohorts else '<tr><td colspan="6">No origin cohort data yet</td></tr>'}</tbody>
+                        </table>
+                    </div>
 
           {unanswered_section}
 
@@ -277,6 +298,47 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
         """),
         {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
     ).fetchall()
+    origin_cohorts = db.execute(
+        text(
+            """
+            WITH origin_events AS (
+                SELECT DISTINCT ON (qa_log_id)
+                    qa_log_id,
+                    COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin
+                FROM product_events
+                WHERE event_name = 'question_submitted'
+                  AND qa_log_id IS NOT NULL
+                  AND created_at >= :cutoff
+                ORDER BY qa_log_id, created_at DESC
+            )
+            SELECT
+                COALESCE(oe.origin, 'typed_or_unknown') AS origin,
+                COUNT(*) AS total_questions,
+                ROUND(AVG(q.latency_ms)::numeric, 2) AS avg_latency_ms,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY q.latency_ms)::numeric, 2) AS p95_latency_ms,
+                ROUND(
+                    (
+                        SUM(
+                            CASE
+                                WHEN q.is_answered = FALSE OR q.episode_ids IS NULL OR q.episode_ids = '' THEN 1
+                                ELSE 0
+                            END
+                        ) * 100.0 / NULLIF(COUNT(*), 0)
+                    )::numeric,
+                    2
+                ) AS weak_match_pct,
+                ROUND((SUM(CASE WHEN q.is_cached THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0))::numeric, 2) AS cache_hit_pct
+            FROM qa_logs q
+            LEFT JOIN origin_events oe ON oe.qa_log_id = q.id
+            WHERE q.created_at >= :cutoff
+              AND COALESCE(q.user_ip, '') != :internal_user_ip
+            GROUP BY COALESCE(oe.origin, 'typed_or_unknown')
+            ORDER BY total_questions DESC, origin ASC
+            LIMIT 15
+            """
+        ),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+    ).fetchall()
     runs = db.execute(
         text("SELECT id, started_at, finished_at, status, message FROM ingest_runs ORDER BY started_at DESC LIMIT 10")
     ).all()
@@ -303,6 +365,7 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
         cached_count=cached_count,
         top_unanswered=top_unanswered,
         top_episodes=top_episodes,
+        origin_cohorts=origin_cohorts,
         runs=runs,
         logs=logs,
     )

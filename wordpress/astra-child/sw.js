@@ -10,8 +10,8 @@
  * FORCE UPDATE: Build timestamp to ensure browser detects changes
  */
 
-const BUILD_TIMESTAMP = '2026-05-17T14:37:00.000Z';  // Update this to force SW refresh
-const CACHE_VERSION = 'amt-v5.9.27';
+const BUILD_TIMESTAMP = '2026-05-31T09:35:00.000Z';  // Update this to force SW refresh
+const CACHE_VERSION = 'amt-v5.9.28';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const NAVIGATION_CACHE = `${CACHE_VERSION}-pages`;

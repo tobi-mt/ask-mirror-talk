@@ -61,6 +61,13 @@ _SYNONYM_GROUPS = {
 }
 
 
+_BRAND_LEAD_PATTERNS = [
+    re.compile(r"^\s*what does mirror talk (?:teach|say) about\s+", re.IGNORECASE),
+    re.compile(r"^\s*mirror talk (?:teaches|says)\s+", re.IGNORECASE),
+    re.compile(r"^\s*according to mirror talk[,:\s]+", re.IGNORECASE),
+]
+
+
 def preprocess_query(question: str) -> ProcessedQuery:
     """
     Preprocess and optimize a user query for better retrieval.
@@ -73,6 +80,9 @@ def preprocess_query(question: str) -> ProcessedQuery:
     """
     # Normalize the question
     normalized = _normalize_query(question)
+
+    # Strip product-brand lead-ins that add little retrieval value
+    normalized = _strip_brand_lead(normalized)
     
     # Correct common spelling errors
     corrected = _correct_spelling(normalized)
@@ -87,7 +97,7 @@ def preprocess_query(question: str) -> ProcessedQuery:
     is_clear, suggestions = _check_clarity(corrected, key_terms)
     
     # Expand with synonyms if we have key emotional terms
-    expanded = _expand_query(corrected, key_terms) if key_terms else None
+    expanded = _expand_query(corrected, key_terms, intent=intent) if key_terms else None
     
     logger.info(
         "Query preprocessing: original='%s', normalized='%s', "
@@ -104,6 +114,19 @@ def preprocess_query(question: str) -> ProcessedQuery:
         is_clear=is_clear,
         suggestions=suggestions
     )
+
+
+def _strip_brand_lead(query: str) -> str:
+    """Remove brand-heavy lead-ins so retrieval embeds the actual user intent."""
+    for pattern in _BRAND_LEAD_PATTERNS:
+        stripped = pattern.sub("", query).strip()
+        if stripped and stripped != query and len(stripped.split()) >= 3:
+            # Preserve terminal punctuation from the original normalization step.
+            if query.endswith("?") and not stripped.endswith("?"):
+                stripped += "?"
+            logger.info("Stripped brand lead-in for retrieval: '%s' -> '%s'", query[:60], stripped[:60])
+            return stripped
+    return query
 
 
 def _normalize_query(query: str) -> str:
@@ -194,6 +217,14 @@ def _detect_intent(query: str) -> str:
     Returns: 'advice', 'definition', 'example', 'reflection', 'general'
     """
     query_lower = query.lower()
+
+    # Example-seeking patterns (check before definition so
+    # "what does ... look like" is treated as example intent).
+    if any(pattern in query_lower for pattern in [
+        'example', 'look like', 'sound like', 'instance',
+        'case of', 'scenario', 'situation where'
+    ]):
+        return 'example'
     
     # Advice-seeking patterns
     if any(pattern in query_lower for pattern in [
@@ -209,13 +240,6 @@ def _detect_intent(query: str) -> str:
         'meaning of', 'mean by', 'definition', 'explain'
     ]):
         return 'definition'
-    
-    # Example-seeking patterns
-    if any(pattern in query_lower for pattern in [
-        'example', 'look like', 'sound like', 'instance',
-        'case of', 'scenario', 'situation where'
-    ]):
-        return 'example'
     
     # Reflection/understanding patterns
     if any(pattern in query_lower for pattern in [
@@ -270,7 +294,7 @@ def _check_clarity(query: str, key_terms: list[str]) -> tuple[bool, list[str]]:
     return True, []
 
 
-def _expand_query(query: str, key_terms: list[str]) -> Optional[str]:
+def _expand_query(query: str, key_terms: list[str], intent: str = "general") -> Optional[str]:
     """
     Expand query with synonyms for better retrieval.
     
@@ -286,12 +310,29 @@ def _expand_query(query: str, key_terms: list[str]) -> Optional[str]:
             synonyms = _SYNONYM_GROUPS[term_lower][:2]
             expansions.extend(synonyms)
     
-    if not expansions:
+    query_lower = query.lower()
+
+    # Add intent-aware context for "what does X look like" style questions.
+    if intent == "example":
+        expansions.extend(["practical example", "real life"])
+
+    # Add phrase-level expansions for high-frequency weak-match phrasings.
+    if "everyday life" in query_lower or "daily life" in query_lower:
+        expansions.extend(["daily practice", "real world"])
+    if "without feeling guilty" in query_lower:
+        expansions.extend(["self-compassion", "healthy limits"])
+    if "without shutting down" in query_lower:
+        expansions.extend(["emotional regulation", "staying open"])
+
+    # Keep insertion order while removing duplicates.
+    deduped_expansions = list(dict.fromkeys(expansions))
+
+    if not deduped_expansions:
         return None
     
     # Create expanded query: "original query [synonym1 synonym2]"
-    expanded = f"{query} {' '.join(expansions)}"
-    logger.info(f"Query expanded with synonyms: {expansions}")
+    expanded = f"{query} {' '.join(deduped_expansions)}"
+    logger.info(f"Query expanded with synonyms: {deduped_expansions}")
     return expanded
 
 
@@ -308,6 +349,43 @@ def optimize_for_retrieval(query: ProcessedQuery) -> str:
     
     # Otherwise use normalized
     return query.normalized
+
+
+def build_low_match_rewrite(query: ProcessedQuery) -> Optional[str]:
+    """
+    Build a second-pass retrieval query when first-pass confidence is low.
+
+    The rewrite keeps the user's intent but adds concrete retrieval hints so
+    semantic search can recover stronger supporting chunks.
+    """
+    if not query or not query.normalized:
+        return None
+
+    base = query.normalized.strip().rstrip("?")
+    if not base:
+        return None
+
+    hints: list[str] = []
+    if query.key_terms:
+        hints.append("focus on " + ", ".join(query.key_terms[:3]))
+
+    if query.intent == "example":
+        hints.append("practical real-life examples and steps")
+    elif query.intent == "advice":
+        hints.append("grounded practical guidance")
+    elif query.intent == "reflection":
+        hints.append("clear reflective perspective")
+
+    if "everyday life" in query.normalized.lower() or "daily life" in query.normalized.lower():
+        hints.append("daily practice")
+
+    if not hints:
+        return None
+
+    rewritten = f"{base}; {'; '.join(dict.fromkeys(hints))}?"
+    if rewritten.lower() == query.normalized.lower():
+        return None
+    return rewritten
 
 
 def get_clarification_response(query: ProcessedQuery) -> Optional[str]:

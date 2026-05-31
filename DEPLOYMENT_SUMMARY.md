@@ -1,4 +1,12 @@
 # 🚀 Ask Mirror Talk - UX Enhancement Complete!
+
+## Current Package (Latest)
+
+- Release version: 5.9.28
+- WordPress theme package: astra-child-v5.9.28.zip
+- Theme package path: dist/astra-child-v5.9.28.zip
+- Full project archive (not for WP theme upload): ask-mirror-talk_v5.9.28.zip
+
 **Date:** March 13, 2026  
 **Version:** 4.0.0  
 **Status:** ✅ READY FOR DEPLOYMENT

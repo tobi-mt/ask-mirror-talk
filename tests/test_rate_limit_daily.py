@@ -135,6 +135,44 @@ def test_rate_limiting():
     print("="*80 + "\n")
     return True
 
+
+def test_same_question_daily_limit():
+    """Repeated identical prompts from one IP should hit the daily same-question cap."""
+    from app.core.config import settings
+
+    clear_rate_limits()
+
+    original_per_minute = settings.rate_limit_per_minute
+    original_per_day = settings.rate_limit_per_day
+    original_burst_threshold = settings.rate_limit_burst_threshold
+    original_same_question_limit = settings.rate_limit_same_question_per_day
+
+    try:
+        settings.rate_limit_per_minute = 1000
+        settings.rate_limit_per_day = 1000
+        settings.rate_limit_burst_threshold = 1000
+        settings.rate_limit_same_question_per_day = 3
+
+        test_ip = "repeat.ip"
+        question = "What does courage look like in everyday life?"
+
+        enforce_rate_limit(test_ip, question)
+        enforce_rate_limit(test_ip, question)
+        enforce_rate_limit(test_ip, question)
+
+        try:
+            enforce_rate_limit(test_ip, question)
+            assert False, "Expected HTTPException for repeated same-question daily cap"
+        except HTTPException as exc:
+            assert exc.status_code == 429
+            assert "same question" in str(exc.detail).lower() or "rephrase" in str(exc.detail).lower()
+    finally:
+        settings.rate_limit_per_minute = original_per_minute
+        settings.rate_limit_per_day = original_per_day
+        settings.rate_limit_burst_threshold = original_burst_threshold
+        settings.rate_limit_same_question_per_day = original_same_question_limit
+        clear_rate_limits()
+
 if __name__ == "__main__":
     success = test_rate_limiting()
     sys.exit(0 if success else 1)

@@ -58,7 +58,7 @@ async def _prewarm_cache():
 
     logger.info("🔥 Starting cache pre-warm...")
 
-    from app.qa.cache import get_answer_cache, prewarm_from_db_history, _is_incomplete_answer
+    from app.qa.cache import get_answer_cache, prewarm_from_db_history, _is_incomplete_answer, get_top_weak_match_questions
 
     cache = get_answer_cache()
 
@@ -127,7 +127,90 @@ async def _prewarm_cache():
             failed += 1
             logger.warning("  ✗ Pre-warm failed for '%.50s…': %s", question, e)
 
+    # ── Phase 3: analytics-driven weak-match prewarm ──
+    if settings.weak_match_prewarm_enabled:
+        logger.info("  🎯 Loading weak-match question prewarm set...")
+        weak_questions = []
+        weak_db = SessionLocal()
+        try:
+            weak_questions = get_top_weak_match_questions(
+                weak_db,
+                limit=settings.weak_match_prewarm_daily_limit,
+                lookback_days=settings.weak_match_prewarm_lookback_days,
+            )
+            logger.info("  ✓ Weak-match question candidates: %d", len(weak_questions))
+        except Exception as e:
+            logger.warning("  ✗ Weak-match query failed: %s", e)
+        finally:
+            safe_close_session(weak_db, context="cache_prewarm_weak_match_query")
+
+        weak_warmed = 0
+        for question in weak_questions:
+            try:
+                db = SessionLocal()
+                try:
+                    answer_question(db, question, user_ip="cache-prewarm", log_interaction=False)
+                    weak_warmed += 1
+                finally:
+                    safe_close_session(db, context="cache_prewarm_weak_question")
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.warning("  ✗ Weak-match prewarm failed for '%.50s…': %s", question, e)
+
+        logger.info("  ✓ Weak-match prewarm complete: %d warmed", weak_warmed)
+
     logger.info("🔥 Cache pre-warm complete: %d warmed, %d failed, %d total", warmed, failed, len(questions))
+
+
+async def _daily_weak_match_prewarm_loop():
+    """Run weak-match cache prewarm every 24h to keep hard questions warm."""
+    import asyncio
+
+    if not settings.weak_match_prewarm_enabled:
+        logger.info("Weak-match daily prewarm disabled")
+        return
+
+    # Wait for initial startup prewarm work to settle.
+    await asyncio.sleep(180)
+
+    from app.qa.cache import get_top_weak_match_questions
+    from app.qa.service import answer_question
+
+    SessionLocal = get_session_local()
+
+    while True:
+        try:
+            if not is_db_initialized():
+                logger.warning("Skipping daily weak-match prewarm: DB not initialized")
+            else:
+                logger.info("🔁 Running daily weak-match cache prewarm...")
+                query_db = SessionLocal()
+                try:
+                    weak_questions = get_top_weak_match_questions(
+                        query_db,
+                        limit=settings.weak_match_prewarm_daily_limit,
+                        lookback_days=settings.weak_match_prewarm_lookback_days,
+                    )
+                finally:
+                    safe_close_session(query_db, context="daily_weak_match_query")
+
+                warmed = 0
+                for question in weak_questions:
+                    worker_db = SessionLocal()
+                    try:
+                        answer_question(worker_db, question, user_ip="cache-prewarm", log_interaction=False)
+                        warmed += 1
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Daily weak-match prewarm failed for '%.50s…': %s", question, exc)
+                    finally:
+                        safe_close_session(worker_db, context="daily_weak_match_prewarm")
+                    await asyncio.sleep(0.5)
+
+                logger.info("✅ Daily weak-match prewarm complete: %d/%d", warmed, len(weak_questions))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Daily weak-match prewarm loop failed: %s", exc, exc_info=True)
+
+        await asyncio.sleep(24 * 60 * 60)
 
 
 @asynccontextmanager
@@ -143,6 +226,7 @@ async def _lifespan(_app: FastAPI):
     logger.info("Starting background DB initialization task...")
     asyncio.create_task(_init_db_background())
     asyncio.create_task(_prewarm_cache())
+    asyncio.create_task(_daily_weak_match_prewarm_loop())
     yield
     logger.info("Application shutting down")
 

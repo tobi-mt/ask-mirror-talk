@@ -14,6 +14,59 @@ router = APIRouter()
 INTERNAL_USER_IP = "cache-prewarm"
 
 
+def _fetch_origin_cohort_metrics(db: Session, cutoff: datetime):
+    return db.execute(
+        text(
+            """
+            WITH origin_events AS (
+                SELECT DISTINCT ON (qa_log_id)
+                    qa_log_id,
+                    COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin
+                FROM product_events
+                WHERE event_name = 'question_submitted'
+                  AND qa_log_id IS NOT NULL
+                  AND created_at >= :cutoff
+                ORDER BY qa_log_id, created_at DESC
+            )
+            SELECT
+                COALESCE(oe.origin, 'typed_or_unknown') AS origin,
+                COUNT(*) AS total_questions,
+                ROUND(AVG(q.latency_ms)::numeric, 2) AS avg_latency_ms,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY q.latency_ms)::numeric, 2) AS p95_latency_ms,
+                SUM(CASE WHEN q.is_cached THEN 1 ELSE 0 END) AS cached_questions,
+                ROUND((SUM(CASE WHEN q.is_cached THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0))::numeric, 2) AS cache_hit_pct,
+                SUM(
+                    CASE
+                        WHEN q.is_answered = FALSE OR q.episode_ids IS NULL OR q.episode_ids = '' THEN 1
+                        ELSE 0
+                    END
+                ) AS weak_match_questions,
+                ROUND(
+                    (
+                        SUM(
+                            CASE
+                                WHEN q.is_answered = FALSE OR q.episode_ids IS NULL OR q.episode_ids = '' THEN 1
+                                ELSE 0
+                            END
+                        ) * 100.0 / NULLIF(COUNT(*), 0)
+                    )::numeric,
+                    2
+                ) AS weak_match_pct,
+                COUNT(DISTINCT q.user_ip) AS unique_users,
+                COUNT(DISTINCT COALESCE(NULLIF(pe.device_id, ''), q.user_ip)) AS unique_devices
+            FROM qa_logs q
+            LEFT JOIN origin_events oe ON oe.qa_log_id = q.id
+            LEFT JOIN product_events pe ON pe.qa_log_id = q.id
+            WHERE q.created_at >= :cutoff
+              AND COALESCE(q.user_ip, '') != :internal_user_ip
+            GROUP BY COALESCE(oe.origin, 'typed_or_unknown')
+            ORDER BY total_questions DESC, origin ASC
+            """
+        ),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+    ).fetchall()
+
+
 @router.get("/api/stats/questions-today")
 def get_questions_today(db: Session = Depends(get_db)):
     """
@@ -175,6 +228,12 @@ def get_analytics_summary(
             guardrail_total = 0
             guardrail_rows = []
 
+        try:
+            origin_rows = _fetch_origin_cohort_metrics(db, cutoff)
+        except Exception:
+            db.rollback()
+            origin_rows = []
+
         return {
             "period_days": days,
             "total_questions": total_questions or 0,
@@ -198,10 +257,58 @@ def get_analytics_summary(
                 {"id": episode[0], "title": episode[1], "citations": episode[2]}
                 for episode in most_cited
             ],
+            "origin_cohorts": [
+                {
+                    "origin": row[0],
+                    "total_questions": row[1],
+                    "avg_latency_ms": float(row[2] or 0),
+                    "p95_latency_ms": float(row[3] or 0),
+                    "cached_questions": int(row[4] or 0),
+                    "cache_hit_pct": float(row[5] or 0),
+                    "weak_match_questions": int(row[6] or 0),
+                    "weak_match_pct": float(row[7] or 0),
+                    "unique_users": int(row[8] or 0),
+                    "unique_devices": int(row[9] or 0),
+                }
+                for row in origin_rows
+            ],
         }
     except Exception as e:
         logger.error("Error getting analytics summary: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/analytics/origins")
+def get_origin_cohort_analytics(
+    days: int = 30,
+    request: Request = None,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Per-origin cohort analytics for latency, cache hit rate, and weak-match rate."""
+    admin_auth(credentials, request)
+    days = max(1, min(days, 365))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = _fetch_origin_cohort_metrics(db, cutoff)
+    return {
+        "period_days": days,
+        "origins": [
+            {
+                "origin": row[0],
+                "total_questions": int(row[1] or 0),
+                "avg_latency_ms": float(row[2] or 0),
+                "p95_latency_ms": float(row[3] or 0),
+                "cached_questions": int(row[4] or 0),
+                "cache_hit_pct": float(row[5] or 0),
+                "weak_match_questions": int(row[6] or 0),
+                "weak_match_pct": float(row[7] or 0),
+                "unique_users": int(row[8] or 0),
+                "unique_devices": int(row[9] or 0),
+            }
+            for row in rows
+        ],
+    }
 
 
 @router.get("/api/analytics/episodes")

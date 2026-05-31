@@ -8,6 +8,7 @@ from app.core.config import settings
 _rate_limit_bucket: dict[str, list[float]] = {}
 _daily_limit_bucket: dict[str, list[float]] = {}
 _question_burst_tracker: dict[str, dict[str, list[float]]] = {}  # {ip: {question_hash: [timestamps]}}
+_question_daily_tracker: dict[str, dict[str, list[float]]] = {}  # {ip: {question_hash: [timestamps]}}
 
 
 def enforce_rate_limit(ip: str, question: str | None = None):
@@ -48,6 +49,8 @@ def _check_suspicious_burst(ip: str, question: str, now: float):
     """Detect suspicious repeated question patterns (bot behavior)."""
     burst_threshold = getattr(settings, 'rate_limit_burst_threshold', 5)
     burst_window = getattr(settings, 'rate_limit_burst_window', 300)  # 5 minutes
+    same_question_daily_limit = getattr(settings, 'rate_limit_same_question_per_day', 25)
+    same_question_daily_window = 86400  # 24 hours
     
     # Hash question for tracking (normalize first)
     question_hash = hashlib.md5(question.lower().strip().encode()).hexdigest()[:8]
@@ -74,6 +77,22 @@ def _check_suspicious_burst(ip: str, question: str, now: float):
         )
     
     ip_tracker[question_hash].append(now)
+
+    # Also enforce a softer same-question daily cap per IP.
+    if ip not in _question_daily_tracker:
+        _question_daily_tracker[ip] = {}
+    daily_tracker = _question_daily_tracker[ip]
+    daily_entries = daily_tracker.get(question_hash, [])
+    daily_entries = [ts for ts in daily_entries if now - ts < same_question_daily_window]
+
+    if len(daily_entries) >= same_question_daily_limit:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many repeats of the same question today. Please rephrase or try another angle.",
+        )
+
+    daily_entries.append(now)
+    daily_tracker[question_hash] = daily_entries
     
     # Cleanup: remove empty trackers
     if not ip_tracker[question_hash]:
@@ -86,3 +105,4 @@ def clear_rate_limits():
     _rate_limit_bucket.clear()
     _daily_limit_bucket.clear()
     _question_burst_tracker.clear()
+    _question_daily_tracker.clear()

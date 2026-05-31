@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.27 loaded');
+  log('Ask Mirror Talk Widget v5.9.28 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -2924,11 +2924,11 @@
     let clean = normalizeReflectionText(text);
     if (!clean) return '';
     clean = clean.replace(
-      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:emphasizes|says|shares|notes|explains|reminds(?:\s+us)?|suggests|teaches)\s+that\s+/,
+      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(?:emphasizes|says|shares|notes|explains|reminds(?:\s+us)?|suggests|teaches)\s+that\s+/,
       ''
     );
     clean = clean.replace(
-      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:believes|argues|offers|shows)\s+/,
+      /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(?:believes|argues|offers|shows)\s+/,
       ''
     );
     return clean.trim();
@@ -3025,7 +3025,7 @@
     if (/\b(maybe|perhaps|for example|for instance|kind of|sort of|really|actually)\b/i.test(lower)) score -= 2;
     if (/\b(podcast|episode|guest|speaker|story|program|tool)\b/i.test(lower)) score -= 3;
     if (/\b(thank you|welcome back|let me ask|one thing i love|what i want to ask)\b/i.test(lower)) score -= 6;
-    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(emphasizes|says|shares|notes|explains|reminds|suggests)\b/.test(String(sentence || '').trim())) score -= 8;
+    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(emphasizes|says|shares|notes|explains|reminds|suggests)\b/.test(String(sentence || '').trim())) score -= 8;
 
     const themeKeywords = (options && options.themeKeywords) || [];
     const matchedKeywords = themeKeywords.filter(keyword => lower.includes(keyword));
@@ -3123,16 +3123,47 @@
     ) || '';
   }
 
-  function scoreShareHeadlineCandidate(text, themeKeywords) {
+  function scoreQuestionHeadlineRelevance(candidate, question) {
+    const cleanQuestion = String(question || '').toLowerCase().trim();
+    const cleanCandidate = String(candidate || '').toLowerCase().trim();
+    if (!cleanQuestion || !cleanCandidate) return 0;
+
+    const stopwords = new Set([
+      'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'from', 'has', 'he', 'in',
+      'is', 'it', 'its', 'my', 'not', 'of', 'on', 'or', 'that', 'the', 'to', 'was', 'will', 'with'
+    ]);
+
+    const extractKeyTerms = (text) => text.split(/\s+/)
+      .map(word => word.replace(/[^a-z0-9]/g, '').toLowerCase())
+      .filter(word => word.length > 3 && !stopwords.has(word));
+
+    const questionTerms = new Set(extractKeyTerms(cleanQuestion));
+    if (!questionTerms.size) return 0;
+
+    const candidateTerms = new Set(extractKeyTerms(cleanCandidate));
+    let matches = 0;
+    questionTerms.forEach(term => {
+      if (candidateTerms.has(term)) matches += 1;
+    });
+
+    return matches / Math.max(1, questionTerms.size);
+  }
+
+  function scoreShareHeadlineCandidate(text, themeKeywords, options) {
     const clean = ensureReflectionSentence(stripSpeakerAttribution(text) || text);
     if (!clean) return -Infinity;
 
     const words = clean.split(/\s+/).filter(Boolean);
     const length = clean.length;
+    const question = String((options && options.question) || '').trim();
     let score = scoreReflectionSentence(clean, {
       themeKeywords: themeKeywords || [],
       preferUniversal: true
     });
+
+    const questionRelevance = scoreQuestionHeadlineRelevance(clean, question);
+    if (questionRelevance > 0) score += questionRelevance * 12;
+    else if (question) score -= 4;
 
     if (isWeakShareHeadlineCandidate(clean)) score -= 35;
 
@@ -3154,7 +3185,7 @@
       score += 2;
     }
 
-    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) score -= 8;
+    if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) score -= 8;
     if (/^(what|how|why|when|where|who|can|could|should|would|do|does|did|is|are|am|will)\b/i.test(clean)) score -= 10;
     if (/^(in this reflection|this reflection|one thing that stood out|here are grounded reflections|i found a few mirror talk moments|the clearest thread is this|one source moment says)\b/i.test(clean.toLowerCase())) score -= 15;
 
@@ -3290,7 +3321,7 @@
       .map(sentence => {
         const cleaned = ensureReflectionSentence(stripSpeakerAttribution(sentence) || sentence);
         const words = cleaned.split(/\s+/).filter(Boolean);
-        const score = scoreShareHeadlineCandidate(cleaned, themeKeywords);
+        const score = scoreShareHeadlineCandidate(cleaned, themeKeywords, { question: opts.question || '' });
         return {
           text: cleaned,
           score,
@@ -3715,7 +3746,7 @@
     const ranked = uniqueCandidates
       .map(candidate => ({
         text: candidate,
-        score: scoreShareHeadlineCandidate(candidate, themeKeywords),
+        score: scoreShareHeadlineCandidate(candidate, themeKeywords, { question: insight.question || '' }),
         relevance: scoreQuestionRelevance(candidate)
       }))
       .filter(item => item.text && item.score > -Infinity && !isWeakShareHeadlineCandidate(item.text))
@@ -8999,7 +9030,7 @@
     };
 
     const scoreHeadlinePresentation = (text) => {
-      return scoreShareHeadlineCandidate(text, themeKeywords);
+      return scoreShareHeadlineCandidate(text, themeKeywords, { question: normalized.question || '' });
     };
 
     const scoreInsightDepth = (text) => {
@@ -9016,7 +9047,7 @@
       if (/\b(you|your|we|our)\b/i.test(lower)) depth += 1;
       if (words.length >= 10 && words.length <= 24) depth += 3;
       else if (words.length >= 8 && words.length <= 28) depth += 1;
-      if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) depth -= 6;
+      if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(says|shares|notes|explains|reminds|suggests|teaches)\b/.test(clean)) depth -= 6;
 
       return depth;
     };
@@ -9095,7 +9126,10 @@
     const extractedCandidates = listCardHeadlineCandidates(
       joinReflectionTextParts([normalized.answer, normalized.excerpt]),
       normalized.theme || '',
-      { includeFallback: (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim() }
+      {
+        includeFallback: (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim(),
+        question: normalized.question || ''
+      }
     );
     extractedCandidates.forEach(addHeadlineCandidate);
 
@@ -10176,7 +10210,8 @@
     if (!headline) {
       const headlineCandidates = listCardHeadlineCandidates(
         joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-        normalized.theme || ''
+        normalized.theme || '',
+        { question: normalized.question || '' }
       );
 
       headline = headlineCandidates.find(candidate =>
@@ -10476,7 +10511,8 @@
     if (!headline) {
       const headlineCandidates = listCardHeadlineCandidates(
         joinReflectionTextParts([normalized.answer, normalized.excerpt]),
-        normalized.theme || ''
+        normalized.theme || '',
+        { question: normalized.question || '' }
       );
 
       headline = headlineCandidates.find(candidate =>

@@ -17,8 +17,9 @@ from app.storage.repository import log_qa
 # Quality and reliability imports
 from app.qa.quality import validate_answer_quality, should_retry_generation
 from app.qa.resilience import CircuitBreakerOpenError, is_transient_error
-from app.qa.preprocessing import preprocess_query, optimize_for_retrieval
+from app.qa.preprocessing import preprocess_query, optimize_for_retrieval, build_low_match_rewrite
 from app.qa.citation_validation import ensure_citation_quality
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,28 @@ def _log_phase_timings(flow: str, question: str, timings_ms: dict[str, int], ext
     if extra:
         payload.update(extra)
     logger.info("QA phase timings: %s", payload)
+
+
+def _retrieval_confidence(payloads: list[dict]) -> float:
+    """Estimate retrieval confidence from top chunk similarities."""
+    if not payloads:
+        return 0.0
+    sims = sorted((float(p.get("similarity", 0.0) or 0.0) for p in payloads), reverse=True)
+    best = sims[0]
+    top_avg = sum(sims[: min(3, len(sims))]) / min(3, len(sims))
+    # Prioritize best-match strength while still rewarding consistency.
+    return (best * 0.65) + (top_avg * 0.35)
+
+
+def _should_retry_retrieval_with_rewrite(payloads: list[dict]) -> bool:
+    if not payloads:
+        return True
+    best_similarity = max(float(p.get("similarity", 0.0) or 0.0) for p in payloads)
+    confidence = _retrieval_confidence(payloads)
+    return (
+        best_similarity < settings.low_match_best_similarity_threshold
+        or confidence < settings.low_match_retrieval_confidence_threshold
+    )
 
 
 def _generate_answer_with_quality_checks(
@@ -319,7 +342,7 @@ def answer_question(
       Phase 2 — Answer generation (OpenAI): session CLOSED to avoid idle-in-transaction timeout
       Phase 3 — Logging: fresh session
     """
-    from app.core.db import get_session_local, safe_close_session
+    from app.core.db import safe_close_session
 
     start_time = time.time()
     embed_started_at = None
@@ -404,6 +427,9 @@ def answer_question(
 
     # ── Phase 1: DB-heavy retrieval — keep session open ──
     retrieval_started_at = time.perf_counter()
+    retrieval_rewrite_applied = False
+    retrieval_query_used = retrieval_query
+
     if use_smart_citations:
         retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
         answer_chunks = retrieval_result['answer_chunks']
@@ -448,6 +474,64 @@ def answer_question(
                 "relevance_score": cit['relevance_score'],
                 "total_relevant_chunks": cit['total_relevant_chunks'],
             })
+
+        if _should_retry_retrieval_with_rewrite(chunk_payloads):
+            rewritten_query = build_low_match_rewrite(processed_query)
+            if rewritten_query and rewritten_query.lower() != retrieval_query.lower():
+                try:
+                    rewrite_embedding = embed_text(rewritten_query)
+                    rewritten_result = retrieve_chunks_two_tier(db, rewrite_embedding)
+                    rewritten_answer_chunks = rewritten_result['answer_chunks']
+                    rewritten_citation_episodes = rewritten_result['citation_episodes']
+
+                    rewritten_episode_ids = list({chunk.episode_id for chunk, _ in rewritten_answer_chunks})
+                    rewritten_episode_map = load_episode_map(db, rewritten_episode_ids)
+
+                    rewritten_chunk_payloads = []
+                    for chunk, similarity in rewritten_answer_chunks:
+                        episode = rewritten_episode_map.get(chunk.episode_id)
+                        if not episode:
+                            continue
+                        rewritten_chunk_payloads.append({
+                            "text": chunk.text,
+                            "start_time": chunk.start_time,
+                            "end_time": chunk.end_time,
+                            "episode": {
+                                "id": episode.id,
+                                "title": episode.title,
+                                "audio_url": episode.audio_url or "",
+                                "published_year": episode.published_at.year if episode.published_at else None,
+                            },
+                            "similarity": similarity,
+                        })
+
+                    rewritten_citation_payloads = []
+                    for cit in rewritten_citation_episodes:
+                        episode = rewritten_episode_map.get(cit['episode_id'])
+                        if not episode:
+                            continue
+                        rewritten_citation_payloads.append({
+                            "text": cit['chunk'].text,
+                            "start_time": cit['chunk'].start_time,
+                            "end_time": cit['chunk'].end_time,
+                            "episode": {
+                                "id": episode.id,
+                                "title": episode.title,
+                                "audio_url": episode.audio_url or "",
+                            },
+                            "similarity": cit['similarity'],
+                            "relevance_score": cit['relevance_score'],
+                            "total_relevant_chunks": cit['total_relevant_chunks'],
+                        })
+
+                    if _retrieval_confidence(rewritten_chunk_payloads) > _retrieval_confidence(chunk_payloads):
+                        chunk_payloads = rewritten_chunk_payloads
+                        citation_payloads = rewritten_citation_payloads
+                        retrieval_rewrite_applied = True
+                        retrieval_query_used = rewritten_query
+                        logger.info("Applied low-match retrieval rewrite for question='%.80s'", question)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Low-match rewrite retrieval failed; continuing with original retrieval: %s", exc)
     else:
         retrieved = retrieve_chunks(db, query_embedding)
         episode_ids = list({chunk.episode_id for chunk, _ in retrieved})
@@ -470,6 +554,40 @@ def answer_question(
                 "similarity": similarity,
             })
         citation_payloads = None
+
+        if _should_retry_retrieval_with_rewrite(chunk_payloads):
+            rewritten_query = build_low_match_rewrite(processed_query)
+            if rewritten_query and rewritten_query.lower() != retrieval_query.lower():
+                try:
+                    rewrite_embedding = embed_text(rewritten_query)
+                    rewritten_retrieved = retrieve_chunks(db, rewrite_embedding)
+                    rewritten_episode_ids = list({chunk.episode_id for chunk, _ in rewritten_retrieved})
+                    rewritten_episode_map = load_episode_map(db, rewritten_episode_ids)
+
+                    rewritten_chunk_payloads = []
+                    for chunk, similarity in rewritten_retrieved:
+                        episode = rewritten_episode_map.get(chunk.episode_id)
+                        if not episode:
+                            continue
+                        rewritten_chunk_payloads.append({
+                            "text": chunk.text,
+                            "start_time": chunk.start_time,
+                            "end_time": chunk.end_time,
+                            "episode": {
+                                "id": episode.id,
+                                "title": episode.title,
+                                "audio_url": episode.audio_url or "",
+                            },
+                            "similarity": similarity,
+                        })
+
+                    if _retrieval_confidence(rewritten_chunk_payloads) > _retrieval_confidence(chunk_payloads):
+                        chunk_payloads = rewritten_chunk_payloads
+                        retrieval_rewrite_applied = True
+                        retrieval_query_used = rewritten_query
+                        logger.info("Applied low-match retrieval rewrite for question='%.80s'", question)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Low-match rewrite retrieval failed; continuing with original retrieval: %s", exc)
     retrieval_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
 
     # ── Release DB session before long OpenAI call ──
@@ -570,6 +688,8 @@ def answer_question(
         {
             "citations": len(response["citations"]),
             "cached": False,
+            "retrieval_rewrite_applied": retrieval_rewrite_applied,
+            "retrieval_query_used_preview": retrieval_query_used[:80],
         },
     )
 
@@ -636,7 +756,7 @@ def answer_question_stream(
     the long-running OpenAI streaming to prevent idle-in-transaction timeouts.
     """
     import json
-    from app.core.db import get_session_local, safe_close_session
+    from app.core.db import safe_close_session
 
     start_time = time.time()
     embed_started_at = None
@@ -728,6 +848,8 @@ def answer_question_stream(
 
     # ── Phase 1: DB-heavy work (retrieval) — keep session open ──
     retrieval_started_at = time.perf_counter()
+    retrieval_rewrite_applied = False
+    retrieval_query_used = retrieval_query
     retrieval_result = retrieve_chunks_two_tier(db, query_embedding)
     answer_chunks = retrieval_result['answer_chunks']
     citation_episodes = retrieval_result['citation_episodes']
@@ -767,6 +889,60 @@ def answer_question_stream(
             "relevance_score": cit['relevance_score'],
             "total_relevant_chunks": cit['total_relevant_chunks'],
         })
+
+    if _should_retry_retrieval_with_rewrite(chunk_payloads):
+        rewritten_query = build_low_match_rewrite(processed_query)
+        if rewritten_query and rewritten_query.lower() != retrieval_query.lower():
+            try:
+                rewrite_embedding = embed_text(rewritten_query)
+                rewritten_result = retrieve_chunks_two_tier(db, rewrite_embedding)
+                rewritten_answer_chunks = rewritten_result['answer_chunks']
+                rewritten_citation_episodes = rewritten_result['citation_episodes']
+
+                rewritten_episode_ids = list({chunk.episode_id for chunk, _ in rewritten_answer_chunks})
+                rewritten_episode_map = load_episode_map(db, rewritten_episode_ids)
+
+                rewritten_chunk_payloads = []
+                for chunk, similarity in rewritten_answer_chunks:
+                    episode = rewritten_episode_map.get(chunk.episode_id)
+                    if not episode:
+                        continue
+                    rewritten_chunk_payloads.append({
+                        "text": chunk.text,
+                        "start_time": chunk.start_time,
+                        "end_time": chunk.end_time,
+                        "episode": {
+                            "id": episode.id,
+                            "title": episode.title,
+                            "audio_url": episode.audio_url or "",
+                            "published_year": episode.published_at.year if episode.published_at else None,
+                        },
+                        "similarity": similarity,
+                    })
+
+                rewritten_citation_payloads = []
+                for cit in rewritten_citation_episodes:
+                    episode = rewritten_episode_map.get(cit['episode_id'])
+                    if not episode:
+                        continue
+                    rewritten_citation_payloads.append({
+                        "text": cit['chunk'].text,
+                        "start_time": cit['chunk'].start_time,
+                        "end_time": cit['chunk'].end_time,
+                        "episode": {"id": episode.id, "title": episode.title, "audio_url": episode.audio_url or "", "published_year": episode.published_at.year if episode.published_at else None},
+                        "similarity": cit['similarity'],
+                        "relevance_score": cit['relevance_score'],
+                        "total_relevant_chunks": cit['total_relevant_chunks'],
+                    })
+
+                if _retrieval_confidence(rewritten_chunk_payloads) > _retrieval_confidence(chunk_payloads):
+                    chunk_payloads = rewritten_chunk_payloads
+                    citation_payloads = rewritten_citation_payloads
+                    retrieval_rewrite_applied = True
+                    retrieval_query_used = rewritten_query
+                    logger.info("Applied low-match retrieval rewrite for stream question='%.80s'", question)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Low-match stream rewrite retrieval failed; continuing with original retrieval: %s", exc)
     retrieval_ms = int((time.perf_counter() - retrieval_started_at) * 1000)
 
     # ── Release the original DB session before the long streaming phase ──
@@ -775,8 +951,6 @@ def answer_question_stream(
 
     # ── Phase 2: OpenAI streaming — no DB needed ──
     from app.qa.answer import generate_intelligent_answer_stream, _generate_degraded_answer
-    from app.core.config import settings
-
     full_answer = ""
     answer_source = "openai"
     answer_status = "generated"
@@ -863,6 +1037,8 @@ def answer_question_stream(
         {
             "citations": len(citations),
             "cached": False,
+            "retrieval_rewrite_applied": retrieval_rewrite_applied,
+            "retrieval_query_used_preview": retrieval_query_used[:80],
         },
     )
 

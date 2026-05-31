@@ -653,11 +653,7 @@ def sanitize_shareable_headline(headline: str, answer: str = "") -> str:
         cleaned,
         flags=re.IGNORECASE,
     ).strip()
-    cleaned = re.sub(
-        r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+",
-        "",
-        cleaned,
-    ).strip()
+    cleaned = re.sub(r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+", "", cleaned).strip()
     if cleaned:
         cleaned = cleaned[0].upper() + cleaned[1:]
     
@@ -800,6 +796,7 @@ def _generate_shareable_headline(question: str, answer: str, chunks: list[dict])
                                     "Bad examples:\n"
                                     "- \"But where do I feel even the tiniest spark of quiet joy?\" (fragment + question)\n"
                                     "- \"Return to the kind of connection you want to build.\" (vague)\n\n"
+                                    "Make the headline feel directly connected to this specific question and answer, not generic.\n\n"
                                     "Return ONLY the headline text, nothing else."
                                 ),
                             },
@@ -866,7 +863,7 @@ def _extract_best_sentence_headline(answer: str) -> str:
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         cleaned = re.sub(r"^(?:for\s+instance|for\s+example)\s*,\s*", "", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(
-            r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+",
+            r"^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\s+(?:talks\s+about\s+how|says|shares|notes|explains|reminds(?:\s+us)?\s+that|suggests|teaches)\s+",
             "",
             cleaned,
         ).strip()

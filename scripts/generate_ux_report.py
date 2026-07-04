@@ -404,7 +404,7 @@ def main():
     parser.add_argument('--days', type=int, default=7, help='Number of days to analyze')
     args = parser.parse_args()
     
-    db = SessionLocal()()
+    db = SessionLocal()
     try:
         generate_summary_report(db, args.days)
     except Exception as e:

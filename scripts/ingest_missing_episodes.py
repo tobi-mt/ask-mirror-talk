@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.db import get_session_local
 from app.ingestion.pipeline_optimized import run_ingestion_optimized
+from app.ingestion.rss import fetch_feed, normalize_entries
+from app.core.config import settings
 
 
 # The 30 episode GUIDs that were deleted
@@ -85,14 +87,25 @@ def main():
             print("❌ Cancelled")
             return
         
-        # Run ingestion - the pipeline will fetch from RSS and filter by GUID
+        # Fetch the feed and filter down to just the deleted episodes.
         print(f"\n🚀 Starting re-ingestion of {len(DELETED_EPISODE_GUIDS)} episodes...\n")
-        print("Note: The pipeline will fetch ALL episodes from RSS and process only the deleted ones.\n")
-        
+        print("Note: Only matching feed entries will be processed.\n")
+
+        if not settings.rss_url:
+            raise ValueError("RSS URL is not configured")
+
+        feed = fetch_feed(settings.rss_url)
+        entries = normalize_entries(feed)
+        target_entries = [e for e in entries if e.get("guid") in DELETED_EPISODE_GUIDS]
+
+        missing = len(DELETED_EPISODE_GUIDS) - len(target_entries)
+        if missing > 0:
+            print(f"⚠️  {missing} deleted episode(s) were not found in the RSS feed")
+
         result = run_ingestion_optimized(
             db,
-            max_episodes=len(DELETED_EPISODE_GUIDS),
-            skip_existing=False  # Don't skip - we want to re-process these
+            max_episodes=len(target_entries),
+            entries_to_process=target_entries,
         )
         
         print(f"\n✅ Re-ingestion complete!")

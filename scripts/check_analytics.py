@@ -5,9 +5,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
-from app.core.db import get_session_local
+from app.core.db import SessionLocal
 
-db = get_session_local()()
+db = SessionLocal()
 cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 try:
     total    = db.execute(text("SELECT COUNT(*) FROM qa_logs WHERE created_at >= :c"), {"c": cutoff}).scalar()

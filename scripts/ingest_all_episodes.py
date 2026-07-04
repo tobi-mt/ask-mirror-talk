@@ -65,7 +65,7 @@ if __name__ == "__main__":
         init_db()
         
         # Create database session
-        db = SessionLocal()()
+        db = SessionLocal()
         
         try:
             # Run ingestion without episode limit

@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.security import HTTPBasicCredentials
 
 from app.api.auth import admin_auth, security
-from app.core.db import get_session_local
+from app.core.db import SessionLocal
 
 router = APIRouter()
 
@@ -10,7 +10,7 @@ router = APIRouter()
 def _run_ingestion_bg() -> None:
     from app.ingestion.pipeline import run_ingestion
 
-    db = get_session_local()()
+    db = SessionLocal()
     try:
         run_ingestion(db)
     finally:

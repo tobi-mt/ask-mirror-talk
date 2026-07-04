@@ -92,32 +92,32 @@ def run_ingestion_optimized(db: Session, max_episodes: int | None = None, entrie
             logger.info("Database connection lost, refreshing...")
             db = refresh_db_connection(db)
 
-            # Check if episode is COMPLETELY processed (has transcript AND chunks)
-            # Only check if we're not using pre-filtered entries
-            if entries_to_process is None:
-                if check_episode_complete(db, entry["guid"]):
-                    logger.info("[%s/%s] Episode already complete, skipping: %s", 
-                               idx + 1, len(entries), entry["title"])
-                    skipped += 1
-                    continue
-                
-                # Check if episode exists but is incomplete (needs re-processing)
-                existing = repository.get_episode_by_guid(db, entry["guid"])
-                if existing:
-                    logger.info("[%s/%s] Episode exists but incomplete, re-processing: %s", 
-                               idx + 1, len(entries), entry["title"])
-                    # Delete incomplete episode data to start fresh
-                    # Must delete in correct order due to foreign key constraints
-                    db.query(models.Chunk).filter(models.Chunk.episode_id == existing.id).delete()
-                    db.query(models.TranscriptSegment).filter(
-                        models.TranscriptSegment.transcript_id.in_(
-                            db.query(models.Transcript.id).filter(models.Transcript.episode_id == existing.id)
-                        )
-                    ).delete(synchronize_session=False)
-                    db.query(models.Transcript).filter(models.Transcript.episode_id == existing.id).delete()
-                    db.delete(existing)
-                    db.commit()
-                    logger.info("  ├─ Deleted incomplete episode data")
+            # Check if episode is COMPLETELY processed (has transcript AND chunks).
+            # This must run for both full-feed and prefiltered runs so targeted
+            # reingestion helpers stay idempotent.
+            if check_episode_complete(db, entry["guid"]):
+                logger.info("[%s/%s] Episode already complete, skipping: %s", 
+                           idx + 1, len(entries), entry["title"])
+                skipped += 1
+                continue
+
+            # Check if episode exists but is incomplete (needs re-processing).
+            existing = repository.get_episode_by_guid(db, entry["guid"])
+            if existing:
+                logger.info("[%s/%s] Episode exists but incomplete, re-processing: %s", 
+                           idx + 1, len(entries), entry["title"])
+                # Delete incomplete episode data to start fresh.
+                # Must delete in correct order due to foreign key constraints.
+                db.query(models.Chunk).filter(models.Chunk.episode_id == existing.id).delete()
+                db.query(models.TranscriptSegment).filter(
+                    models.TranscriptSegment.transcript_id.in_(
+                        db.query(models.Transcript.id).filter(models.Transcript.episode_id == existing.id)
+                    )
+                ).delete(synchronize_session=False)
+                db.query(models.Transcript).filter(models.Transcript.episode_id == existing.id).delete()
+                db.delete(existing)
+                db.commit()
+                logger.info("  ├─ Deleted incomplete episode data")
 
             logger.info("[%s/%s] Processing episode: %s", 
                        idx + 1, len(entries), entry["title"])

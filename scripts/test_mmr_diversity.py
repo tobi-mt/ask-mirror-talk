@@ -42,7 +42,7 @@ def test_mmr_diversity():
     print("=" * 80)
     print()
     
-    db: Session = SessionLocal()()
+    db: Session = SessionLocal()
     all_episode_ids = []
     question_results = []
     

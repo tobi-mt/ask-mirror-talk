@@ -3,11 +3,11 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.db import get_session_local
+from app.core.db import SessionLocal
 from app.qa.cache import get_answer_cache, prewarm_from_db_history
 
 cache = get_answer_cache()
-db = get_session_local()()
+db = SessionLocal()
 try:
     n = prewarm_from_db_history(cache, db, limit=40)
     print(f"Prewarm loaded: {n} entries")

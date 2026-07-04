@@ -80,9 +80,9 @@ def main():
     logger.info("=" * 60)
     
     with SessionLocal() as db:
-        success = run_ingestion_optimized(db, episode)
-        
-        if success:
+        result = run_ingestion_optimized(db, max_episodes=1, entries_to_process=[episode])
+
+        if result["failed"] == 0 and (result["processed"] > 0 or result["skipped"] > 0):
             logger.info("\n" + "=" * 60)
             logger.info("✅ INGESTION SUCCESSFUL!")
             logger.info("=" * 60)

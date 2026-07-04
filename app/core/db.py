@@ -94,7 +94,7 @@ def get_engine():
 
 
 def get_session_local():
-    """Get SessionLocal class (not an instance)."""
+    """Get or create the shared SQLAlchemy sessionmaker."""
     global _SessionLocal
     if _SessionLocal is None:
         _SessionLocal = sessionmaker(bind=get_engine(), autocommit=False, autoflush=False)
@@ -175,8 +175,22 @@ def init_db():
         raise
 
 
+class _SessionLocalProxy:
+    """
+    Lazily proxy the shared session factory so `SessionLocal()` returns a real
+    SQLAlchemy session while still deferring engine creation.
+
+    We keep the underlying engine/sessionmaker creation lazy to avoid eager DB
+    connection setup at import time.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return get_session_local()(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(get_session_local(), name)
+
+
 # Backward-compatible aliases used by scripts/
-# Scripts use `SessionLocal()()` (call the function, then call the sessionmaker),
-# so aliasing directly to the factory functions is the correct approach.
-SessionLocal = get_session_local
+SessionLocal = _SessionLocalProxy()
 engine = get_engine

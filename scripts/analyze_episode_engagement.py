@@ -36,9 +36,8 @@ def analyze_engagement():
     print("Connecting to database...")
     
     try:
-        # Get session factory and create a session
-        session_factory = SessionLocal()
-        db: Session = session_factory()
+        # SessionLocal now returns a real SQLAlchemy session.
+        db: Session = SessionLocal()
         print("✅ Database connection established")
         print()
     except Exception as e:

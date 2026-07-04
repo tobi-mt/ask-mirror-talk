@@ -82,7 +82,7 @@ def main():
     logger.info("Found %s episodes in feed", len(entries))
 
     # Check what we already have
-    db = SessionLocal()()  # Note: SessionLocal() returns sessionmaker, need to call again
+    db = SessionLocal()
     try:
         existing_count = 0
         new_episodes = []
@@ -127,7 +127,7 @@ def main():
         
         # Open a fresh database connection for ingestion
         logger.info("\nOpening fresh database connection...")
-        db = SessionLocal()()
+        db = SessionLocal()
 
         # Run the optimized ingestion with pre-filtered episodes
         logger.info("Starting ingestion...\n")

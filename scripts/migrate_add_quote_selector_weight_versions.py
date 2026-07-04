@@ -7,7 +7,7 @@ from app.core.db import SessionLocal, safe_close_session
 
 
 def main() -> None:
-    db = SessionLocal()()
+    db = SessionLocal()
     try:
         db.execute(
             text(

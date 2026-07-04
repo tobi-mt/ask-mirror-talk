@@ -636,7 +636,7 @@ def main():
                 args.diversity, args.latency, args.hourly, args.cache, args.bursts, args.origins]):
         args.all = True
     
-    db = SessionLocal()()  # Call SessionLocal() to get the session factory, then call it again to get a session instance
+    db = SessionLocal()
     
     try:
         if args.all:

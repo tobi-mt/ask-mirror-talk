@@ -19,7 +19,7 @@ from sqlalchemy import text
 def cleanup_orphaned_data():
     """Remove orphaned transcripts and segments that have null episode_id"""
     init_db()
-    db = SessionLocal()()
+    db = SessionLocal()
     
     try:
         print("="*60)

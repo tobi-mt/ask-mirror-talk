@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 import logging
 import socket
+import time
 
 from app.core.config import settings
 
@@ -58,7 +60,8 @@ def get_engine():
         # startup parameter. We mitigate idle-in-transaction issues by
         # closing DB sessions before long-running operations (see service.py).
         connect_args = {
-            "connect_timeout": 10,
+            # Give Neon a little more time to wake up on cold starts.
+            "connect_timeout": 20,
             "options": "-c client_encoding=utf8",
         }
 
@@ -139,40 +142,63 @@ def safe_close_session(session, *, context: str = "session"):
 
 def init_db():
     """Initialize database with pgvector extension and create tables."""
-    try:
-        # Get the actual engine instance
-        db_engine = get_engine()
-        
-        # Ensure pgvector extension exists and create tables
-        with db_engine.connect() as connection:
-            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            connection.commit()
-        logger.info("✓ pgvector extension enabled")
+    max_attempts = 3
+    retryable_exceptions = (OperationalError, DBAPIError)
+    last_error: Exception | None = None
 
-        # Late import to avoid circulars
-        from app.storage.models import Base  # noqa: WPS433
+    for attempt in range(1, max_attempts + 1):
+        try:
+            # Get the actual engine instance
+            db_engine = get_engine()
 
-        Base.metadata.create_all(bind=db_engine)
-        logger.info("✓ Database tables created/verified")
+            # Ensure pgvector extension exists and create tables
+            with db_engine.connect() as connection:
+                connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                connection.commit()
+            logger.info("✓ pgvector extension enabled")
 
-        # Create HNSW index for fast approximate nearest-neighbour search.
-        # Without this, every vector query is a full sequential scan over all
-        # chunks which grows from ~100ms to 10+ seconds as the corpus expands.
-        # HNSW is the recommended index type for pgvector ≥ 0.5.
-        # m=16 / ef_construction=64 are good defaults for a 384-dim corpus of
-        # this size; index creation on ~45K vectors takes roughly 30–90 seconds
-        # but only runs once (CREATE INDEX IF NOT EXISTS is a no-op thereafter).
-        with db_engine.connect() as connection:
-            connection.execute(text(
-                "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
-                "ON chunks USING hnsw (embedding vector_cosine_ops) "
-                "WITH (m = 16, ef_construction = 64)"
-            ))
-            connection.commit()
-        logger.info("✓ HNSW vector index verified")
-    except Exception as e:
-        logger.error(f"✗ Database initialization failed: {e}")
-        raise
+            # Late import to avoid circulars
+            from app.storage.models import Base  # noqa: WPS433
+
+            Base.metadata.create_all(bind=db_engine)
+            logger.info("✓ Database tables created/verified")
+
+            # Create HNSW index for fast approximate nearest-neighbour search.
+            # Without this, every vector query is a full sequential scan over all
+            # chunks which grows from ~100ms to 10+ seconds as the corpus expands.
+            # HNSW is the recommended index type for pgvector ≥ 0.5.
+            # m=16 / ef_construction=64 are good defaults for a 384-dim corpus of
+            # this size; index creation on ~45K vectors takes roughly 30–90 seconds
+            # but only runs once (CREATE INDEX IF NOT EXISTS is a no-op thereafter).
+            with db_engine.connect() as connection:
+                connection.execute(text(
+                    "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
+                    "ON chunks USING hnsw (embedding vector_cosine_ops) "
+                    "WITH (m = 16, ef_construction = 64)"
+                ))
+                connection.commit()
+            logger.info("✓ HNSW vector index verified")
+            return
+        except retryable_exceptions as exc:
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+
+            delay = min(2 ** (attempt - 1), 5)
+            logger.warning(
+                "Database initialization attempt %d/%d failed transiently: %s. Retrying in %ss...",
+                attempt,
+                max_attempts,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+        except Exception as exc:
+            logger.error(f"✗ Database initialization failed: {exc}")
+            raise
+
+    logger.error(f"✗ Database initialization failed after {max_attempts} attempts: {last_error}")
+    raise last_error
 
 
 class _SessionLocalProxy:

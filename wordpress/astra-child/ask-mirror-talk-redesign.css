@@ -1,0 +1,461 @@
+/* Ask Mirror Talk — Premium visual system v6
+ * Isolated presentation layer: no layout IDs, DOM structure, or behavior hooks.
+ */
+.ask-mirror-talk {
+  --amt-v6-ink: #211d2b;
+  --amt-v6-muted: #6f6878;
+  --amt-v6-plum: #3a2947;
+  --amt-v6-plum-2: #51375f;
+  --amt-v6-coral: #d86546;
+  --amt-v6-gold: #d7a84f;
+  --amt-v6-sage: #66877c;
+  --amt-v6-cream: #fbf7f1;
+  --amt-v6-paper: rgba(255, 253, 249, 0.9);
+  --amt-v6-line: rgba(58, 41, 71, 0.13);
+  --amt-v6-shadow: 0 28px 80px rgba(47, 34, 53, 0.14);
+  --amt-v6-shadow-soft: 0 12px 32px rgba(47, 34, 53, 0.08);
+  position: relative;
+  isolation: isolate;
+  max-width: 1160px;
+  padding: clamp(18px, 3.5vw, 52px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: clamp(24px, 3vw, 40px);
+  color: var(--amt-v6-ink);
+  background:
+    radial-gradient(circle at 8% 3%, rgba(215, 168, 79, 0.17), transparent 27%),
+    radial-gradient(circle at 94% 12%, rgba(216, 101, 70, 0.13), transparent 31%),
+    linear-gradient(145deg, #fffdf9 0%, #f7f0e8 54%, #f1eee8 100%);
+  box-shadow: var(--amt-v6-shadow);
+  overflow: hidden;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ask-mirror-talk,
+.ask-mirror-talk *,
+.ask-mirror-talk *::before,
+.ask-mirror-talk *::after {
+  box-sizing: border-box;
+}
+
+.ask-mirror-talk::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 360px;
+  height: 360px;
+  right: -190px;
+  top: 28%;
+  border-radius: 50%;
+  background: rgba(102, 135, 124, 0.12);
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+.ask-mirror-talk h2,
+.ask-mirror-talk h3,
+.ask-mirror-talk h4,
+.amt-onboarding-card h3,
+.amt-about-card h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.ask-mirror-talk .amt-heading-row {
+  align-items: flex-start;
+  gap: clamp(18px, 4vw, 52px);
+  margin-bottom: 26px;
+  padding: clamp(22px, 3vw, 38px);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 28px;
+  background:
+    linear-gradient(115deg, rgba(58, 41, 71, 0.97), rgba(81, 55, 95, 0.94)),
+    var(--amt-v6-plum);
+  box-shadow: 0 22px 56px rgba(45, 30, 53, 0.2);
+}
+
+.ask-mirror-talk .amt-heading-kicker {
+  color: #f1c979;
+  letter-spacing: 0.18em;
+}
+
+.ask-mirror-talk .amt-heading-row h2 {
+  margin: 4px 0 8px;
+  color: #fffdf8;
+  font-size: clamp(34px, 5vw, 62px);
+  line-height: 0.98;
+}
+
+.ask-mirror-talk .amt-heading-subtitle {
+  max-width: 580px;
+  color: rgba(255, 253, 248, 0.78);
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.65;
+}
+
+.ask-mirror-talk .amt-heading-controls > button {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.ask-mirror-talk .amt-heading-controls > button:hover,
+.ask-mirror-talk .amt-heading-controls > button:focus-visible {
+  border-color: rgba(241, 201, 121, 0.72);
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px);
+}
+
+.ask-mirror-talk .amt-heading-controls-note {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.ask-mirror-talk .amt-stats-bar {
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--amt-v6-line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: var(--amt-v6-shadow-soft);
+  backdrop-filter: blur(16px);
+}
+
+.ask-mirror-talk .amt-stat,
+.ask-mirror-talk .amt-stat-action-btn {
+  min-height: 46px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: transparent;
+}
+
+.ask-mirror-talk .amt-stat-action-btn:hover,
+.ask-mirror-talk .amt-stat-action-btn:focus-visible {
+  border-color: var(--amt-v6-line);
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(47, 34, 53, 0.1);
+}
+
+.ask-mirror-talk .amt-stat-value,
+.ask-mirror-talk .amt-stat-label,
+.ask-mirror-talk .amt-stat-action-label {
+  color: var(--amt-v6-ink);
+}
+
+.ask-mirror-talk .amt-stat-icon {
+  filter: saturate(0.82);
+}
+
+.ask-mirror-talk .amt-workflow-bar {
+  gap: 7px;
+  margin: 38px 0 18px;
+  padding: 8px;
+  border: 1px solid var(--amt-v6-line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: var(--amt-v6-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.ask-mirror-talk .amt-workflow-guide {
+  color: var(--amt-v6-muted);
+  letter-spacing: 0.16em;
+}
+
+.ask-mirror-talk .amt-workflow-step {
+  min-height: 76px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  color: var(--amt-v6-muted);
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease,
+    transform 180ms ease, box-shadow 180ms ease;
+}
+
+.ask-mirror-talk .amt-workflow-step:hover,
+.ask-mirror-talk .amt-workflow-step:focus-visible {
+  color: var(--amt-v6-plum);
+  border-color: var(--amt-v6-line);
+  background: rgba(255, 255, 255, 0.76);
+  transform: translateY(-2px);
+}
+
+.ask-mirror-talk .amt-workflow-step-active,
+.ask-mirror-talk .amt-workflow-step[aria-current="step"] {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--amt-v6-plum), var(--amt-v6-plum-2));
+  box-shadow: 0 12px 28px rgba(58, 41, 71, 0.25);
+}
+
+.ask-mirror-talk .amt-workflow-icon {
+  color: var(--amt-v6-gold);
+}
+
+.ask-mirror-talk .amt-workflow-panel {
+  animation: amtV6PanelIn 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ask-mirror-talk #ask-mirror-talk-form,
+.ask-mirror-talk .amt-save-share-hub-card,
+.ask-mirror-talk .amt-momentum-card-inner,
+.ask-mirror-talk .amt-weekly-recap-inner,
+.ask-mirror-talk .amt-journey-card-inner,
+.ask-mirror-talk .amt-reflect-inner,
+.ask-mirror-talk .amt-insight-item {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 26px;
+  background: var(--amt-v6-paper);
+  box-shadow: var(--amt-v6-shadow-soft);
+  backdrop-filter: blur(16px);
+}
+
+.ask-mirror-talk #ask-mirror-talk-form {
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.ask-mirror-talk .amt-form-kicker,
+.ask-mirror-talk .amt-save-share-kicker,
+.ask-mirror-talk .amt-momentum-kicker,
+.ask-mirror-talk .amt-weekly-recap-kicker,
+.ask-mirror-talk .amt-journey-kicker,
+.ask-mirror-talk .amt-answer-context-kicker {
+  color: var(--amt-v6-coral);
+  letter-spacing: 0.15em;
+}
+
+.ask-mirror-talk #ask-mirror-talk-input {
+  min-height: 132px;
+  padding: 18px 20px;
+  border: 1px solid rgba(58, 41, 71, 0.18);
+  border-radius: 18px;
+  color: var(--amt-v6-ink);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  font-size: 17px;
+  line-height: 1.6;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.ask-mirror-talk #ask-mirror-talk-input:focus {
+  outline: none;
+  border-color: rgba(216, 101, 70, 0.72);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(216, 101, 70, 0.12), 0 12px 28px rgba(47, 34, 53, 0.08);
+}
+
+.ask-mirror-talk button[type="submit"],
+.ask-mirror-talk .amt-save-share-hub-btn,
+.ask-mirror-talk .amt-momentum-ask-btn,
+.ask-mirror-talk .amt-weekly-recap-btn,
+.ask-mirror-talk .amt-journey-btn-primary,
+.ask-mirror-talk .amt-reflect-save-btn,
+.amt-onboarding-start {
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--amt-v6-coral, #d86546), #b94d39);
+  box-shadow: 0 12px 28px rgba(190, 78, 55, 0.24);
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.ask-mirror-talk button[type="submit"]:hover,
+.ask-mirror-talk .amt-save-share-hub-btn:hover,
+.ask-mirror-talk .amt-momentum-ask-btn:hover,
+.ask-mirror-talk .amt-weekly-recap-btn:hover,
+.ask-mirror-talk .amt-journey-btn-primary:hover,
+.ask-mirror-talk .amt-reflect-save-btn:hover,
+.amt-onboarding-start:hover {
+  filter: saturate(1.08) brightness(1.03);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(190, 78, 55, 0.3);
+}
+
+.ask-mirror-talk .amt-starter-journey-btn,
+.ask-mirror-talk .amt-followup-btn,
+.ask-mirror-talk .amt-suggestion-btn,
+.ask-mirror-talk .amt-topic-starter-btn,
+.ask-mirror-talk .amt-related-btn,
+.ask-mirror-talk .amt-question-coach-btn {
+  border: 1px solid var(--amt-v6-line);
+  border-radius: 16px;
+  color: var(--amt-v6-plum);
+  background: rgba(255, 255, 255, 0.74);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.ask-mirror-talk .amt-starter-journey-btn:hover,
+.ask-mirror-talk .amt-followup-btn:hover,
+.ask-mirror-talk .amt-suggestion-btn:hover,
+.ask-mirror-talk .amt-topic-starter-btn:hover,
+.ask-mirror-talk .amt-related-btn:hover,
+.ask-mirror-talk .amt-question-coach-btn:hover {
+  border-color: rgba(216, 101, 70, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 9px 22px rgba(47, 34, 53, 0.1);
+}
+
+.ask-mirror-talk .amt-qotd-inner {
+  border: 1px solid rgba(215, 168, 79, 0.36);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(215, 168, 79, 0.18), transparent 40%),
+    linear-gradient(135deg, #fffaf0, #f9efe3);
+  box-shadow: 0 14px 34px rgba(96, 70, 31, 0.1);
+}
+
+.ask-mirror-talk .ask-mirror-talk-response {
+  margin-top: 20px;
+  padding: clamp(20px, 3vw, 36px);
+  border: 1px solid rgba(58, 41, 71, 0.1);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--amt-v6-shadow-soft);
+}
+
+.ask-mirror-talk #ask-mirror-talk-output {
+  max-width: 760px;
+  margin-inline: auto;
+  color: #342e3a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(17px, 1.65vw, 20px);
+  line-height: 1.85;
+}
+
+.ask-mirror-talk #ask-mirror-talk-output p + p {
+  margin-top: 1.25em;
+}
+
+.ask-mirror-talk .amt-answer-context,
+.ask-mirror-talk .amt-citation-trust-note {
+  border: 1px solid rgba(102, 135, 124, 0.22);
+  border-radius: 19px;
+  background: linear-gradient(135deg, rgba(238, 245, 240, 0.88), rgba(250, 247, 240, 0.9));
+}
+
+.ask-mirror-talk .citation-item {
+  border: 1px solid var(--amt-v6-line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 8px 22px rgba(47, 34, 53, 0.07);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ask-mirror-talk .citation-item:hover {
+  border-color: rgba(102, 135, 124, 0.48);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(47, 34, 53, 0.11);
+}
+
+.ask-mirror-talk .amt-mood-btn,
+.ask-mirror-talk .amt-feedback-btn {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.ask-mirror-talk .amt-workflow-nudge {
+  max-width: 820px;
+  border: 1px solid rgba(58, 41, 71, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 10px 26px rgba(47, 34, 53, 0.06);
+  backdrop-filter: blur(14px);
+}
+
+.amt-onboarding-overlay,
+.amt-about-modal {
+  background: rgba(27, 22, 33, 0.82);
+  backdrop-filter: blur(18px) saturate(0.8);
+}
+
+.amt-onboarding-card,
+.amt-about-card {
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(215, 168, 79, 0.15), transparent 34%),
+    linear-gradient(145deg, #fffdf9, #f7f0e8);
+  box-shadow: 0 32px 90px rgba(16, 12, 20, 0.38);
+}
+
+@keyframes amtV6PanelIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 720px) {
+  .ask-mirror-talk {
+    width: min(100%, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    margin-inline: auto;
+    padding: 10px;
+    border-radius: 24px;
+  }
+
+  .ask-mirror-talk .amt-heading-row {
+    padding: 22px 18px;
+    border-radius: 22px;
+  }
+
+  .ask-mirror-talk .amt-heading-row h2 {
+    font-size: clamp(34px, 11vw, 46px);
+  }
+
+  .ask-mirror-talk .amt-heading-controls {
+    width: 100%;
+    max-width: none;
+  }
+
+  .ask-mirror-talk .amt-workflow-bar {
+    position: sticky;
+    top: 8px;
+    z-index: 30;
+    margin-top: 32px;
+    border-radius: 18px;
+  }
+
+  .ask-mirror-talk .amt-workflow-step {
+    min-height: 58px;
+    border-radius: 13px;
+  }
+
+  .ask-mirror-talk #ask-mirror-talk-form,
+  .ask-mirror-talk .ask-mirror-talk-response,
+  .ask-mirror-talk .amt-save-share-hub-card,
+  .ask-mirror-talk .amt-momentum-card-inner,
+  .ask-mirror-talk .amt-weekly-recap-inner {
+    border-radius: 20px;
+  }
+
+  .ask-mirror-talk #ask-mirror-talk-output {
+    font-size: 17px;
+    line-height: 1.78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-mirror-talk *,
+  .ask-mirror-talk *::before,
+  .ask-mirror-talk *::after,
+  .amt-onboarding-overlay *,
+  .amt-about-modal * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .ask-mirror-talk {
+    --amt-v6-line: rgba(33, 29, 43, 0.42);
+  }
+
+  .ask-mirror-talk button:focus-visible,
+  .ask-mirror-talk a:focus-visible,
+  .ask-mirror-talk textarea:focus-visible {
+    outline: 3px solid #1b6f62 !important;
+    outline-offset: 3px;
+  }
+}

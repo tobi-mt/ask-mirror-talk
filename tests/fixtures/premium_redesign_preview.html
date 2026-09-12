@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ask Mirror Talk v6 visual regression fixture</title>
+  <link rel="stylesheet" href="../../wordpress/astra-child/ask-mirror-talk.css">
+  <link rel="stylesheet" href="../../wordpress/astra-child/ask-mirror-talk-premium.css">
+  <link rel="stylesheet" href="../../wordpress/astra-child/ask-mirror-talk-redesign.css">
+  <style>html,body{box-sizing:border-box;max-width:100%;overflow-x:hidden}body{margin:0;padding:32px 12px;background:#e9e4dc}</style>
+</head>
+<body>
+  <main class="ask-mirror-talk amt-workflow-mode-ask">
+    <div class="amt-heading-row">
+      <div class="amt-heading-copy">
+        <p class="amt-heading-kicker">Premium reflection</p>
+        <h2>Ask Mirror Talk</h2>
+        <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
+      </div>
+      <div class="amt-heading-controls">
+        <button type="button" aria-label="Change text size">Aa</button>
+        <button type="button" aria-label="My reflection notes">📓</button>
+        <button type="button" aria-label="Jot a private note">✍️</button>
+        <button type="button" aria-label="About Mirror Talk">ⓘ</button>
+        <div class="amt-heading-controls-note">Your private reflection space</div>
+      </div>
+    </div>
+    <div class="amt-stats-bar" style="display:flex">
+      <div class="amt-stat"><span class="amt-stat-icon">🔥</span><span class="amt-stat-value">7</span><span class="amt-stat-label">day streak</span></div>
+      <div class="amt-stat"><span class="amt-stat-icon">💬</span><span class="amt-stat-value">24</span><span class="amt-stat-label">questions</span></div>
+      <button class="amt-stat-action-btn"> 🔖 saved</button>
+    </div>
+    <nav class="amt-workflow-bar" aria-label="Reflection path">
+      <span class="amt-workflow-guide">Choose your next step</span>
+      <button class="amt-workflow-step amt-workflow-step-active" aria-current="step"><span class="amt-workflow-icon">✦</span><span class="amt-workflow-label">Ask</span><span class="amt-workflow-hint">Begin</span></button>
+      <button class="amt-workflow-step"><span class="amt-workflow-icon">⌁</span><span class="amt-workflow-label">Explore</span><span class="amt-workflow-hint">Prompts</span></button>
+      <button class="amt-workflow-step"><span class="amt-workflow-icon">◇</span><span class="amt-workflow-label">Save &amp; Share</span><span class="amt-workflow-hint">Ready</span></button>
+      <button class="amt-workflow-step"><span class="amt-workflow-icon">◷</span><span class="amt-workflow-label">Rhythm</span><span class="amt-workflow-hint">Momentum</span></button>
+    </nav>
+    <section id="amt-workflow-panel-ask" class="amt-workflow-panel" data-workflow-panel="ask" style="display:block">
+      <form id="ask-mirror-talk-form">
+        <div class="amt-form-intro"><span class="amt-form-kicker">Start your reflection</span><h3>What’s on your heart?</h3><p>Ask an honest question. We’ll find the strongest moments from Mirror Talk.</p></div>
+        <div class="amt-qotd-inner"><span class="amt-qotd-badge">✨ Question of the day</span><p class="amt-qotd-text">“What would become possible if I trusted my next small step?”</p></div>
+        <textarea id="ask-mirror-talk-input" aria-label="What’s on your heart?" placeholder="Share what you are carrying or trying to understand..."></textarea>
+        <button type="submit">Ask Mirror Talk</button>
+      </form>
+      <article class="ask-mirror-talk-response">
+        <div class="amt-answer-context" style="display:block;padding:18px"><span class="amt-answer-context-kicker">Grounded in Mirror Talk</span><h3>One source moment supports this reflection.</h3></div>
+        <div id="ask-mirror-talk-output"><p>You do not need complete certainty before taking a meaningful step. Clarity often arrives through movement, attention, and honest reflection.</p><p>Choose one action small enough to begin today, then notice what it teaches you about the direction ahead.</p></div>
+        <div class="citation-item" style="padding:18px"><strong>A conversation about courage and purpose</strong><p>Preview the strongest source moment, or open the full episode.</p><button class="amt-related-btn">Preview 30s</button></div>
+      </article>
+    </section>
+    <div class="amt-workflow-nudge">Keep what matters, explore the thread, or return tomorrow.</div>
+  </main>
+</body>
+</html>

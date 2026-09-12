@@ -19,6 +19,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -102,7 +103,14 @@ DANGLING_ENDINGS = {
     "your",
 }
 
-SOURCE_GROUNDED_PREFIXES = ("saved_", "journal_")
+EXPECTED_HOLDBACKS = {
+    "faith_fragment",
+    "gratitude_prompt_fragment",
+    "healing_commitments_fragment",
+    "relationships_truncated_fragment",
+    "inner_peace_empty",
+    "basic_fallback_meta_answer",
+}
 
 STOPWORDS = {
     "about",
@@ -402,6 +410,12 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
     normalized = debug.get("normalized") or {}
     footer = debug.get("footer") or {}
     card_kind = debug.get("cardKind") or "reflection"
+    readiness = debug.get("readiness") or {}
+
+    if card_kind != "achievement":
+        expected_eligible = case.fixture not in EXPECTED_HOLDBACKS
+        if bool(readiness.get("eligible")) != expected_eligible:
+            failures.append(CaseFailure(case.fixture, case.family, f"card readiness mismatch: {readiness!r}"))
 
     try:
         if png_dimensions(case.png_path) != PNG_SIZE:
@@ -426,7 +440,7 @@ def validate_case(case: RenderedCase) -> list[CaseFailure]:
     if card_kind != "achievement" and question and normalise_for_compare(question) == normalise_for_compare(headline):
         failures.append(CaseFailure(case.fixture, case.family, "headline repeats the original question"))
 
-    if card_kind != "achievement" and case.fixture.startswith(SOURCE_GROUNDED_PREFIXES):
+    if card_kind != "achievement" and case.fixture not in EXPECTED_HOLDBACKS:
         source_text = " ".join(
             str(normalized.get(key) or "")
             for key in ("answer", "excerpt", "question")
@@ -473,6 +487,7 @@ def main() -> int:
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR), help="Where to write rendered PNG/HTML artifacts")
     parser.add_argument("--timeout", type=float, default=18.0, help="Seconds to wait for each fixture render")
     parser.add_argument("--keep-going", action="store_true", help="Continue rendering after failures")
+    parser.add_argument("--workers", type=int, default=min(6, os.cpu_count() or 2), help="Parallel Chrome render workers")
     args = parser.parse_args()
 
     chrome = find_chrome(args.chrome)
@@ -492,28 +507,28 @@ def main() -> int:
     print(f"Chrome: {chrome}", flush=True)
     print(f"Artifacts: {out_dir}", flush=True)
 
-    for fixture in fixtures:
-        for family in families:
+    work = [(fixture, family) for fixture in fixtures for family in families]
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        future_cases = {
+            pool.submit(render_case, chrome, fixture, family, out_dir, args.timeout): (fixture, family)
+            for fixture, family in work
+        }
+        for future in as_completed(future_cases):
+            fixture, family = future_cases[future]
             family_label = family or "auto"
             try:
-                case = render_case(chrome, fixture, family, out_dir, args.timeout)
+                case = future.result()
                 case_failures = validate_case(case)
                 rendered_count += 1
                 if case_failures:
                     failures.extend(case_failures)
                     print(f"FAIL {fixture} / {family_label}: {case_failures[0].reason}", flush=True)
-                    if not args.keep_going:
-                        raise SystemExit(report_failures(rendered_count, total, failures))
                 else:
                     headline = (case.debug.get("rendered") or {}).get("headline", "")
                     print(f"OK   {fixture} / {family_label}: {headline}", flush=True)
-            except SystemExit:
-                raise
             except Exception as exc:  # noqa: BLE001 - convert tool errors into readable failures
                 failures.append(CaseFailure(fixture, family_label, str(exc)))
                 print(f"FAIL {fixture} / {family_label}: {exc}", flush=True)
-                if not args.keep_going:
-                    raise SystemExit(report_failures(rendered_count, total, failures))
 
     return report_failures(rendered_count, total, failures)
 

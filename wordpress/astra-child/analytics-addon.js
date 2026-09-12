@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v5.9.31
+ * Analytics Add-on for Ask Mirror Talk Widget v6.0.0
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -50,7 +50,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v5.9.31 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v6.0.0 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();
@@ -63,6 +63,29 @@
 
         // Track lightweight product events emitted by the main widget
         watchProductEvents();
+
+        // Establish the DAU denominator. This is emitted by the analytics
+        // layer itself because the main widget loads before this listener.
+        trackProductEvent('app_opened', {
+            device_id: getOrCreateAnalyticsDeviceId(),
+            entry_surface: window.matchMedia('(display-mode: standalone)').matches ? 'pwa' : 'web',
+            local_date: new Date().toLocaleDateString('en-CA')
+        });
+    }
+
+    function getOrCreateAnalyticsDeviceId() {
+        const storageKey = 'amt_device_id';
+        try {
+            const existing = localStorage.getItem(storageKey);
+            if (existing && existing.length >= 16) return existing;
+            const generated = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
+            localStorage.setItem(storageKey, generated);
+            return generated;
+        } catch (e) {
+            return null;
+        }
     }
     
     /**

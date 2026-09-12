@@ -276,6 +276,9 @@
         rendered: debug,
         footer: window.__AMT_LAST_FOOTER_DEBUG__ || null,
         normalized,
+        readiness: exports.getReflectionCardReadiness
+          ? exports.getReflectionCardReadiness(fixture.type === 'journal' ? normalized : fixture)
+          : null,
         qrPayload: exports.getReflectionCardQrPayload ? exports.getReflectionCardQrPayload() : null,
         qrMatrix: exports.getReflectionCardQrMatrix ? {
           size: exports.getReflectionCardQrMatrix().size,

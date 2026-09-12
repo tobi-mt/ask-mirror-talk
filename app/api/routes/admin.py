@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import html
 
@@ -55,9 +55,9 @@ class AdminDashboardData:
     cached_count: int | None
     top_unanswered: list
     top_episodes: list
-    origin_cohorts: list
     runs: list
     logs: list
+    origin_cohorts: list = field(default_factory=list)
 
 
 def _table_rows(rows: list[tuple], builders: list) -> str:
@@ -165,7 +165,8 @@ def render_admin_dashboard_html(data: AdminDashboardData) -> str:
 
           <div class="api-links">
             <a href="/api/analytics/summary?days=7" target="_blank">📊 Analytics API</a>
-                        <a href="/api/analytics/origins?days=30" target="_blank">🧭 Origin Cohorts API</a>
+            <a href="/api/analytics/growth?days=30" target="_blank">🎯 10k DAU Scorecard</a>
+            <a href="/api/analytics/origins?days=30" target="_blank">🧭 Origin Cohorts API</a>
             <a href="/api/analytics/episodes" target="_blank">📚 Episode Analytics</a>
             <a href="/status" target="_blank">⚙️ System Status</a>
           </div>

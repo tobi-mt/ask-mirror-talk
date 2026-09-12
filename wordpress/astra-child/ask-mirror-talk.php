@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '5.9.31';
+    return '6.0.0';
 }
 
 function ask_mirror_talk_shortcode() {
@@ -197,8 +197,18 @@ function ask_mirror_talk_shortcode() {
 add_shortcode('ask_mirror_talk', 'ask_mirror_talk_shortcode');
 
 function ask_mirror_talk_enqueue_assets() {
-    // Always enqueue on singular pages to handle page builders and dynamic content
+    // Load the ~800 KB reflection experience only where the widget can render.
+    // Keep the canonical page-slug fallback for page-builder installations whose
+    // stored post content does not expose the shortcode to has_shortcode().
     if (!is_singular()) {
+        return;
+    }
+
+    global $post;
+    $has_widget_shortcode = $post instanceof WP_Post
+        && has_shortcode((string) $post->post_content, 'ask_mirror_talk');
+    $is_widget_page = is_page('ask-mirror-talk');
+    if (!$has_widget_shortcode && !$is_widget_page) {
         return;
     }
 
@@ -226,6 +236,15 @@ function ask_mirror_talk_enqueue_assets() {
         'ask-mirror-talk-premium',
         $theme_uri . '/ask-mirror-talk-premium.css',
         array('ask-mirror-talk'),
+        $version
+    );
+
+    // Isolated v6 presentation layer. Keeping this separate makes the redesign
+    // easy to disable or roll back without touching functional styles.
+    wp_enqueue_style(
+        'ask-mirror-talk-redesign',
+        $theme_uri . '/ask-mirror-talk-redesign.css',
+        array('ask-mirror-talk', 'ask-mirror-talk-premium'),
         $version
     );
     

@@ -1,6 +1,6 @@
 [project]
 name = "ask-mirror-talk"
-version = "5.9.31"
+version = "6.0.0"
 description = "Mirror Talk - Ask Mirror Talk service"
 requires-python = ">=3.10"
 readme = "README.md"

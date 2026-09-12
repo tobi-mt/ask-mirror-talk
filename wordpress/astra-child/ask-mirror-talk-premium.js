@@ -1,6 +1,6 @@
 /**
  * Ask Mirror Talk — Premium Features
- * v5.9.31
+ * v6.0.0
  * 
  * Implements:
  * - Track A: User Experience (Question coaching, Onboarding, Response formatting)
@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  console.log('✨ Ask Mirror Talk Premium Features v5.9.31 loaded');
+  console.log('✨ Ask Mirror Talk Premium Features v6.0.0 loaded');
 
   // ═══════════════════════════════════════════════════════════════
   // ██ TRACK C: TECHNICAL FOUNDATION - DATA LAYER (IndexedDB)
@@ -605,7 +605,7 @@
         </div>
 
         <div class="amt-onboarding-promise">
-          <strong>Your reflections are private.</strong> They're stored securely on your device and never shared.
+          <strong>Your reflection stays private by default.</strong> Saved notes stay on this device; questions are sent anonymously to create an answer.
         </div>
 
         <button type="button" class="amt-onboarding-start">Begin Your First Reflection</button>
@@ -623,6 +623,9 @@
       const input = document.querySelector('#ask-mirror-talk-input');
       if (input) {
         input.value = 'What does it mean to live authentically?';
+        // Keep the character counter, question coach, and accessibility state in
+        // sync with the programmatic value.
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.focus();
         input.setSelectionRange(input.value.length, input.value.length);
       }
@@ -722,7 +725,7 @@
       const patterns = await getCachedPatterns();
 
       const exportData = {
-        version: '5.9.31',
+        version: '6.0.0',
         exportedAt: new Date().toISOString(),
         reflections: history,
         patterns: patterns,

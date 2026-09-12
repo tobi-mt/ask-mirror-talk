@@ -59,6 +59,7 @@ python -m app.ingestion.scheduler
 | `GET` | `/status` | System status (episodes, chunks, latest run) |
 | `GET` | `/admin` | Admin dashboard (HTTP Basic auth) |
 | `GET` | `/api/analytics/summary` | Analytics summary (last N days) |
+| `GET` | `/api/analytics/growth` | DAU, activation, value, referral, and day-1 retention scorecard |
 | `GET` | `/api/analytics/episodes` | Episode-level analytics |
 | `POST` | `/api/citation/click` | Track citation click |
 | `POST` | `/api/feedback` | Submit user feedback |

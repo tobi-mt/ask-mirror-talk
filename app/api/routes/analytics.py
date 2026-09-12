@@ -311,6 +311,107 @@ def get_origin_cohort_analytics(
     }
 
 
+@router.get("/api/analytics/growth")
+def get_growth_analytics(
+    days: int = 30,
+    request: Request = None,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Return the acquisition-to-value scorecard used for the 10k DAU milestone."""
+    admin_auth(credentials, request)
+    days = max(7, min(days, 365))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    daily_rows = db.execute(
+        text(
+            """
+            WITH activity AS (
+                SELECT
+                    DATE(created_at) AS activity_date,
+                    COALESCE(NULLIF(device_id, ''), NULLIF(user_ip, '')) AS actor_id,
+                    event_name
+                FROM product_events
+                WHERE created_at >= :cutoff
+                  AND COALESCE(user_ip, '') != :internal_user_ip
+            )
+            SELECT
+                activity_date,
+                COUNT(DISTINCT actor_id) FILTER (WHERE event_name = 'app_opened') AS dau,
+                COUNT(DISTINCT actor_id) FILTER (WHERE event_name = 'question_submitted') AS askers,
+                COUNT(DISTINCT actor_id) FILTER (WHERE event_name = 'question_answered') AS answered_users,
+                COUNT(DISTINCT actor_id) FILTER (
+                    WHERE event_name IN ('reflection_note_saved', 'share_cta_used', 'citation_action_used')
+                ) AS value_users,
+                COUNT(DISTINCT actor_id) FILTER (WHERE event_name = 'referral_cta_used') AS referrers
+            FROM activity
+            WHERE actor_id IS NOT NULL
+            GROUP BY activity_date
+            ORDER BY activity_date
+            """
+        ),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+    ).fetchall()
+
+    retention = db.execute(
+        text(
+            """
+            WITH opens AS (
+                SELECT DISTINCT
+                    DATE(created_at) AS activity_date,
+                    COALESCE(NULLIF(device_id, ''), NULLIF(user_ip, '')) AS actor_id
+                FROM product_events
+                WHERE created_at >= :cutoff
+                  AND event_name = 'app_opened'
+                  AND COALESCE(user_ip, '') != :internal_user_ip
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE next_day.actor_id IS NOT NULL) AS retained_users,
+                COUNT(*) AS eligible_users
+            FROM opens cohort
+            LEFT JOIN opens next_day
+              ON next_day.actor_id = cohort.actor_id
+             AND next_day.activity_date = cohort.activity_date + 1
+            WHERE cohort.activity_date < CURRENT_DATE
+            """
+        ),
+        {"cutoff": cutoff, "internal_user_ip": INTERNAL_USER_IP},
+    ).one()
+
+    series = [
+        {
+            "date": row[0].isoformat(),
+            "dau": int(row[1] or 0),
+            "askers": int(row[2] or 0),
+            "answered_users": int(row[3] or 0),
+            "value_users": int(row[4] or 0),
+            "referrers": int(row[5] or 0),
+        }
+        for row in daily_rows
+    ]
+    latest = series[-1] if series else {"dau": 0, "askers": 0, "answered_users": 0, "value_users": 0, "referrers": 0}
+    dau = latest["dau"]
+    eligible = int(retention[1] or 0)
+
+    return {
+        "period_days": days,
+        "milestone_dau": 10000,
+        "latest": {
+            **latest,
+            "progress_percent": round(dau / 10000 * 100, 2),
+            "visitor_to_question_percent": round(latest["askers"] / dau * 100, 2) if dau else None,
+            "visitor_to_value_percent": round(latest["value_users"] / dau * 100, 2) if dau else None,
+        },
+        "day_1_retention_percent": round(int(retention[0] or 0) / eligible * 100, 2) if eligible else None,
+        "daily": series,
+        "definitions": {
+            "dau": "Distinct device IDs opening Ask Mirror Talk on a UTC calendar day; IP is fallback only.",
+            "value_user": "A daily active user who saves a note, shares, or opens a cited source.",
+            "day_1_retention": "Eligible daily openers who also open the product on the following UTC day.",
+        },
+    }
+
+
 @router.get("/api/analytics/episodes")
 def get_episode_analytics(
     request: Request,

@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v5.9.31 loaded');
+  log('Ask Mirror Talk Widget v6.0.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1840,7 +1840,7 @@
         trustLead: `${count} episode reference${count === 1 ? '' : 's'} support${count === 1 ? 's' : ''} this reflection`,
         trustDetail: 'You have direct source moments below. A narrower follow-up can still surface a tighter match.',
         contextKicker: 'Grounded in Mirror Talk',
-        contextSummary: `${count} episode reference${count === 1 ? '' : 's'} support this reflection.`,
+        contextSummary: `${count} episode reference${count === 1 ? '' : 's'} support${count === 1 ? 's' : ''} this reflection.`,
         contextDetail: 'Use the source moments below to verify the answer, then tighten the question if you want a sharper match.',
         supportPill: 'Partial grounding'
       };
@@ -2319,6 +2319,7 @@
               });
               const previewAudio = document.createElement('audio');
               previewAudio.className = 'amt-preview-audio';
+              previewAudio.preload = 'metadata';
               previewAudio.style.display = 'none';
               previewAudio.src = audioUrl;
               li.appendChild(previewAudio);
@@ -3599,6 +3600,7 @@
     };
     
     const topic = extractTopic(lower);
+    const howToAction = (lower.match(/^how do i\s+(.+)/i) || [])[1] || '';
     const prompts = [];
     const addPrompt = (label, questionText) => {
       const cleanQuestion = String(questionText || '').trim();
@@ -3611,8 +3613,18 @@
       addPrompt('Make it more specific', `How do I navigate ${topic} with honesty and clarity?`);
     }
 
-    addPrompt('Ask for a first step', `What is the first step I should take with ${topic}?`);
-    addPrompt('Ground it in Mirror Talk', `What does Mirror Talk say about ${topic}?`);
+    addPrompt(
+      'Ask for a first step',
+      howToAction
+        ? `What is one practical first step to ${howToAction}?`
+        : `What is one practical first step for ${topic}?`
+    );
+    addPrompt(
+      'Ground it in Mirror Talk',
+      howToAction
+        ? `What does Mirror Talk say about how to ${howToAction}?`
+        : `What does Mirror Talk say about ${topic}?`
+    );
 
     if (lower.includes('feel ') || lower.includes('feeling')) {
       addPrompt('Explore the feeling', `What might this feeling be trying to show me about ${topic}?`);
@@ -3759,7 +3771,12 @@
         score: scoreShareHeadlineCandidate(candidate, themeKeywords, { question: insight.question || '' }),
         relevance: scoreQuestionRelevance(candidate)
       }))
-      .filter(item => item.text && item.score > -Infinity && !isWeakShareHeadlineCandidate(item.text))
+      .filter(item => item.text &&
+        item.score > -Infinity &&
+        !isWeakShareHeadlineCandidate(item.text) &&
+        // Theme fallbacks are prompts, never evidence. Do not let one outrank
+        // a sentence that actually came from a saved reflection.
+        trimDanglingHeadlineTail(item.text).toLowerCase() !== trimDanglingHeadlineTail(fallback).toLowerCase())
       .sort((a, b) => {
         // Primary: presentation score
         if (Math.abs(a.score - b.score) > 0.5) return b.score - a.score;
@@ -3867,6 +3884,53 @@
     if (/^\d+[.)]\s/.test(clean)) return false;
     if (/\b(here are|i found|source moment|grounded reflections|speak to your question|partial grounding)\b/i.test(clean)) return false;
     return true;
+  }
+
+  function getReflectionCardReadiness(insight) {
+    if (isFallbackAnswerMeta(insight && insight.answerMeta)) {
+      return { eligible: false, reason: 'fallback_answer', headline: '', groundingScore: 0 };
+    }
+
+    const rawSource = joinReflectionTextParts([
+      insight && insight.answer,
+      insight && insight.excerpt,
+      insight && insight.sourceExcerpt
+    ]);
+    if (/\b(here are grounded reflections|i found a few mirror talk moments|source moments only|partial grounding)\b/i.test(rawSource)) {
+      return { eligible: false, reason: 'fallback_answer', headline: '', groundingScore: 0 };
+    }
+    if (rawSource.replace(/\s+/g, ' ').trim().length < 32) {
+      return { eligible: false, reason: 'insufficient_source', headline: '', groundingScore: 0 };
+    }
+    const rawAnswer = String((insight && insight.answer) || '').trim();
+    const rawExcerpt = String((insight && insight.excerpt) || '').trim();
+    if (!String((insight && insight.sourceExcerpt) || '').trim() &&
+        !isCompleteReflectionSentence(rawAnswer) &&
+        !isCompleteReflectionSentence(rawExcerpt)) {
+      return { eligible: false, reason: 'incomplete_source', headline: '', groundingScore: 0 };
+    }
+
+    const normalized = normalizeInsightRecord(insight || {});
+    const headline = extractShareHeadline(normalized);
+    if (!isShareableReflectionText(headline) || !isShareableReflectionText(normalized.excerpt)) {
+      return { eligible: false, reason: 'weak_or_incomplete_text', headline, groundingScore: 0 };
+    }
+
+    const stopwords = new Set(['about', 'after', 'again', 'being', 'could', 'from', 'have', 'into', 'just', 'more', 'most', 'that', 'their', 'then', 'there', 'these', 'they', 'this', 'those', 'through', 'today', 'when', 'where', 'while', 'with', 'would', 'your', 'youre', 'youve']);
+    const terms = (value) => new Set(String(value || '').toLowerCase()
+      .match(/[a-z][a-z']+/g)
+      ?.map(term => term.replace(/'/g, ''))
+      .filter(term => term.length >= 4 && !stopwords.has(term)) || []);
+    const headlineTerms = terms(headline);
+    const sourceTerms = terms(rawSource);
+    const overlap = [...headlineTerms].filter(term => sourceTerms.has(term)).length;
+    const groundingScore = overlap / Math.max(1, Math.min(headlineTerms.size, sourceTerms.size));
+    const exactGrounding = rawSource.toLowerCase().includes(trimDanglingHeadlineTail(headline).toLowerCase());
+    if (!exactGrounding && (overlap < 2 || groundingScore < 0.35)) {
+      return { eligible: false, reason: 'headline_not_source_grounded', headline, groundingScore };
+    }
+
+    return { eligible: true, reason: 'ready', headline, groundingScore };
   }
 
   function formatRelativeTime(timestamp) {
@@ -5127,6 +5191,7 @@
    */
   function showNotificationOptIn(fromBell) {
     console.log('[NotifOptIn] Called with args:', arguments);
+    const explicitlyRequested = fromBell === true || fromBell === 'fromBell';
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) && !window.MSStream;
     const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|OPiOS|EdgiOS/.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
@@ -5308,6 +5373,10 @@
 
     // If permission already denied, show browser settings instructions
     if (Notification.permission === 'denied') {
+      // A blocked permission cannot be repaired from an in-page prompt. Keep
+      // first-question and returning-user journeys calm; show instructions only
+      // after the person deliberately opens notification settings.
+      if (!explicitlyRequested) return;
       console.log('[NotifOptIn] Permission denied, showing instructions');
       // Don't show if dismissed this session (unless called from bell button)
       try {
@@ -5360,7 +5429,7 @@
 
     // If permission already granted but not subscribed, allow them to subscribe
     // (Don't nag if they explicitly dismissed, but let bell button trigger this)
-    const clickedBell = arguments[0] === 'fromBell';
+    const clickedBell = explicitlyRequested;
     console.log('[NotifOptIn] clickedBell:', clickedBell, 'permission:', Notification.permission);
     if (Notification.permission === 'granted' && !clickedBell) {
       // Permission already granted - they can subscribe via bell button
@@ -9157,10 +9226,9 @@
       }
     }
 
-    const allowSyntheticFallback = (normalized.shareSource || '') === 'current_answer' || !(normalized.shareSource || '').trim();
-    const sourceRescueCandidates = !allowSyntheticFallback
-      ? listCompactSourceReflectionCandidates(joinReflectionTextParts([normalized.excerpt, normalized.answer]))
-      : [];
+    const sourceRescueCandidates = listCompactSourceReflectionCandidates(
+      joinReflectionTextParts([normalized.excerpt, normalized.answer])
+    );
 
     if (!headlinePool.length) {
       const sourceRescue = sourceRescueCandidates.find(candidate => fitsAnyProfile(candidate, fitProfiles));
@@ -9250,8 +9318,16 @@
       return sourceRescue;
     }
 
-    console.log('[Card] Headline candidates available but none fit, using fallback');
-    return buildThemeReflectionFallback(normalized.theme || '');
+    // Never trade provenance for layout. Render the best grounded candidate at
+    // the minimum type size instead of inventing a theme slogan.
+    if (headlinePool.length) {
+      return headlinePool
+        .slice()
+        .sort((a, b) => scoreHeadlinePresentation(b) - scoreHeadlinePresentation(a))[0];
+    }
+
+    console.log('[Card] No grounded headline could be recovered');
+    return '';
   }
 
   function getInsightShareFamily(insight) {
@@ -11230,6 +11306,16 @@
   }
 
   function shareInsightArtifact(insight) {
+    const readiness = getReflectionCardReadiness(insight || {});
+    if (!readiness.eligible) {
+      const messages = {
+        fallback_answer: 'The answer is currently source moments only. Refine the question first, then share the complete reflection.',
+        insufficient_source: 'There is not enough source reflection to make an accurate card yet.',
+        headline_not_source_grounded: 'The proposed card text could not be verified against this reflection.'
+      };
+      showShareHoldbackToast(messages[readiness.reason] || 'The selected text is not complete or reflective enough for a polished card yet.');
+      return;
+    }
     const normalized = {
       ...normalizeInsightRecord(insight),
       shareSource: (insight && insight.shareSource) || 'saved_insight'
@@ -12801,6 +12887,7 @@
       extractCardHeadline,
       listCardHeadlineCandidates,
       isCompleteReflectionSentence,
+      getReflectionCardReadiness,
       ensureReflectionSentence,
       joinReflectionTextParts,
       buildThemeReflectionFallback,

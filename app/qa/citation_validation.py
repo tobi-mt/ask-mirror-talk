@@ -206,11 +206,15 @@ def _check_semantic_relevance(
     answer_words -= stopwords
     citation_words -= stopwords
     
-    # Word-level overlap boost
+    # Word-level concept coverage. Phrase matching alone is too brittle for
+    # short, faithful paraphrases ("grief requires patience" vs
+    # "grief is a journey that requires patience"). Normalize by the smaller
+    # concept set so a concise source passage can still strongly support a
+    # longer generated answer.
     word_overlap = answer_words & citation_words
-    if answer_words:
-        word_overlap_ratio = len(word_overlap) / len(answer_words)
-        score += word_overlap_ratio * 50  # Up to 50 bonus points
+    if answer_words and citation_words:
+        word_overlap_ratio = len(word_overlap) / min(len(answer_words), len(citation_words))
+        score += word_overlap_ratio * 80  # Up to 80 points for concept coverage
     
     # Penalty for citations with no overlap
     if overlap_ratio < 0.1:

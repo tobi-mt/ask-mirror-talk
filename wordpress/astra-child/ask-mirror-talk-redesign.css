@@ -100,6 +100,12 @@
   backdrop-filter: blur(10px);
 }
 
+.ask-mirror-talk .amt-heading-controls {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(24, 15, 31, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 28px rgba(24, 15, 31, 0.18);
+}
+
 .ask-mirror-talk .amt-heading-controls > button:hover,
 .ask-mirror-talk .amt-heading-controls > button:focus-visible {
   border-color: rgba(241, 201, 121, 0.72);
@@ -108,7 +114,9 @@
 }
 
 .ask-mirror-talk .amt-heading-controls-note {
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .ask-mirror-talk .amt-stats-bar {
@@ -127,6 +135,7 @@
   border: 1px solid transparent;
   border-radius: 15px;
   background: transparent;
+  color: var(--amt-v6-ink);
 }
 
 .ask-mirror-talk .amt-stat-action-btn:hover,
@@ -144,6 +153,25 @@
 
 .ask-mirror-talk .amt-stat-icon {
   filter: saturate(0.82);
+}
+
+.ask-mirror-talk .amt-stats-prompt {
+  margin-top: 4px;
+  padding: 14px 16px 12px;
+  border-top: 1px solid var(--amt-v6-line);
+}
+
+.ask-mirror-talk .amt-stats-prompt-kicker {
+  color: #6b536f;
+}
+
+.ask-mirror-talk .amt-stats-prompt-text {
+  color: #2b2433;
+  font-weight: 720;
+}
+
+.ask-mirror-talk .amt-stats-prompt-subtext {
+  color: #62596b;
 }
 
 .ask-mirror-talk .amt-workflow-bar {
@@ -234,6 +262,25 @@
   font-size: 17px;
   line-height: 1.6;
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.ask-mirror-talk #ask-mirror-talk-input::placeholder {
+  color: #706777;
+  opacity: 1;
+}
+
+.ask-mirror-talk .amt-form-note,
+.ask-mirror-talk .amt-qotd-text,
+.ask-mirror-talk .amt-answer-context p,
+.ask-mirror-talk .citation-item p {
+  color: #5f5667;
+}
+
+.ask-mirror-talk #ask-mirror-talk-form label,
+.ask-mirror-talk .amt-form-intro h3,
+.ask-mirror-talk .amt-answer-context h3,
+.ask-mirror-talk .citation-item strong {
+  color: var(--amt-v6-ink);
 }
 
 .ask-mirror-talk #ask-mirror-talk-input:focus {
@@ -405,6 +452,22 @@
   .ask-mirror-talk .amt-heading-controls {
     width: 100%;
     max-width: none;
+  }
+
+  .ask-mirror-talk .amt-heading-controls-note {
+    font-size: 11px;
+  }
+
+  .ask-mirror-talk .amt-workflow-guide {
+    font-size: 9px;
+  }
+
+  .ask-mirror-talk .amt-workflow-label {
+    font-size: 11px;
+  }
+
+  .ask-mirror-talk .amt-workflow-hint {
+    font-size: 9px;
   }
 
   .ask-mirror-talk .amt-workflow-bar {

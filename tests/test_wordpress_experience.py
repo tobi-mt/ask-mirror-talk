@@ -49,3 +49,24 @@ def test_redesign_is_scoped_and_accessibility_aware():
     assert "@media (prefers-reduced-motion: reduce)" in css
     assert "@media (prefers-contrast: more)" in css
     assert "button:focus-visible" in css
+
+
+def test_light_premium_surfaces_have_explicit_readable_text_colors():
+    css = (THEME_DIR / "ask-mirror-talk-redesign.css").read_text()
+    fixture = (Path(__file__).parent / "fixtures" / "premium_redesign_preview.html").read_text()
+
+    assert ".ask-mirror-talk .amt-stats-prompt-text" in css
+    assert "color: #2b2433" in css
+    assert ".ask-mirror-talk .amt-stats-prompt-subtext" in css
+    assert "color: #62596b" in css
+    assert ".ask-mirror-talk .amt-stats-prompt-kicker" in css
+    assert "color: #6b536f" in css
+    assert ".ask-mirror-talk .amt-heading-controls" in css
+    assert "background: rgba(24, 15, 31, 0.34)" in css
+    assert ".ask-mirror-talk #ask-mirror-talk-input::placeholder" in css
+    assert "color: #706777" in css
+    assert ".ask-mirror-talk .amt-form-note" in css
+    assert ".ask-mirror-talk .amt-workflow-label" in css
+    assert "font-size: 11px" in css
+    assert "amt-badge-count" in fixture
+    assert "amt-stats-prompt-text" in fixture

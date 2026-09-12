@@ -11,7 +11,7 @@
  */
 
 const BUILD_TIMESTAMP = '2026-05-31T16:10:00.000Z';  // Update this to force SW refresh
-const CACHE_VERSION = 'amt-v6.0.0';
+const CACHE_VERSION = 'amt-v6.0.1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const NAVIGATION_CACHE = `${CACHE_VERSION}-pages`;

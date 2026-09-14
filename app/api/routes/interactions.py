@@ -12,6 +12,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _analytics_metadata(payload_metadata: dict[str, Any] | None, request: Request) -> dict[str, Any]:
+    """Add coarse edge geography without deriving or storing precise location."""
+    metadata = dict(payload_metadata or {})
+    country = (
+        request.headers.get("cf-ipcountry")
+        or request.headers.get("x-vercel-ip-country")
+        or request.headers.get("cloudfront-viewer-country")
+    )
+    if country and len(country.strip()) == 2 and country.strip().isalpha():
+        metadata["country_code"] = country.strip().upper()
+    return metadata
+
+
 class CitationClickRequest(BaseModel):
     qa_log_id: int
     episode_id: int
@@ -104,9 +117,9 @@ def track_client_event(
 
     user_ip = get_client_ip(request)
 
-    device_id = None
-    if payload.metadata and isinstance(payload.metadata, dict):
-        device_id = payload.metadata.get("device_id")
+    metadata = _analytics_metadata(payload.metadata, request)
+    raw_device_id = metadata.get("device_id")
+    device_id = str(raw_device_id).strip()[:64] if raw_device_id else None
 
     try:
         log_product_event(
@@ -114,7 +127,7 @@ def track_client_event(
             event_name=event_name,
             user_ip=user_ip,
             qa_log_id=payload.qa_log_id,
-            metadata=payload.metadata or {},
+            metadata=metadata,
             device_id=device_id,
         )
         return {"status": "ok"}
@@ -125,8 +138,8 @@ def track_client_event(
                 "event_name": event_name,
                 "qa_log_id": payload.qa_log_id,
                 "user_ip": user_ip,
-                "metadata": payload.metadata or {},
-                "device_id": device_id,
+                "metadata_keys": sorted(metadata.keys()),
+                "has_device_id": bool(device_id),
                 "error": str(e),
             },
         )

@@ -165,6 +165,7 @@ def render_admin_dashboard_html(data: AdminDashboardData) -> str:
 
           <div class="api-links">
             <a href="/api/analytics/summary?days=7" target="_blank">📊 Analytics API</a>
+            <a href="/api/analytics/overview?period=all" target="_blank">🌍 All-time Analytics</a>
             <a href="/api/analytics/growth?days=30" target="_blank">🎯 10k DAU Scorecard</a>
             <a href="/api/analytics/origins?days=30" target="_blank">🧭 Origin Cohorts API</a>
             <a href="/api/analytics/episodes" target="_blank">📚 Episode Analytics</a>

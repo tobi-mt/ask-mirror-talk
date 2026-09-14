@@ -639,7 +639,15 @@
   function emitProductEvent(name, metadata) {
     try {
       const deviceId = getOrCreateDeviceId();
-      const merged = Object.assign({}, getCampaignMetadata(), metadata || {}, { device_id: deviceId });
+      const width = Math.max(window.innerWidth || 0, (window.screen && window.screen.width) || 0);
+      const clientContext = {
+        device_id: deviceId,
+        timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').slice(0, 100),
+        language: String(navigator.language || '').slice(0, 20),
+        platform: width < 768 ? 'mobile' : (width < 1024 ? 'tablet' : 'desktop'),
+        display_mode: window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'
+      };
+      const merged = Object.assign({}, clientContext, getCampaignMetadata(), metadata || {});
       window.dispatchEvent(new CustomEvent('amt:product-event', {
         detail: {
           eventName: name,

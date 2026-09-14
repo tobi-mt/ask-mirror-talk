@@ -22,6 +22,7 @@ def test_render_admin_dashboard_html_includes_core_sections():
 
     assert "Ask Mirror Talk Admin" in html
     assert "Analytics & System Dashboard" in html
+    assert "/api/analytics/overview?period=all" in html
     assert "User Satisfaction" in html
     assert "Top Unanswered Questions" in html
     assert "Episode One" in html

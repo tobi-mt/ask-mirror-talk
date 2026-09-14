@@ -1,6 +1,15 @@
 from app.api.routes import interactions as interaction_routes
 
 
+def test_analytics_metadata_adds_coarse_country_header():
+    request = type("Req", (), {"headers": {"cf-ipcountry": "de"}})()
+
+    assert interaction_routes._analytics_metadata({"platform": "mobile"}, request) == {
+        "platform": "mobile",
+        "country_code": "DE",
+    }
+
+
 def test_track_client_event_requires_event_name():
     request = type("Req", (), {"client": type("Client", (), {"host": "127.0.0.1"})(), "headers": {}})()
     payload = interaction_routes.ClientEventRequest(event_name="   ", qa_log_id=None, metadata=None)

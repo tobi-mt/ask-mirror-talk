@@ -311,6 +311,150 @@ def get_origin_cohort_analytics(
     }
 
 
+@router.get("/api/analytics/overview")
+def get_analytics_overview(
+    period: str = "all",
+    days: int = 30,
+    request: Request = None,
+    credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Return comprehensive analytics with explicit coverage and definitions."""
+    admin_auth(credentials, request)
+    if period not in {"all", "days"}:
+        raise HTTPException(status_code=400, detail="period must be 'all' or 'days'")
+    days = max(1, min(days, 3650))
+    cutoff = None if period == "all" else datetime.now(timezone.utc) - timedelta(days=days)
+    q_filter = "" if cutoff is None else "AND q.created_at >= :cutoff"
+    p_filter = "" if cutoff is None else "AND p.created_at >= :cutoff"
+    params = {"internal_user_ip": INTERNAL_USER_IP, "cutoff": cutoff}
+
+    totals = db.execute(text(f"""
+        SELECT COUNT(*) AS questions,
+               COUNT(DISTINCT NULLIF(q.user_ip, '')) AS unique_ip_addresses,
+               MIN(q.created_at) AS first_seen_at, MAX(q.created_at) AS last_seen_at,
+               ROUND(AVG(q.latency_ms)::numeric, 2) AS avg_latency_ms,
+               ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY q.latency_ms)::numeric, 2) AS p95_latency_ms,
+               COUNT(*) FILTER (WHERE q.is_answered = FALSE OR NULLIF(q.episode_ids, '') IS NULL) AS weak_matches,
+               COUNT(*) FILTER (WHERE q.is_cached = TRUE) AS cached_questions
+        FROM qa_logs q
+        WHERE COALESCE(q.user_ip, '') != :internal_user_ip {q_filter}
+    """), params).mappings().one()
+    devices = db.execute(text(f"""
+        SELECT COUNT(*) AS events,
+               COUNT(DISTINCT NULLIF(p.device_id, '')) AS unique_devices,
+               COUNT(*) FILTER (WHERE NULLIF(p.device_id, '') IS NOT NULL) AS events_with_device,
+               MIN(p.created_at) AS first_seen_at, MAX(p.created_at) AS last_seen_at
+        FROM product_events p
+        WHERE COALESCE(p.user_ip, '') != :internal_user_ip {p_filter}
+    """), params).mappings().one()
+    top_questions = db.execute(text(f"""
+        SELECT LOWER(REGEXP_REPLACE(BTRIM(q.question), '\\s+', ' ', 'g')) AS question,
+               COUNT(*) AS asks,
+               COUNT(DISTINCT NULLIF(q.user_ip, '')) AS unique_ip_addresses
+        FROM qa_logs q
+        WHERE COALESCE(q.user_ip, '') != :internal_user_ip
+          AND BTRIM(q.question) != ''
+          AND BTRIM(q.question) NOT LIKE '{{{{%}}}}' {q_filter}
+        GROUP BY 1 HAVING COUNT(*) >= 2
+        ORDER BY asks DESC, question ASC LIMIT 25
+    """), params).mappings().all()
+    hourly = db.execute(text(f"""
+        SELECT EXTRACT(HOUR FROM q.created_at)::int AS hour_utc,
+               COUNT(*) AS questions,
+               COUNT(DISTINCT NULLIF(q.user_ip, '')) AS unique_ip_addresses
+        FROM qa_logs q
+        WHERE COALESCE(q.user_ip, '') != :internal_user_ip {q_filter}
+        GROUP BY 1 ORDER BY 1
+    """), params).mappings().all()
+    weekdays = db.execute(text(f"""
+        SELECT EXTRACT(ISODOW FROM q.created_at)::int AS iso_weekday,
+               COUNT(*) AS questions,
+               COUNT(DISTINCT NULLIF(q.user_ip, '')) AS unique_ip_addresses
+        FROM qa_logs q
+        WHERE COALESCE(q.user_ip, '') != :internal_user_ip {q_filter}
+        GROUP BY 1 ORDER BY 1
+    """), params).mappings().all()
+    daily = db.execute(text(f"""
+        SELECT DATE(q.created_at) AS activity_date,
+               COUNT(*) AS questions,
+               COUNT(DISTINCT NULLIF(q.user_ip, '')) AS unique_ip_addresses
+        FROM qa_logs q
+        WHERE COALESCE(q.user_ip, '') != :internal_user_ip {q_filter}
+        GROUP BY 1 ORDER BY 1
+    """), params).mappings().all()
+    event_mix = db.execute(text(f"""
+        SELECT p.event_name, COUNT(*) AS events,
+               COUNT(DISTINCT NULLIF(p.device_id, '')) AS unique_devices
+        FROM product_events p
+        WHERE COALESCE(p.user_ip, '') != :internal_user_ip {p_filter}
+        GROUP BY p.event_name ORDER BY events DESC, p.event_name ASC
+    """), params).mappings().all()
+
+    dimensions = {}
+    for dimension in ("country_code", "timezone", "language", "platform", "display_mode"):
+        rows = db.execute(text(f"""
+            WITH latest_device AS (
+                SELECT DISTINCT ON (p.device_id) p.device_id,
+                       NULLIF(p.metadata_json::jsonb->>:dimension, '') AS value
+                FROM product_events p
+                WHERE COALESCE(p.user_ip, '') != :internal_user_ip
+                  AND NULLIF(p.device_id, '') IS NOT NULL {p_filter}
+                ORDER BY p.device_id, p.created_at DESC
+            )
+            SELECT value, COUNT(*) AS devices FROM latest_device
+            WHERE value IS NOT NULL GROUP BY value
+            ORDER BY devices DESC, value ASC LIMIT 30
+        """), {**params, "dimension": dimension}).mappings().all()
+        dimensions[dimension] = [dict(row) for row in rows]
+
+    question_count = int(totals["questions"] or 0)
+    event_count = int(devices["events"] or 0)
+    weak_matches = int(totals["weak_matches"] or 0)
+    cached = int(totals["cached_questions"] or 0)
+    device_coverage = int(devices["events_with_device"] or 0)
+    return {
+        "period": {"type": period, "days": days if period == "days" else None},
+        "coverage": {
+            "questions_first_seen_at": totals["first_seen_at"], "questions_last_seen_at": totals["last_seen_at"],
+            "events_first_seen_at": devices["first_seen_at"], "events_last_seen_at": devices["last_seen_at"],
+        },
+        "audience": {
+            "unique_users_proxy": int(totals["unique_ip_addresses"] or 0),
+            "unique_devices": int(devices["unique_devices"] or 0),
+            "unique_user_definition": "Distinct IP addresses that asked a question; a proxy, not an account-level user count.",
+            "unique_device_definition": "Distinct first-party browser IDs in product events; available only after instrumentation began.",
+        },
+        "usage": {
+            "questions": question_count, "events": event_count,
+            "avg_latency_ms": float(totals["avg_latency_ms"] or 0),
+            "p95_latency_ms": float(totals["p95_latency_ms"] or 0),
+            "weak_matches": weak_matches,
+            "weak_match_percent": round(weak_matches / question_count * 100, 2) if question_count else None,
+            "cached_questions": cached,
+            "cache_hit_percent": round(cached / question_count * 100, 2) if question_count else None,
+        },
+        "top_questions": [dict(row) for row in top_questions],
+        "daily": [dict(row) for row in daily],
+        "time_of_day_utc": [dict(row) for row in hourly],
+        "weekday_utc": [dict(row) for row in weekdays],
+        "event_mix": [dict(row) for row in event_mix],
+        "geography": {"countries": dimensions["country_code"], "timezones": dimensions["timezone"]},
+        "technology": {"platforms": dimensions["platform"], "display_modes": dimensions["display_mode"], "languages": dimensions["language"]},
+        "demography": {"available": False, "reason": "Age, gender, and other demographics are not collected and are not inferred from private questions."},
+        "data_quality": {
+            "device_id_event_coverage_percent": round(device_coverage / event_count * 100, 2) if event_count else None,
+            "top_questions_minimum_aggregate_count": 2,
+            "known_limitations": [
+                "IP addresses can merge people on shared networks and split one person across changing networks.",
+                "Browser device IDs reset when storage is cleared or another browser/device is used.",
+                "Historical time-of-day is UTC; local-time analysis becomes available as timezone metadata accumulates.",
+                "Country is populated only when a trusted reverse proxy supplies a country header.",
+            ],
+        },
+    }
+
+
 @router.get("/api/analytics/growth")
 def get_growth_analytics(
     days: int = 30,

@@ -14,7 +14,6 @@ Usage:
 """
 
 import sys
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -541,7 +540,7 @@ def generate_summary_report(db, days=7):
             WHERE pe.created_at >= :cutoff
                             AND pe.event_name IN ('question_submitted', 'question_answered')
               AND pe.qa_log_id IS NOT NULL
-            ORDER BY pe.qa_log_id, pe.created_at DESC
+            ORDER BY pe.qa_log_id, (pe.event_name = 'question_answered') DESC, pe.created_at DESC
         )
         SELECT
             COUNT(*) AS canonical_question_count,
@@ -572,7 +571,7 @@ def generate_summary_report(db, days=7):
     total_episodes = db.execute(text("SELECT COUNT(*) FROM episodes")).scalar()
     total_chunks = db.execute(text("SELECT COUNT(*) FROM chunks")).scalar()
     
-    print(f"\n📈 Overall Metrics:")
+    print("\n📈 Overall Metrics:")
     print(f"   Total Questions: {total_questions or 0}")
     print(f"   Unique Users (by IP): {unique_users or 0}")
     print(f"   Unique Devices (qa-linked): {unique_devices or 0}")

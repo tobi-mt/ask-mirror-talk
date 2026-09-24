@@ -308,10 +308,10 @@ def _fetch_admin_dashboard_data(db: Session) -> AdminDashboardData:
                     qa_log_id,
                     COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin
                 FROM product_events
-                WHERE event_name = 'question_submitted'
+                WHERE event_name IN ('question_answered', 'question_submitted')
                   AND qa_log_id IS NOT NULL
                   AND created_at >= :cutoff
-                ORDER BY qa_log_id, created_at DESC
+                ORDER BY qa_log_id, (event_name = 'question_answered') DESC, created_at DESC
             )
             SELECT
                 COALESCE(oe.origin, 'typed_or_unknown') AS origin,

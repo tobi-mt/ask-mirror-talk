@@ -16,6 +16,17 @@
     let productEventTrackingEnabled = true;
     let productEventEndpointMissing = false;
     const recentProductEventSignatures = new Map();
+    const POST_ANSWER_EVENTS = new Set([
+        'citation_action_used',
+        'citation_click_recorded',
+        'continuation_action_used',
+        'low_match_action',
+        'reflection_note_opened',
+        'reflection_note_saved',
+        'share_cta_used',
+        'share_panel_shown',
+        'trust_capsule_opened'
+    ]);
     const PRODUCT_EVENT_SANITY = {
         enabled: true,
         defaultSampleRate: 1,
@@ -337,9 +348,10 @@
                 ? metadata.qa_log_id
                 : null;
             const explicitQALogId = Number(explicitQALogIdRaw);
+            const mayInheritCurrentQALogId = POST_ANSWER_EVENTS.has(eventName);
             const qaLogIdForEvent = Number.isFinite(explicitQALogId) && explicitQALogId > 0
                 ? explicitQALogId
-                : currentQALogId;
+                : (mayInheritCurrentQALogId ? currentQALogId : null);
 
             // Keep rolling context in sync when a strongly linked completion event arrives.
             if (eventName === 'question_answered' && qaLogIdForEvent) {

@@ -23,10 +23,10 @@ def _fetch_origin_cohort_metrics(db: Session, cutoff: datetime):
                     qa_log_id,
                     COALESCE(metadata_json::jsonb->>'origin', metadata_json::jsonb->>'label', 'unknown') AS origin
                 FROM product_events
-                WHERE event_name = 'question_submitted'
+                WHERE event_name IN ('question_answered', 'question_submitted')
                   AND qa_log_id IS NOT NULL
                   AND created_at >= :cutoff
-                ORDER BY qa_log_id, created_at DESC
+                ORDER BY qa_log_id, (event_name = 'question_answered') DESC, created_at DESC
             )
             SELECT
                 COALESCE(oe.origin, 'typed_or_unknown') AS origin,

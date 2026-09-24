@@ -487,6 +487,7 @@
   const TEST_FORCE_FAMILY = String(window.__AMT_TEST_FORCE_FAMILY__ || '').trim();
   let lastShownCitations = [];
   let pendingQuestionOrigin = 'typed';
+  let activeSubmissionId = null;
   let activeCampaignContext = null;
 
   function hasStrongSupport(citationsList) {
@@ -636,6 +637,19 @@
     return id;
   }
 
+  function createSubmissionId() {
+    try {
+      if (crypto && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    } catch (e) {
+      return `submission-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+  }
+
   function emitProductEvent(name, metadata) {
     try {
       const deviceId = getOrCreateDeviceId();
@@ -647,7 +661,8 @@
         platform: width < 768 ? 'mobile' : (width < 1024 ? 'tablet' : 'desktop'),
         display_mode: window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'
       };
-      const merged = Object.assign({}, clientContext, getCampaignMetadata(), metadata || {});
+      const lifecycleContext = activeSubmissionId ? { submission_id: activeSubmissionId } : {};
+      const merged = Object.assign({}, clientContext, getCampaignMetadata(), lifecycleContext, metadata || {});
       window.dispatchEvent(new CustomEvent('amt:product-event', {
         detail: {
           eventName: name,
@@ -4786,6 +4801,10 @@
       return;
     }
 
+    // Give every valid ask a fresh lifecycle ID so pre-answer and terminal
+    // events can be joined without borrowing a previous answer's qa_log_id.
+    activeSubmissionId = createSubmissionId();
+
     // Track only valid question submissions.
     emitProductEvent('question_submitted', { origin: pendingQuestionOrigin, length: question.length });
 
@@ -4813,6 +4832,15 @@
         }
         const data = result.data;
         if (!data.answer) throw new Error("No answer received from the service.");
+        window._amtLastQALogId = data.qa_log_id || null;
+        emitProductEvent('question_answered', {
+          qa_log_id: data.qa_log_id,
+          origin: pendingQuestionOrigin,
+          length: question.length,
+          latency_ms: data.latency_ms,
+          cached: data.cached || false,
+          answer_status: data.answer_status || data.answerStatus || 'generated'
+        });
         // Store shareable headline if provided
         window._amtLastShareableHeadline = data.shareable_headline || '';
         showAnswer(data.answer, data.citations || [], data.follow_up_questions || [], {
@@ -4821,6 +4849,10 @@
           fallbackReason: data.fallback_reason || data.fallbackReason || ''
         });
       } catch (fallbackError) {
+        emitProductEvent('question_failed', {
+          origin: pendingQuestionOrigin,
+          reason: fallbackError && fallbackError.name === 'AbortError' ? 'timeout' : 'request_error'
+        });
         console.error("Ask Mirror Talk Error:", fallbackError);
         if (fallbackError.name === 'AbortError') {
           showError("The request took too long. Please try again.");

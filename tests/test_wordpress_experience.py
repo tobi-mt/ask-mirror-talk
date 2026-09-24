@@ -42,6 +42,24 @@ def test_audio_preview_avoids_eager_full_download():
     assert "previewAudio.preload = 'metadata'" in js
 
 
+def test_question_events_use_submission_lifecycle_ids():
+    js = (THEME_DIR / "ask-mirror-talk.js").read_text()
+
+    assert "let activeSubmissionId = null;" in js
+    assert "activeSubmissionId = createSubmissionId();" in js
+    assert "submission_id: activeSubmissionId" in js
+    assert "emitProductEvent('question_failed'" in js
+
+
+def test_pre_answer_events_do_not_inherit_previous_qa_log_id():
+    addon = (THEME_DIR / "analytics-addon.js").read_text()
+
+    assert "const POST_ANSWER_EVENTS = new Set" in addon
+    assert "const mayInheritCurrentQALogId = POST_ANSWER_EVENTS.has(eventName);" in addon
+    assert ": (mayInheritCurrentQALogId ? currentQALogId : null);" in addon
+    assert "'question_submitted'" not in addon.split("const POST_ANSWER_EVENTS = new Set", 1)[1].split("]);", 1)[0]
+
+
 def test_redesign_is_scoped_and_accessibility_aware():
     css = (THEME_DIR / "ask-mirror-talk-redesign.css").read_text()
 

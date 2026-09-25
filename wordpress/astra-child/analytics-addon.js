@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v6.0.1
+ * Analytics Add-on for Ask Mirror Talk Widget v6.0.2
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -61,7 +61,7 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v6.0.1 loaded');
+        console.log('✅ Ask Mirror Talk Analytics Add-on v6.0.2 loaded');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();

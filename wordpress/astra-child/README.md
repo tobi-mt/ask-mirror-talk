@@ -1,6 +1,6 @@
 # Astra Child Theme - Mirror Talk Edition
 
-This is a child theme for the Astra WordPress theme, containing the Ask Mirror Talk widget with PWA, push notifications, gamification, and a full v5.0.0 UX feature set.
+This is the Mirror Talk experience layer for Astra. It includes the Ask Mirror Talk application, the editorial homepage, native topic hubs, contextual reflection journeys, PWA support and privacy-conscious optional analytics.
 
 ## Files Included
 
@@ -14,7 +14,23 @@ astra-child/
 ├── ask-mirror-talk-enhanced.css   # Additional premium styles
 ├── ask-mirror-talk-enhanced.js    # Enhanced interaction layer
 ├── analytics-addon.js             # Citation tracking and feedback
-├── answer-archive-template.php    # Custom page template for answer archive
+├── answer-archive-template.php    # Editor-curated Insights Library template
+├── assets/art/                    # Responsive AVIF + JPEG atmospheric artwork
+├── category.php                   # Search-friendly category/topic hubs
+├── inc/journey.php                # Context-aware episode → Ask journeys
+├── inc/listen-and-connect.php     # RSS player, platform links and CTA dialogs
+├── mirror-talk-site.css           # Global Mirror Talk design system
+├── mirror-talk-site.js            # Accessible featured-content slider
+├── listen-connect.js              # Persistent player and invitation behavior
+├── home.php                       # Dark editorial blog index
+├── archive.php                    # Dark tag/date/author archives
+├── single.php                     # Immersive long-form post template
+├── page.php                       # Cohesive standard page template
+├── topic.php                      # Virtual topic collections for existing posts
+├── player-window.php              # Persistent browser-level listening window
+├── page-templates/
+│   └── mirror-talk-home.php       # Opt-in editorial homepage
+├── theme.json                     # WordPress editor design tokens
 ├── manifest.json                  # PWA manifest
 ├── sw.js                          # Service worker for offline + push notifications
 ├── pwa-icon-192.png               # PWA icon (192x192)
@@ -54,7 +70,22 @@ astra-child/
 2. Add the shortcode: `[ask_mirror_talk]`
 3. View the page — you should see the Ask Mirror Talk widget
 
-### Step 4: Clean Up (Optional)
+### Step 4: Preview the New Homepage Safely
+
+1. Create a new draft page in WordPress.
+2. Choose the **Mirror Talk Editorial Home** template.
+3. Preview it on desktop and mobile in staging.
+4. When approved, set it under **Settings → Reading → A static page**.
+
+The template is opt-in and does not replace the existing homepage automatically.
+
+The artwork is intentionally decorative and contains no text, people or literal health imagery. AVIF is served to supporting browsers with optimized JPEG fallbacks; smaller files are selected for mobile layouts. Original PNG masters and the complete art-direction record live in `artwork/` outside the deployable theme.
+
+### Step 5: Use Mirror Talk Intelligence & SEO
+
+Mirror Talk is the authoritative SEO system. It owns titles, descriptions, canonical URLs, featured-image social cards, schema and the XML sitemap. AIOSEO output is suppressed while the plugin remains installed for migration review; after verifying staging, deactivate AIOSEO and any other general-purpose SEO suite so the site has one clear source of SEO truth.
+
+### Step 6: Clean Up (Optional)
 
 After confirming the child theme works:
 
@@ -81,6 +112,40 @@ This ensures you're only using the child theme version.
 - **Analytics:** Citation click tracking, answer feedback, and engagement reporting
 - **Answer Archive:** Custom page template listing all archived answers
 - **Theme-Safe:** Updates to Astra won't affect your customizations
+- **Editorial Homepage:** Native, responsive homepage built around Listen → Read → Explore → Reflect → Ask → Connect → Return
+- **Dark Editorial System:** Cohesive high-contrast styling across the header, homepage, blog, archives, posts, standard pages and footer
+- **Fluid Viewports:** Full-bleed Astra overrides, 1680px adaptive wide shells and 12px mobile gutters without horizontal overflow
+- **Automated Featured Slider:** Compact, control-free adaptive autoplay with progress, visibility awareness, reduced-motion support and an on-device preference-ranked starting conversation across desktop and mobile
+- **Privacy-First Personalisation:** Returning-visitor welcome and topic affinity stay in the visitor's browser; no fingerprinting, precise-location lookup or profile transmission
+- **Mirror Talk Intelligence & SEO:** Consent-gated first-party journeys, campaigns, podcast completion, Core Web Vitals, link observations, protected reporting, native metadata, social cards, Article/PodcastEpisode/Breadcrumb schema and complete collision-proof `/mirror-talk-sitemap/`, `/mirror-talk-news-sitemap/` and `/mirror-talk-video-sitemap/` feeds
+- **Editorial SEO Guidance:** Search-description editor, content-quality checks and internal-link prompts inside the WordPress editor
+- **Weekly Site Audit:** WordPress checks priority routes, records broken links and redirects, and emails the administrator a weekly report
+- **Listening Companion:** Site-wide RSS-powered player with the latest episode, expandable queue and Media Session metadata
+- **Continuous Listening:** Explicit mini-player window preserves the selected episode and timestamp while the main site navigates
+- **Intentional Invitations:** Accessible Ask, newsletter and follow/support dialogs with engagement-based frequency caps
+- **Direct Newsletter Signup:** Name, email and explicit consent are collected inside the modal and stored as private WordPress subscriber records without a contact-page redirect
+- **Layered Signup Defence:** Signed form-age proof, nonce, honeypot, anonymised burst/daily limits, non-enumerating responses and hashed 48-hour double-opt-in confirmation tokens
+- **Private Insights Archive:** The Insights template renders the visitor's device-local Ask Mirror Talk saved library instead of substituting public blog posts
+- **Smart Topic Collections:** Purpose, resilience, relationships, faith, healing and leadership routes classify the existing archive without manual recategorisation
+- **Topic Hubs:** WordPress categories render as indexable discovery pages
+- **Contextual Ask:** Episode and topic pages prefill an editable reflection prompt without auto-submitting it
+- **Curated Insights:** Only editor-approved WordPress posts appear; private questions are never published
+- **Analytics Consent:** Optional product analytics stays off until a visitor explicitly enables it
+- **From the Mirror Talk Studio:** The newest YouTube upload is discovered from the channel feed, cached server-side and presented before the footer with cinematic, archive and article layouts
+- **Respectful Video Autoplay:** External media loads only after one explicit device-level choice, then autoplays muted only while at least half visible; reduced-motion, Data Saver, hidden tabs and podcast playback are respected
+- **Video Intelligence:** First-party consent-gated events measure discovery, starts, progress, completions, autoplay blocking and sound choices, while native SEO can emit a `VideoObject` for the featured upload
+- **SEO Platform 8:** Automatic IndexNow batching, Google News/video sitemaps, first-party `llms.txt` and `llms-full.txt`, RSS attribution, protected robots additions, slug-aware redirects, daily whole-site link health, SEO revision rollback and protected REST fields
+- **Search Ownership:** Google, Bing and Pinterest verification plus a complete Google OAuth/Search Console connector and encrypted Bing Webmaster connector; verified properties, query data and sitemap status power the native dashboard without scraping search results
+- **AI Visibility:** Privacy-preserving, first-party observations of recognized AI crawler requests and AI-service referrals, a citation-readiness score, and AI landing-page discovery—without storing IP addresses, prompts or private reflections
+- **Mirror Talk Intelligence:** A separate native WordPress dashboard for consented page views, unique visitors, top pages, acquisition, campaigns, journeys, devices, privacy-safe geography, conversions, podcast completion, episode performance, Core Web Vitals, resource failures, Google/Bing search data, SEO health, AI discovery, period comparisons, weekly reports, table filtering and complete CSV export
+- **Evidence-led SEO Learning:** Automatically derives per-post focus keywords from verified Google query/page data, ranks opportunities, runs no more than two guarded search-title experiments at once, requires meaningful impressions and a statistically credible CTR gain, preserves visible headlines, records every decision and restores the baseline when evidence is weak
+- **Editorial Intelligence:** Search-title/description suggestions, structural content checks, internal-link prompts, browser spellcheck and reviewable media-alt repair
+- **Authority Profiles:** Author expertise, experience, credentials and profile links flow into Person/Article structured data
+- **Specialist SEO:** Truthful opt-in LocalBusiness data, conditional WooCommerce Product/Offer schema and 48-hour Google News publisher discovery
+
+#### What is automatic and what needs one connection
+
+All on-site features work immediately after activation. IndexNow creates and serves its own key, the crawlers and reports schedule themselves, and sitemaps, feeds, schema, redirects and both LLM source files need no setup. If AIOSEO is present, Mirror Talk disables only its overlapping LLM-file generator and removes only those two generated files so that one authoritative source remains. Google Search Console, Bing Webmaster and Pinterest still require the site owner to prove ownership once; their platforms do not allow a theme to consent on the owner's behalf. After that one authorization, synchronization is scheduled automatically. LocalBusiness schema remains off until a real public address is supplied, because publishing invented location data would weaken trust rather than improve SEO.
 
 ### Gamification & Engagement (v4.x)
 - **Streak Tracking:** Daily question streak with fire emoji milestones and XP points

@@ -1,5 +1,5 @@
 /**
- * Analytics Add-on for Ask Mirror Talk Widget v6.0.2
+ * Analytics Add-on for Ask Mirror Talk Widget v6.1.0
  * 
  * Adds citation click tracking and feedback without changing existing widget code.
  * Captures qa_log_id from:
@@ -12,7 +12,9 @@
     'use strict';
     
     const API_BASE_URL = 'https://ask-mirror-talk-production.up.railway.app';
+    const ANALYTICS_CONSENT_KEY = 'amt_analytics_consent_v1';
     let currentQALogId = null;
+    let analyticsInitialized = false;
     let productEventTrackingEnabled = true;
     let productEventEndpointMissing = false;
     const recentProductEventSignatures = new Map();
@@ -61,7 +63,50 @@
     
     // Wait for DOM to be ready
     function init() {
-        console.log('✅ Ask Mirror Talk Analytics Add-on v6.0.2 loaded');
+        const consentControl = document.getElementById('amt-analytics-consent');
+        const storedConsent = getStoredAnalyticsConsent();
+
+        if (consentControl) {
+            consentControl.checked = storedConsent === 'granted';
+            consentControl.addEventListener('change', function() {
+                const nextConsent = this.checked ? 'granted' : 'denied';
+                storeAnalyticsConsent(nextConsent);
+                if (nextConsent === 'granted') {
+                    initializeAnalytics();
+                } else {
+                    productEventTrackingEnabled = false;
+                    currentQALogId = null;
+                }
+            });
+        }
+
+        if (storedConsent === 'granted') {
+            initializeAnalytics();
+        }
+    }
+
+    function getStoredAnalyticsConsent() {
+        try {
+            return localStorage.getItem(ANALYTICS_CONSENT_KEY) || 'unset';
+        } catch (e) {
+            return 'unset';
+        }
+    }
+
+    function storeAnalyticsConsent(value) {
+        try {
+            localStorage.setItem(ANALYTICS_CONSENT_KEY, value);
+        } catch (e) {
+            // Storage can be unavailable in hardened or private browsing modes.
+        }
+    }
+
+    function initializeAnalytics() {
+        if (analyticsInitialized) return;
+        analyticsInitialized = true;
+        productEventTrackingEnabled = true;
+
+        console.log('✅ Ask Mirror Talk optional analytics enabled');
         
         // Intercept fetch calls to capture qa_log_id from non-streaming responses
         interceptFetch();

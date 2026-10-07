@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Living Mirror reflection QA</title>
+  <link rel="stylesheet" href="../wordpress/astra-child/mirror-talk-site.css">
+  <style>
+    body { min-height: 100vh; margin: 0; background: radial-gradient(circle at 80% 0,#35253e,#100d14 55%); }
+    .qa { width: min(100% - 28px, 900px); margin: auto; padding: 42px 0; color: #fff; }
+    .qa > h1 { color: #fff; font-size: clamp(2.8rem,8vw,5rem); }
+    .mt-listen { position: relative !important; inset: auto !important; }
+    .mt-listen__panel { position: relative !important; display: block !important; inset: auto !important; }
+  </style>
+</head>
+<body>
+  <main class="qa">
+    <p class="mt-section-kicker">The Living Mirror</p>
+    <h1>Reflection stays with the listening.</h1>
+    <aside class="mt-listen is-open is-reflecting">
+      <section class="mt-listen__panel">
+        <section class="mt-living-reflection" aria-labelledby="fixture-title">
+          <header class="mt-living-reflection__header">
+            <div><p class="mt-section-kicker">The Living Mirror</p><h2 id="fixture-title">A reflection from this moment</h2></div>
+            <button type="button" aria-label="Return to the podcast player">←</button>
+          </header>
+          <div class="mt-living-reflection__context">A meaningful conversation about your next step · 12:48</div>
+          <div class="mt-living-reflection__answer">This moment may be inviting you to notice the difference between forcing clarity and allowing it to emerge. The question that keeps returning is not necessarily a problem to silence; it may be pointing toward the next honest conversation or small courageous action.</div>
+          <div class="mt-living-reflection__followups"><button>What small action could make this insight practical?</button><button>How can I tell whether this question is important?</button></div>
+          <form class="mt-living-reflection__form"><label for="fixture-followup">Ask a follow-up</label><textarea id="fixture-followup" rows="2" placeholder="What would you like to understand more deeply?"></textarea><button type="button">Continue reflecting</button></form>
+          <div class="mt-living-reflection__actions"><button type="button">Save reflection</button><button type="button">Return to listening</button></div>
+          <p class="mt-living-reflection__privacy">Saved reflections remain privately on this device. This is reflective guidance, not therapy or emergency support.</p>
+        </section>
+      </section>
+    </aside>
+  </main>
+</body>
+</html>

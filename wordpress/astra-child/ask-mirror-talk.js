@@ -10,7 +10,7 @@
   // Track when the page loaded (for service worker update detection)
   window.amtLoadTime = Date.now();
 
-  log('Ask Mirror Talk Widget v6.0.2 loaded');
+  log('Ask Mirror Talk Widget v6.1.0 loaded');
 
   const form = document.querySelector("#ask-mirror-talk-form");
   const input = document.querySelector("#ask-mirror-talk-input");
@@ -1379,6 +1379,34 @@
     }
   }
 
+  // Contextual links from episodes and topic hubs prefill a useful reflection
+  // question, but never submit it without the visitor's explicit action.
+  (function applyContextualPrefill() {
+    const params = new URLSearchParams(window.location.search);
+    const prefill = sanitizeCampaignValue(params.get('prefill'), 500);
+    const episode = sanitizeCampaignValue(params.get('episode'), 180);
+    const at = sanitizeCampaignValue(params.get('at'), 24);
+    if (!prefill) return;
+
+    removeAutoStartParams(['prefill']);
+    runWhenReady(() => {
+      if (!input || input.value.trim()) return;
+      input.value = prefill;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      setQuestionOrigin('contextual_entry');
+      if (questionCoach) {
+        questionCoach.textContent = 'This question came from the conversation you were exploring. Edit it until it feels like yours.';
+        questionCoach.style.display = 'block';
+      }
+      const entryContext = document.getElementById('amt-living-entry-context');
+      if (entryContext && episode) {
+        entryContext.innerHTML = `<span aria-hidden="true">◉</span><div><strong>Continuing from your listening</strong><p>${escapeHtml(episode)}${at ? ` · ${escapeHtml(at)}` : ''}</p><small>You chose this moment. Ask Mirror Talk will use your editable question to find related conversations.</small></div>`;
+        entryContext.style.display = 'flex';
+      }
+      input.focus({ preventScroll: true });
+    }, 80);
+  })();
+
   function markAutoStartProcessed(key) {
     const clean = String(key || '').slice(0, 700);
     if (!clean) return true;
@@ -2576,11 +2604,12 @@
               cached: event.cached || false,
               answer_status: answerMeta.answerStatus || 'generated'
             });
-            // Add share button, related questions, and SEO schema after answer is complete
+            // Add post-answer actions. Personalized reflections are intentionally
+            // excluded from structured data because they are private, transient,
+            // and not stable indexable editorial content.
             addShareButton(question, answerText, window._amtLastTheme || null, answerMeta);
             addSaveToEmailButton(question, answerText);
             showRelatedQuestions(event.qa_log_id);
-            injectFAQSchema(question, answerText);
             finalizeAnswerPresentation(question, answerText, lastShownCitations, window._amtLastTheme || null, answerMeta);
             restoreExploreContent();
             showReflectPrompt();
@@ -2636,7 +2665,6 @@
     window._amtLastAnswerMeta = meta;
     addShareButton(questionText, answer, window._amtLastTheme || null, meta);
     addSaveToEmailButton(questionText, answer);
-    injectFAQSchema(questionText, answer);
     finalizeAnswerPresentation(questionText, answer, citationsList, null, meta);
     restoreExploreContent();
     showReflectPrompt();
@@ -4751,37 +4779,6 @@
 
   function addShareButton(question, answer, themeHint, answerMeta) {
     addShareButtonV2(question, answer, themeHint, answerMeta);
-  }
-
-  // ========================================
-  // SEO: Inject FAQ Schema.org Markup
-  // ========================================
-
-  function injectFAQSchema(question, answer) {
-    // Remove previous schema if exists
-    const existing = document.getElementById('amt-faq-schema');
-    if (existing) existing.remove();
-
-    if (!question || !answer) return;
-
-    const schema = {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [{
-        "@type": "Question",
-        "name": question,
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": answer.substring(0, 1000)
-        }
-      }]
-    };
-
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.id = 'amt-faq-schema';
-    script.textContent = JSON.stringify(schema);
-    document.head.appendChild(script);
   }
 
   // ========================================

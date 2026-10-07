@@ -1,174 +1,108 @@
 <?php
 /**
- * Template Name: Mirror Talk Answer Archive
- *
- * SEO-friendly page showing frequently asked questions and their answers.
- * Usage: Create a WordPress page, set its template to "Mirror Talk Answer Archive".
+ * Template Name: Mirror Talk Insights Library
+ * Public privacy-screened themes plus browser-local saved reflections.
  */
-
-if (!defined('ABSPATH')) {
-    exit;
-}
-
-$api_url = 'https://ask-mirror-talk-production.up.railway.app/api/answer-archive?limit=50';
-$response = wp_remote_get($api_url, ['timeout' => 15]);
-
-$archive = [];
-if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
-    $body = json_decode(wp_remote_retrieve_body($response), true);
-    $archive = $body['archive'] ?? [];
-}
-
+if (!defined('ABSPATH')) { exit; }
 get_header();
 ?>
+<main id="primary" class="site-main mt-insights-library">
+    <header class="mt-insights-library__hero"><div class="mt-insights-library__shell">
+        <p class="mt-section-kicker"><?php esc_html_e('Ask Mirror Talk archive', 'astra-child'); ?></p>
+        <h1><?php esc_html_e('Insights worth returning to.', 'astra-child'); ?></h1>
+        <p><?php esc_html_e('Explore recurring questions from our curated reflection prompts, then return to insights you privately saved on this device. Free-form visitor questions are never published.', 'astra-child'); ?></p>
+        <a class="mt-button" href="<?php echo esc_url(home_url('/ask-mirror-talk/')); ?>"><?php esc_html_e('Ask your own question', 'astra-child'); ?></a>
+    </div></header>
 
-<main id="amt-archive-page" class="amt-archive-page">
-  <div class="amt-archive-inner">
+    <section class="mt-insights-library__shell mt-insights-library__content" aria-labelledby="mt-community-insights-title">
+        <div class="mt-insights-library__heading"><div><p class="mt-section-kicker"><?php esc_html_e('From the Ask Mirror Talk archive', 'astra-child'); ?></p><h2 id="mt-community-insights-title"><?php esc_html_e('Questions many of us carry', 'astra-child'); ?></h2></div><span data-mt-community-count><?php esc_html_e('Loading…', 'astra-child'); ?></span></div>
+        <div class="mt-insights-library__grid" data-mt-community-archive aria-live="polite"><article class="mt-insight-empty"><span aria-hidden="true">✦</span><h3><?php esc_html_e('Gathering thoughtful reflections…', 'astra-child'); ?></h3></article></div>
+    </section>
 
-    <header class="amt-archive-header">
-      <h1>Mirror Talk: Frequently Asked Questions</h1>
-      <p class="amt-archive-subtitle">
-        Explore answers from the Mirror Talk podcast on personal growth, healing, relationships, and faith.
-        Questions are answered from <?php echo esc_html(count($archive)); ?>+ hours of podcast episodes.
-      </p>
-      <a href="/ask-mirror-talk" class="amt-archive-cta">Ask your own question →</a>
-    </header>
-
-    <?php if (empty($archive)): ?>
-      <p class="amt-archive-empty">No archived answers found. <a href="/ask-mirror-talk">Be the first to ask a question!</a></p>
-    <?php else: ?>
-
-    <!-- FAQ Schema for SEO -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        <?php
-        $schema_items = array_slice($archive, 0, 20);
-        $schema_json = array_map(function($item) {
-            return json_encode([
-                '@type' => 'Question',
-                'name'  => $item['question'],
-                'acceptedAnswer' => [
-                    '@type' => 'Answer',
-                    'text'  => wp_strip_all_tags($item['answer_snippet'] ?? ''),
-                ],
-            ]);
-        }, $schema_items);
-        echo implode(",\n        ", $schema_json);
-        ?>
-      ]
-    }
-    </script>
-
-    <div class="amt-archive-list">
-      <?php foreach ($archive as $item): ?>
-      <article class="amt-archive-item" itemscope itemtype="https://schema.org/Question">
-        <h2 class="amt-archive-question" itemprop="name">
-          <?php echo esc_html($item['question']); ?>
-        </h2>
-        <?php if ($item['asked_count'] > 1): ?>
-        <span class="amt-archive-count">Asked <?php echo esc_html($item['asked_count']); ?> times</span>
-        <?php endif; ?>
-        <div class="amt-archive-answer" itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
-          <p itemprop="text"><?php echo esc_html($item['answer_snippet']); ?>…</p>
+    <section class="mt-insights-library__shell mt-insights-library__content mt-insights-library__private" aria-labelledby="mt-saved-insights-title">
+        <div class="mt-saved-moments" data-mt-saved-moments hidden>
+            <div class="mt-insights-library__heading"><div><p class="mt-section-kicker"><?php esc_html_e('Your listening journey', 'astra-child'); ?></p><h2><?php esc_html_e('Moments you kept', 'astra-child'); ?></h2></div><span data-mt-moments-count></span></div>
+            <div class="mt-insights-library__grid" data-mt-moments-grid></div>
         </div>
-        <a href="/ask-mirror-talk/?autoask=<?php echo urlencode($item['question']); ?>" class="amt-archive-explore">
-          Get the full answer →
-        </a>
-      </article>
-      <?php endforeach; ?>
-    </div>
-
-    <?php endif; ?>
-
-    <div class="amt-archive-footer">
-      <a href="/ask-mirror-talk" class="amt-archive-cta">Ask a new question →</a>
-    </div>
-
-  </div>
+        <div class="mt-insights-library__heading"><div><p class="mt-section-kicker"><?php esc_html_e('Private on this device', 'astra-child'); ?></p><h2 id="mt-saved-insights-title"><?php esc_html_e('Your saved insights', 'astra-child'); ?></h2></div><span data-mt-insights-count></span></div>
+        <div class="mt-insights-library__grid" data-mt-insights-archive></div>
+        <noscript><p><?php esc_html_e('Enable JavaScript to view the insights saved privately in this browser.', 'astra-child'); ?></p></noscript>
+    </section>
 </main>
+<script>
+(() => {
+  const escape = (value) => { const node = document.createElement('span'); node.textContent = String(value || ''); return node.innerHTML; };
+  const publicRoot = document.querySelector('[data-mt-community-archive]');
+  const publicCount = document.querySelector('[data-mt-community-count]');
+  const apiBase = window.MirrorTalkSite?.apiBase || 'https://ask-mirror-talk-production.up.railway.app';
+  fetch(`${apiBase}/api/answer-archive?limit=24`, { headers: { Accept: 'application/json' }, credentials: 'omit' })
+    .then((response) => { if (!response.ok) throw new Error('Archive unavailable'); return response.json(); })
+    .then((payload) => {
+      const items = Array.isArray(payload.archive)
+        ? payload.archive.filter((item) => item && item.privacy === 'curated_prompt')
+        : [];
+      publicCount.textContent = `${items.length} reflections`;
+      if (!items.length) {
+        publicRoot.innerHTML = '<article class="mt-insight-empty"><span aria-hidden="true">✦</span><h3>The archive is growing.</h3><p>Curated community prompts will appear here as the conversations develop.</p></article>';
+        return;
+      }
+      publicRoot.innerHTML = items.map((item) => `<article class="mt-insight-card"><p class="mt-insight-card__meta">Asked ${Number(item.asked_count || 1)} time${Number(item.asked_count || 1) === 1 ? '' : 's'} · Privacy-screened</p><h3>${escape(item.question)}</h3><p>${escape(item.answer_snippet)}</p><a href="<?php echo esc_url(home_url('/ask-mirror-talk/')); ?>?question=${encodeURIComponent(item.question)}">Explore this question →</a></article>`).join('');
+    })
+    .catch(() => {
+      publicCount.textContent = 'Archive temporarily unavailable';
+      publicRoot.innerHTML = '<article class="mt-insight-empty"><span aria-hidden="true">✦</span><h3>The archive is resting.</h3><p>Your private saved insights are still available below.</p></article>';
+    });
 
-<style>
-.amt-archive-page {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 48px 24px 80px;
-}
-.amt-archive-inner {}
-.amt-archive-header {
-  text-align: center;
-  margin-bottom: 48px;
-}
-.amt-archive-header h1 {
-  font-size: clamp(1.6rem, 4vw, 2.4rem);
-  margin-bottom: 12px;
-}
-.amt-archive-subtitle {
-  color: #666;
-  max-width: 600px;
-  margin: 0 auto 20px;
-  line-height: 1.6;
-}
-.amt-archive-cta {
-  display: inline-block;
-  background: #2e2a24;
-  color: #f7c948;
-  padding: 12px 28px;
-  border-radius: 10px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: opacity 0.2s;
-}
-.amt-archive-cta:hover { opacity: 0.85; color: #f7c948; }
-.amt-archive-list {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-.amt-archive-item {
-  border: 1px solid #e5e0d8;
-  border-radius: 14px;
-  padding: 24px 28px;
-  background: #fdfbf8;
-  transition: box-shadow 0.2s;
-}
-.amt-archive-item:hover {
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-.amt-archive-question {
-  font-size: 1.15rem;
-  margin: 0 0 6px;
-  color: #2e2a24;
-}
-.amt-archive-count {
-  font-size: 0.78rem;
-  color: #999;
-  display: block;
-  margin-bottom: 10px;
-}
-.amt-archive-answer p {
-  color: #555;
-  line-height: 1.65;
-  margin: 0 0 12px;
-}
-.amt-archive-explore {
-  font-size: 0.88rem;
-  color: #8b6c3e;
-  text-decoration: none;
-  font-weight: 500;
-}
-.amt-archive-explore:hover { text-decoration: underline; }
-.amt-archive-footer {
-  text-align: center;
-  margin-top: 48px;
-}
-.amt-archive-empty {
-  text-align: center;
-  color: #888;
-  padding: 40px;
-}
-</style>
-
+  const root = document.querySelector('[data-mt-insights-archive]');
+  const count = document.querySelector('[data-mt-insights-count]');
+  let insights = [];
+  let moments = [];
+  try { moments = JSON.parse(localStorage.getItem('mt_saved_moments_v1') || '[]'); } catch (_) {}
+  const momentsSection = document.querySelector('[data-mt-saved-moments]');
+  const momentsGrid = document.querySelector('[data-mt-moments-grid]');
+  if (Array.isArray(moments) && moments.length) {
+    momentsSection.hidden = false;
+    document.querySelector('[data-mt-moments-count]').textContent = `${moments.length} saved`;
+    momentsGrid.innerHTML = moments.map((moment, index) => `<article class="mt-insight-card mt-moment-card"><p class="mt-insight-card__meta">${escape(moment.timeLabel || 'Saved moment')} · Private on this device</p><h3>${escape(moment.title || 'Mirror Talk moment')}</h3><div><button type="button" data-mt-resume-moment="${index}">Continue listening</button><button type="button" data-mt-reflect-saved="${index}">Reflect on this</button></div></article>`).join('');
+    momentsGrid.addEventListener('click', (event) => {
+      const resume = event.target.closest('[data-mt-resume-moment]');
+      const reflect = event.target.closest('[data-mt-reflect-saved]');
+      const selected = resume || reflect;
+      if (!selected) return;
+      const index = Number(resume ? resume.dataset.mtResumeMoment : reflect.dataset.mtReflectSaved);
+      const moment = moments[index]; if (!moment) return;
+      if (resume) document.dispatchEvent(new CustomEvent('mt:resume-moment', { detail: moment }));
+      if (reflect) {
+        const target = new URL('<?php echo esc_url(home_url('/ask-mirror-talk/')); ?>');
+        target.searchParams.set('intent', 'saved_moment_reflection');
+        target.searchParams.set('episode', moment.title || 'Mirror Talk episode');
+        target.searchParams.set('at', moment.timeLabel || 'saved moment');
+        target.searchParams.set('prefill', `I saved a moment from “${moment.title || 'Mirror Talk'}” at ${moment.timeLabel || 'this point'}. Help me reflect on why it stayed with me.`);
+        location.assign(target.toString());
+      }
+    });
+  }
+  try { insights = JSON.parse(localStorage.getItem('amt_saved_insights') || '[]'); } catch (_) {}
+  const renderPrivate = () => {
+    if (!Array.isArray(insights) || !insights.length) {
+      count.textContent = '0 saved';
+      root.innerHTML = '<article class="mt-insight-empty"><span aria-hidden="true">✦</span><h3>No saved insights yet.</h3><p>After receiving an Ask Mirror Talk reflection, choose “Save insight.” It will remain only on this device.</p><a class="mt-button" href="<?php echo esc_url(home_url('/ask-mirror-talk/')); ?>">Begin a reflection</a></article>';
+      return;
+    }
+    count.textContent = `${insights.length} saved`;
+    root.innerHTML = insights.map((item, index) => {
+      const saved = item.timestamp || item.savedAt || item.createdAt;
+      const date = saved ? new Date(saved).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Saved insight';
+      return `<article class="mt-insight-card"><p class="mt-insight-card__meta">${escape(item.theme || 'Reflection')} · ${escape(date)}</p><h3>${escape(item.question || item.title || 'A saved reflection')}</h3><p>${escape(item.answer || item.text || item.excerpt || '').slice(0, 560)}</p><button type="button" data-mt-remove-insight="${index}">Remove from this device</button></article>`;
+    }).join('');
+  };
+  renderPrivate();
+  root.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-mt-remove-insight]'); if (!button) return;
+    insights.splice(Number(button.dataset.mtRemoveInsight), 1);
+    localStorage.setItem('amt_saved_insights', JSON.stringify(insights));
+    renderPrivate();
+  });
+})();
+</script>
 <?php get_footer(); ?>

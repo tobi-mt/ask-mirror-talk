@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/theme.json",
+  "version": 3,
+  "settings": {
+    "appearanceTools": true,
+    "layout": {
+      "contentSize": "760px",
+      "wideSize": "1180px"
+    },
+    "color": {
+      "defaultPalette": false,
+      "palette": [
+        { "slug": "ink", "name": "Night Ink", "color": "#100d14" },
+        { "slug": "plum", "name": "Reflection Plum", "color": "#392943" },
+        { "slug": "coral", "name": "Mirror Coral", "color": "#ef8062" },
+        { "slug": "gold", "name": "Quiet Gold", "color": "#e1b75f" },
+        { "slug": "sage", "name": "Grounded Sage", "color": "#8aafa2" },
+        { "slug": "sand", "name": "Warm Sand", "color": "#eee4d7" },
+        { "slug": "cream", "name": "Soft Cream", "color": "#fbf7f1" },
+        { "slug": "paper", "name": "Paper", "color": "#fffdf9" }
+      ]
+    },
+    "spacing": {
+      "spacingScale": {
+        "operator": "*",
+        "increment": 1.5,
+        "steps": 7,
+        "mediumStep": 1.5,
+        "unit": "rem"
+      },
+      "units": ["px", "rem", "em", "vw", "%"]
+    },
+    "typography": {
+      "fluid": true,
+      "fontFamilies": [
+        {
+          "slug": "editorial",
+          "name": "Mirror Editorial",
+          "fontFamily": "Iowan Old Style, Baskerville, Georgia, Times New Roman, serif"
+        },
+        {
+          "slug": "humanist",
+          "name": "Mirror Humanist",
+          "fontFamily": "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        }
+      ],
+      "fontSizes": [
+        { "slug": "small", "name": "Small", "size": "0.875rem" },
+        { "slug": "medium", "name": "Body", "size": "1.0625rem" },
+        { "slug": "large", "name": "Lead", "size": "1.35rem" },
+        { "slug": "x-large", "name": "Heading", "size": "clamp(2rem, 5vw, 4.5rem)" }
+      ]
+    }
+  },
+  "styles": {
+    "color": {
+      "background": "#100d14",
+      "text": "#f8f2e9"
+    },
+    "spacing": {
+      "blockGap": "1.5rem"
+    },
+    "typography": {
+      "fontFamily": "var(--wp--preset--font-family--humanist)",
+      "fontSize": "1.0625rem",
+      "lineHeight": "1.7"
+    },
+    "elements": {
+      "heading": {
+        "typography": {
+          "fontFamily": "var(--wp--preset--font-family--editorial)",
+          "fontWeight": "500",
+          "lineHeight": "1.05"
+        }
+      },
+      "link": {
+        "color": { "text": "#ff9b7e" },
+        ":hover": { "color": { "text": "#ffc0ad" } }
+      },
+      "button": {
+        "border": { "radius": "999px" },
+        "color": { "background": "#b7432c", "text": "#ffffff" },
+        "typography": { "fontWeight": "700" }
+      }
+    }
+  }
+}

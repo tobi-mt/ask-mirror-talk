@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function ask_mirror_talk_theme_version() {
-    return '6.0.2';
+    return (string) wp_get_theme()->get('Version');
 }
 
 function ask_mirror_talk_shortcode() {
@@ -34,9 +34,9 @@ function ask_mirror_talk_shortcode() {
         </div>
         <div class="amt-heading-row">
             <div class="amt-heading-copy">
-                <p class="amt-heading-kicker">Premium reflection</p>
-                <h2>Ask Mirror Talk</h2>
-                <p class="amt-heading-subtitle">A calmer and private way to ask what is on your heart.</p>
+                <p class="amt-heading-kicker">A grounded reflection space</p>
+                <h1>Ask Mirror Talk</h1>
+                <p class="amt-heading-subtitle">Ask what is on your heart. Receive a thoughtful response grounded in real Mirror Talk conversations.</p>
             </div>
             <div class="amt-heading-controls">
                 <button type="button" id="amt-text-size-btn" class="amt-text-size-btn" title="Change text size" aria-label="Change text size">Aa</button>
@@ -108,6 +108,7 @@ function ask_mirror_talk_shortcode() {
 
         <div id="amt-workflow-panels" class="amt-workflow-panels">
             <section id="amt-workflow-panel-ask" class="amt-workflow-panel amt-workflow-panel-ask" data-workflow-panel="ask" aria-label="Ask">
+                <div id="amt-living-entry-context" class="amt-living-entry-context" style="display:none;" role="status"></div>
                 <form id="ask-mirror-talk-form">
                     <div class="amt-form-intro">
                         <div>
@@ -121,6 +122,17 @@ function ask_mirror_talk_shortcode() {
                     <div id="ask-mirror-talk-qotd" class="amt-qotd" style="display:none;"></div>
                     <textarea id="ask-mirror-talk-input" rows="3" placeholder="Ask what you are carrying, questioning, or trying to understand..." autocomplete="off" autocapitalize="sentences" maxlength="500"></textarea>
                     <div id="amt-question-coach" class="amt-question-coach" style="display:none;" aria-live="polite"></div>
+                    <details class="amt-trust-panel">
+                        <summary>Privacy &amp; safety</summary>
+                        <div class="amt-trust-panel-content">
+                            <p>Your question and limited recent conversation context are sent securely to the Mirror Talk response service to create your reflection. Private notes stay on this device unless you choose to export or share them.</p>
+                            <label class="amt-analytics-consent" for="amt-analytics-consent">
+                                <input type="checkbox" id="amt-analytics-consent" name="amt_analytics_consent" value="1">
+                                <span>Share optional pseudonymous usage analytics to help improve the experience.</span>
+                            </label>
+                            <p class="amt-care-note"><strong>Please note:</strong> Ask Mirror Talk is for reflection, not emergency, medical, mental-health, legal or financial care. If you may be in immediate danger, contact local emergency services or a trusted person now.</p>
+                        </div>
+                    </details>
                     <div class="amt-form-footer">
                         <div id="amt-char-counter" class="amt-char-counter" aria-live="polite">0 / 500</div>
                         <button type="submit" id="ask-mirror-talk-submit">Ask Mirror Talk</button>
@@ -213,7 +225,7 @@ function ask_mirror_talk_enqueue_assets() {
     }
 
     $theme_uri = get_stylesheet_directory_uri();
-    $version = ask_mirror_talk_theme_version(); // v5.5.27: reduced workflow panel headers to 14px (matches momentum text)
+    $version = ask_mirror_talk_theme_version();
 
     // Core styles
     wp_enqueue_style(
@@ -321,18 +333,12 @@ function ask_mirror_talk_pwa_head() {
         Sets both html/body AND the widget container so there's no white/black flash
         between the OS launching the WebView and the first meaningful paint.
     -->
-        <style>
-            html, body { background-color: #f1ece4 !important; }
-            .ask-mirror-talk { background-color: #f1ece4 !important; }
-            #amt-launch-splash { display: flex; }
-        </style>
-
     <!-- PWA Manifest — served dynamically from /manifest.json with correct icon URLs -->
     <link rel="manifest" href="/manifest.json?v=<?php echo esc_attr($ver); ?>">
 
     <!-- Explicit viewport keeps iOS standalone/PWA rendering pinned to device width -->
     <!-- maximum-scale=1 prevents unwanted zoom when focusing inputs (prevents PWA resize) -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
     <!-- Standard PWA meta tag (Android / Chrome) -->
     <!-- theme-color matches the launch splash background so there is no colour mismatch -->

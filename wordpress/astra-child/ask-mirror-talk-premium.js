@@ -1,6 +1,6 @@
 /**
  * Ask Mirror Talk — Premium Features
- * v6.0.2
+ * v6.1.0
  * 
  * Implements:
  * - Track A: User Experience (Question coaching, Onboarding, Response formatting)
@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  console.log('✨ Ask Mirror Talk Premium Features v6.0.2 loaded');
+  console.log('✨ Ask Mirror Talk Premium Features v6.1.0 loaded');
 
   // ═══════════════════════════════════════════════════════════════
   // ██ TRACK C: TECHNICAL FOUNDATION - DATA LAYER (IndexedDB)
@@ -605,7 +605,7 @@
         </div>
 
         <div class="amt-onboarding-promise">
-          <strong>Your reflection stays private by default.</strong> Saved notes stay on this device; questions are sent anonymously to create an answer.
+          <strong>Your reflection is handled with care.</strong> Saved notes stay on this device. Your question is sent securely to the Mirror Talk response service to create an answer; optional usage analytics remains off unless you choose to enable it.
         </div>
 
         <button type="button" class="amt-onboarding-start">Begin Your First Reflection</button>
@@ -725,7 +725,7 @@
       const patterns = await getCachedPatterns();
 
       const exportData = {
-        version: '6.0.2',
+        version: '6.1.0',
         exportedAt: new Date().toISOString(),
         reflections: history,
         patterns: patterns,
@@ -1019,10 +1019,9 @@
     initDatabase().then(() => {
       console.log('✅ Local database initialized');
       
-      // Check if onboarding needed
-      if (needsOnboarding()) {
-        setTimeout(showOnboarding, 500);
-      }
+      // The core experience owns one concise, accessible onboarding journey.
+      // Keeping this older premium overlay as well created two consecutive
+      // welcome walls for first-time visitors.
       
       // Update engagement metrics on page load
       updateEngagementMetrics();

@@ -252,19 +252,22 @@ def get_related_questions(qa_log_id: int, db: Session = Depends(get_db)):
 
 @router.get("/api/answer-archive")
 def get_answer_archive(limit: int = 50, db: Session = Depends(get_db)):
-    """Return the most-asked questions with their best answers."""
+    """Return answers only for the explicitly curated, public-safe prompt pool."""
     try:
+        approved_questions = [entry["question"].strip().lower() for entry in QOTD_POOL]
+        bind_names = [f"approved_{index}" for index in range(len(approved_questions))]
+        approved_clause = ", ".join(f":{name}" for name in bind_names)
+        params = {name: question for name, question in zip(bind_names, approved_questions)}
+        params["limit"] = max(1, min(limit, 100))
         rows = db.execute(
-            text("""
+            text(f"""
                 SELECT
                     question,
                     COUNT(*) AS asked_count,
                     MAX(answer) AS answer,
                     MAX(created_at) AS last_asked
                 FROM qa_logs
-                WHERE LENGTH(question) > 20
-                  AND question NOT LIKE '{%%'
-                  AND LOWER(question) NOT IN ('test', 'hello', 'hi', 'test me')
+                WHERE LOWER(TRIM(question)) IN ({approved_clause})
                   AND answer IS NOT NULL
                   AND LENGTH(answer) > 100
                 GROUP BY question
@@ -272,7 +275,7 @@ def get_answer_archive(limit: int = 50, db: Session = Depends(get_db)):
                 ORDER BY COUNT(*) DESC, MAX(created_at) DESC
                 LIMIT :limit
             """),
-            {"limit": max(1, min(limit, 200))},
+            params,
         ).fetchall()
 
         archive = [
@@ -281,6 +284,7 @@ def get_answer_archive(limit: int = 50, db: Session = Depends(get_db)):
                 "asked_count": row[1],
                 "answer_snippet": row[2][:400] if row[2] else "",
                 "last_asked": row[3].isoformat() if row[3] else None,
+                "privacy": "curated_prompt",
             }
             for row in rows
         ]

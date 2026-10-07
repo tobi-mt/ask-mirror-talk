@@ -114,6 +114,7 @@ class Settings(BaseSettings):
     
     # API
     allowed_origins: str = ""  # comma-separated origins for CORS
+    analytics_hash_salt: str = "change-this-analytics-salt"  # HMAC salt; set a private production value
     question_guardrails_enabled: bool = True
 
     # Admin dashboard

@@ -5159,7 +5159,7 @@ body.amt-light-mode .amt-suggestions-label {
   margin-bottom: 14px;
 }
 
-.amt-heading-row h2 {
+.amt-heading-row :is(h1, h2) {
   margin: 0;
 }
 
@@ -6891,7 +6891,8 @@ body.amt-light-mode .amt-suggestions-label {
   line-height: 1.65;
   margin: 0 0 10px 0;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .amt-journal-entry-footer {
@@ -7525,7 +7526,7 @@ body.amt-light-mode .amt-suggestions-label {
   }
 
   .ask-mirror-talk h2,
-  .amt-heading-row h2 {
+  .amt-heading-row :is(h1, h2) {
     font-size: clamp(19px, 6vw, 22px);
     line-height: 1.08;
   }

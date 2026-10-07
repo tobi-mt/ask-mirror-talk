@@ -2,6 +2,7 @@
  * Isolated presentation layer: no layout IDs, DOM structure, or behavior hooks.
  */
 .ask-mirror-talk {
+  --amt-v6-art: url("assets/art/ask-reflection-atmosphere-1600.jpg");
   --amt-v6-ink: #211d2b;
   --amt-v6-muted: #6f6878;
   --amt-v6-plum: #3a2947;
@@ -22,12 +23,37 @@
   border-radius: clamp(24px, 3vw, 40px);
   color: var(--amt-v6-ink);
   background:
-    radial-gradient(circle at 8% 3%, rgba(215, 168, 79, 0.17), transparent 27%),
-    radial-gradient(circle at 94% 12%, rgba(216, 101, 70, 0.13), transparent 31%),
-    linear-gradient(145deg, #fffdf9 0%, #f7f0e8 54%, #f1eee8 100%);
+    linear-gradient(145deg, rgba(255, 253, 249, 0.91), rgba(247, 240, 232, 0.84) 54%, rgba(241, 238, 232, 0.88)),
+    var(--amt-v6-art) center / cover no-repeat;
   box-shadow: var(--amt-v6-shadow);
   overflow: hidden;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Living Mirror contextual handoff — compact and subordinate to the ask form. */
+.ask-mirror-talk .amt-living-entry-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(244, 201, 103, .28);
+  border-radius: 16px;
+  color: #d9ceda;
+  background: rgba(244, 201, 103, .07);
+}
+.ask-mirror-talk .amt-living-entry-context > span { color: #f4c967; }
+.ask-mirror-talk .amt-living-entry-context strong { color: #fffaf3; }
+.ask-mirror-talk .amt-living-entry-context p { margin: 2px 0; color: #f0e7ef; }
+.ask-mirror-talk .amt-living-entry-context small { color: #bcaebd; line-height: 1.45; }
+
+@supports (background-image: image-set(url("example.avif") type("image/avif"))) {
+  .ask-mirror-talk {
+    --amt-v6-art: image-set(
+      url("assets/art/ask-reflection-atmosphere-1600.avif") type("image/avif"),
+      url("assets/art/ask-reflection-atmosphere-1600.jpg") type("image/jpeg")
+    );
+  }
 }
 
 .ask-mirror-talk,
@@ -79,7 +105,7 @@
   letter-spacing: 0.18em;
 }
 
-.ask-mirror-talk .amt-heading-row h2 {
+.ask-mirror-talk .amt-heading-row :is(h1, h2) {
   margin: 4px 0 8px;
   color: #fffdf8;
   font-size: clamp(34px, 5vw, 62px);
@@ -274,6 +300,7 @@
 .ask-mirror-talk .amt-answer-context p,
 .ask-mirror-talk .citation-item p {
   color: #5f5667;
+  opacity: 1;
 }
 
 .ask-mirror-talk #ask-mirror-talk-form label,
@@ -283,11 +310,66 @@
   color: var(--amt-v6-ink);
 }
 
+.ask-mirror-talk #ask-mirror-talk-form label {
+  font-style: normal;
+  font-weight: 700;
+}
+
 .ask-mirror-talk #ask-mirror-talk-input:focus {
   outline: none;
   border-color: rgba(216, 101, 70, 0.72);
   background: #fff;
   box-shadow: 0 0 0 4px rgba(216, 101, 70, 0.12), 0 12px 28px rgba(47, 34, 53, 0.08);
+}
+
+.ask-mirror-talk .amt-trust-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(88, 120, 110, 0.24);
+  border-radius: 16px;
+  color: #4f4854;
+  background: rgba(239, 246, 242, 0.72);
+}
+
+.ask-mirror-talk .amt-trust-panel summary {
+  min-height: 44px;
+  padding: 11px 15px;
+  cursor: pointer;
+  color: #365d52;
+  font-size: 13px;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+}
+
+.ask-mirror-talk .amt-trust-panel-content {
+  padding: 0 15px 15px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ask-mirror-talk .amt-trust-panel-content p {
+  margin: 0 0 12px;
+}
+
+.ask-mirror-talk .amt-analytics-consent {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  margin: 12px 0;
+  color: #342e3a;
+  cursor: pointer;
+}
+
+.ask-mirror-talk .amt-analytics-consent input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--amt-v6-sage);
+}
+
+.ask-mirror-talk .amt-care-note {
+  padding-top: 12px;
+  border-top: 1px solid rgba(88, 120, 110, 0.2);
 }
 
 .ask-mirror-talk button[type="submit"],
@@ -433,6 +515,7 @@
 
 @media (max-width: 720px) {
   .ask-mirror-talk {
+    --amt-v6-art: url("assets/art/ask-reflection-atmosphere-900.jpg");
     width: min(100%, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
     margin-inline: auto;
@@ -440,22 +523,50 @@
     border-radius: 24px;
   }
 
+  @supports (background-image: image-set(url("example.avif") type("image/avif"))) {
+    .ask-mirror-talk {
+      --amt-v6-art: image-set(
+        url("assets/art/ask-reflection-atmosphere-900.avif") type("image/avif"),
+        url("assets/art/ask-reflection-atmosphere-900.jpg") type("image/jpeg")
+      );
+    }
+  }
+
   .ask-mirror-talk .amt-heading-row {
-    padding: 22px 18px;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 19px 18px 16px;
     border-radius: 22px;
   }
 
-  .ask-mirror-talk .amt-heading-row h2 {
-    font-size: clamp(34px, 11vw, 46px);
+  .ask-mirror-talk .amt-heading-row :is(h1, h2) {
+    margin: 2px 0 6px;
+    font-size: clamp(31px, 10vw, 42px);
+    line-height: 0.94;
+  }
+
+  .ask-mirror-talk .amt-heading-kicker {
+    margin-bottom: 3px;
+    font-size: 9px;
+  }
+
+  .ask-mirror-talk .amt-heading-subtitle {
+    font-size: 14px;
+    line-height: 1.45;
   }
 
   .ask-mirror-talk .amt-heading-controls {
     width: 100%;
     max-width: none;
+    padding: 6px;
   }
 
   .ask-mirror-talk .amt-heading-controls-note {
-    font-size: 11px;
+    display: none;
+  }
+
+  .ask-mirror-talk.amt-workflow-mode-ask .amt-stats-bar {
+    display: none !important;
   }
 
   .ask-mirror-talk .amt-workflow-guide {
@@ -474,13 +585,34 @@
     position: sticky;
     top: 8px;
     z-index: 30;
-    margin-top: 32px;
+    margin: 12px 0 12px;
+    padding: 5px;
     border-radius: 18px;
   }
 
   .ask-mirror-talk .amt-workflow-step {
-    min-height: 58px;
+    min-height: 52px;
     border-radius: 13px;
+  }
+
+  .ask-mirror-talk #ask-mirror-talk-form {
+    padding: 18px 16px;
+  }
+
+  .ask-mirror-talk .amt-form-intro {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .ask-mirror-talk .amt-form-note {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .ask-mirror-talk #ask-mirror-talk-input {
+    min-height: 116px;
+    padding: 15px 16px;
+    font-size: 16px;
   }
 
   .ask-mirror-talk #ask-mirror-talk-form,

@@ -32,6 +32,13 @@ _SELF_HARM_PATTERNS = [
     r"\b(suicide method|self-harm method)\b",
 ]
 
+_SELF_HARM_DISTRESS_PATTERNS = [
+    r"\b(i want to die|i do not want to live|i don't want to live|i cannot go on|i can't go on)\b",
+    r"\b(i am|i'm) (going to|planning to|about to) (kill|hurt) myself\b",
+    r"\b(better off dead|end it all|take my own life)\b",
+    r"\b(suicidal|suicide plan|self[- ]?harming)\b",
+]
+
 _VIOLENT_WRONGDOING_PATTERNS = [
     r"\b(how do i|how to|help me|ways to|best way to|teach me to|show me how to)\b.{0,100}\b(kill|murder|stab|shoot|poison|bomb|attack|hurt someone|make a bomb)\b",
     r"\b(write|draft|generate)\b.{0,80}\b(death threat|violent threat)\b",
@@ -59,26 +66,27 @@ def inspect_question(question: str) -> GuardrailDecision:
         return GuardrailDecision(allowed=True)
 
     if _matches_any(lowered, _PROMPT_INJECTION_PATTERNS):
-        logger.info("Guardrail blocked prompt-injection style request: %.120s", question)
+        logger.info("Guardrail blocked prompt-injection style request (length=%d)", len(question))
         return GuardrailDecision(
             allowed=False,
             code="prompt_injection",
             message="I can't help with hidden instructions, system prompts, or attempts to bypass the app.",
         )
 
-    if _matches_any(lowered, _SELF_HARM_PATTERNS):
-        logger.warning("Guardrail blocked self-harm instruction request: %.120s", question)
+    if _matches_any(lowered, _SELF_HARM_PATTERNS) or _matches_any(lowered, _SELF_HARM_DISTRESS_PATTERNS):
+        logger.warning("Guardrail blocked self-harm or acute-distress request (length=%d)", len(question))
         return GuardrailDecision(
             allowed=False,
             code="self_harm",
             message=(
-                "I can't help with instructions for self-harm. "
-                "If this is personal or urgent, contact local emergency services or a crisis line right now."
+                "I'm really sorry you are carrying this. I can't help with self-harm, but you deserve immediate human support. "
+                "If you might act now or are in immediate danger, contact local emergency services now. "
+                "Please also reach out to a trusted person or a local crisis service and avoid being alone."
             ),
         )
 
     if _matches_any(lowered, _VIOLENT_WRONGDOING_PATTERNS):
-        logger.warning("Guardrail blocked violent wrongdoing request: %.120s", question)
+        logger.warning("Guardrail blocked violent wrongdoing request (length=%d)", len(question))
         return GuardrailDecision(
             allowed=False,
             code="violent_wrongdoing",
@@ -86,7 +94,7 @@ def inspect_question(question: str) -> GuardrailDecision:
         )
 
     if _matches_any(lowered, _ILLEGAL_WRONGDOING_PATTERNS):
-        logger.warning("Guardrail blocked illegal wrongdoing request: %.120s", question)
+        logger.warning("Guardrail blocked illegal wrongdoing request (length=%d)", len(question))
         return GuardrailDecision(
             allowed=False,
             code="illegal_wrongdoing",
@@ -94,7 +102,7 @@ def inspect_question(question: str) -> GuardrailDecision:
         )
 
     if _matches_any(lowered, _EXPLOITATIVE_PATTERNS):
-        logger.warning("Guardrail blocked exploitative request: %.120s", question)
+        logger.warning("Guardrail blocked exploitative request (length=%d)", len(question))
         return GuardrailDecision(
             allowed=False,
             code="exploitative_content",

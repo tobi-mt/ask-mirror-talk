@@ -129,6 +129,24 @@ class ProductEvent(Base):
     device_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
 
 
+class SearchPerformanceMetric(Base):
+    """Verified aggregate metrics imported from search-engine webmaster APIs."""
+    __tablename__ = "search_performance_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    metric_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    engine: Mapped[str] = mapped_column(String(20), index=True)
+    query: Mapped[str] = mapped_column(String(500), default="")
+    page: Mapped[str] = mapped_column(String(1000), default="")
+    country: Mapped[str] = mapped_column(String(8), default="")
+    device: Mapped[str] = mapped_column(String(30), default="")
+    clicks: Mapped[int] = mapped_column(Integer, default=0)
+    impressions: Mapped[int] = mapped_column(Integer, default=0)
+    ctr: Mapped[float] = mapped_column(Float, default=0.0)
+    position: Mapped[float] = mapped_column(Float, default=0.0)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class PushSubscription(Base):
     """Store Web Push notification subscriptions from PWA users."""
     __tablename__ = "push_subscriptions"

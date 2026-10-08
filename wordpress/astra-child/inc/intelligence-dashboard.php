@@ -8,7 +8,7 @@
  */
 if (!defined('ABSPATH')) exit;
 
-define('MIRRORTALK_INTELLIGENCE_DB_VERSION', '1.1.0');
+define('MIRRORTALK_INTELLIGENCE_DB_VERSION', '1.2.0');
 
 function mirrortalk_intelligence_table() {
     global $wpdb;
@@ -47,6 +47,7 @@ function mirrortalk_intelligence_install() {
         rating varchar(30) NOT NULL DEFAULT '',
         target varchar(700) NOT NULL DEFAULT '',
         status varchar(80) NOT NULL DEFAULT '',
+        search_term varchar(300) NOT NULL DEFAULT '',
         PRIMARY KEY  (id),
         KEY event_date (event_date),
         KEY event_name_date (event_name,event_date),
@@ -68,6 +69,7 @@ function mirrortalk_intelligence_allowed_events() {
         'youtube_video_ready', 'youtube_video_start', 'youtube_video_progress', 'youtube_video_complete',
         'youtube_video_unmuted', 'youtube_video_muted', 'youtube_autoplay_blocked',
         'youtube_autoplay_fallback', 'youtube_video_error', 'youtube_api_error',
+        'internal_search', 'safe_topic_view',
     );
 }
 
@@ -129,6 +131,7 @@ function mirrortalk_intelligence_collect(WP_REST_Request $request) {
         'metric' => $clean('metric', 30), 'metric_value' => (float) ($meta['value'] ?? 0),
         'rating' => $clean('rating', 30), 'target' => esc_url_raw(substr((string) ($meta['target'] ?? ''), 0, 700)),
         'status' => $clean('status', 80),
+        'search_term' => function_exists('mirrortalk_intelligence_safe_search_term') ? mirrortalk_intelligence_safe_search_term($meta['search_term'] ?? '') : '',
     ));
     return $inserted ? rest_ensure_response(array('status' => 'ok')) : new WP_Error('store_failed', __('The analytics event could not be stored.', 'astra-child'), array('status' => 500));
 }
@@ -268,12 +271,13 @@ function mirrortalk_intelligence_admin_page() {
     ?>
     <div class="wrap mti-wrap">
       <div class="mti-head"><div><p class="mti-kicker">MIRROR TALK</p><h1><?php esc_html_e('Intelligence', 'astra-child'); ?></h1><p><?php esc_html_e('Website, listening, discovery and performance signals—measured privately and interpreted together.', 'astra-child'); ?></p></div><div class="mti-actions"><form method="get"><input type="hidden" name="page" value="mirror-talk-intelligence"><label><?php esc_html_e('Period', 'astra-child'); ?> <select name="period" onchange="this.form.submit()"><?php foreach (array(7,30,90,365) as $period) echo '<option value="' . esc_attr($period) . '" ' . selected($days, $period, false) . '>' . esc_html($period . ' days') . '</option>'; ?></select></label></form><a class="button button-primary" href="<?php echo esc_url($export_url); ?>"><?php esc_html_e('Export complete CSV', 'astra-child'); ?></a></div></div>
-      <div class="mti-notice"><strong><?php esc_html_e('Privacy-respecting by design.', 'astra-child'); ?></strong> <?php esc_html_e('Website analytics include only visitors who allowed insights. No raw IP addresses, questions, reflection text or email addresses are stored here.', 'astra-child'); ?></div>
+      <div class="mti-notice"><strong><?php esc_html_e('Privacy-respecting by design.', 'astra-child'); ?></strong> <?php esc_html_e('Website analytics include only visitors who allowed insights. No raw IP addresses, private Ask Mirror Talk questions, reflection text or email addresses are stored here. Consented site-search terms are redacted for contact details before storage.', 'astra-child'); ?></div>
       <div class="mti-cards">
       <?php foreach (array('page_views' => 'Page views', 'visitors' => 'Unique visitors', 'plays' => 'Podcast plays', 'completions' => 'Completions', 'conversions' => 'Conversions') as $key => $label) : ?><article><small><?php echo esc_html($label); ?></small><strong><?php echo esc_html(number_format_i18n($data['totals'][$key])); ?></strong><span><?php echo esc_html(mirrortalk_intelligence_change($data['totals'][$key], $data['previous'][$key])); ?> <?php esc_html_e('vs previous period', 'astra-child'); ?></span></article><?php endforeach; ?>
       <article><small><?php esc_html_e('Completion rate', 'astra-child'); ?></small><strong><?php echo esc_html($data['totals']['plays'] ? round($data['totals']['completions'] / $data['totals']['plays'] * 100, 1) : 0); ?>%</strong><span><?php esc_html_e('completed plays ÷ starts', 'astra-child'); ?></span></article></div>
-      <nav class="mti-tabs" aria-label="Dashboard sections"><a href="#overview">Overview</a><a href="#audience">Audience</a><a href="#podcast">Podcast</a><a href="#search">Search &amp; SEO</a><a href="#ai">AI visibility</a><a href="#performance">Performance</a><a href="#learning">SEO learning</a><a href="#reports">Reports</a><label>Filter tables <input type="search" data-mti-filter placeholder="Find a page, episode or source"></label></nav>
+      <nav class="mti-tabs" aria-label="Dashboard sections"><a href="#overview">Overview</a><a href="#command-centre">Command centre</a><a href="#knowledge">Knowledge</a><a href="#quality">Quality</a><a href="#audience">Audience</a><a href="#podcast">Podcast</a><a href="#search">Search &amp; SEO</a><a href="#ai">AI visibility</a><a href="#performance">Performance</a><a href="#learning">SEO learning</a><a href="#reports">Reports</a><label>Filter tables <input type="search" data-mti-filter placeholder="Find a page, episode or source"></label></nav>
       <section id="overview" class="mti-panel"><header><div><p class="mti-kicker">OVERVIEW</p><h2><?php esc_html_e('Audience movement', 'astra-child'); ?></h2></div></header><?php mirrortalk_intelligence_bar_chart($data['daily'], __('Daily page views', 'astra-child')); ?><div class="mti-grid"><div><h3><?php esc_html_e('Top pages', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['pages'], array('label' => 'Page', 'total' => 'Views', 'secondary' => 'Visitors')); ?></div><div><h3><?php esc_html_e('Journeys', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['journeys'], array('label' => 'Path transition', 'total' => 'Times')); ?></div></div></section>
+      <?php if (function_exists('mirrortalk_command_centre_panels')) mirrortalk_command_centre_panels($days); ?>
       <section id="audience" class="mti-panel"><header><div><p class="mti-kicker">ACQUISITION &amp; AUDIENCE</p><h2><?php esc_html_e('How people arrive', 'astra-child'); ?></h2></div></header><div class="mti-grid mti-grid--3"><div><h3>Referrers</h3><?php mirrortalk_intelligence_table_view($data['referrers'], array('label' => 'Source', 'total' => 'Visits')); ?></div><div><h3>Campaigns</h3><?php mirrortalk_intelligence_table_view($data['campaigns'], array('label' => 'Source / medium / campaign', 'total' => 'Visits')); ?></div><div><h3>Conversions</h3><?php mirrortalk_intelligence_table_view($data['conversions'], array('label' => 'Action', 'total' => 'Total')); ?></div><div><h3>Devices</h3><?php mirrortalk_intelligence_bar_chart($data['devices'], 'Device distribution'); ?></div><div><h3>New and returning</h3><?php mirrortalk_intelligence_bar_chart($data['audience_type'], 'New and returning page views'); ?></div><div><h3>Geography</h3><?php mirrortalk_intelligence_table_view($data['geography'], array('label' => 'Country', 'total' => 'Views')); ?><p class="description">Country appears only when the hosting/CDN request supplies a country code; Mirror Talk does not perform IP geolocation.</p></div></div></section>
       <section id="podcast" class="mti-panel"><header><div><p class="mti-kicker">PODCAST</p><h2><?php esc_html_e('Listening performance', 'astra-child'); ?></h2></div></header><?php mirrortalk_intelligence_table_view($data['episodes'], array('label' => 'Episode', 'total' => 'Plays', 'secondary' => 'Completions', 'rate' => 'Completion rate')); ?></section>
       <section id="search" class="mti-panel"><header><div><p class="mti-kicker">SEARCH &amp; SEO</p><h2><?php esc_html_e('Organic discovery', 'astra-child'); ?></h2></div></header><div class="mti-cards mti-cards--compact"><article><small>Search clicks</small><strong><?php echo esc_html(number_format_i18n($data['search']['clicks'])); ?></strong><span><?php echo esc_html(mirrortalk_intelligence_change($data['search']['clicks'], $data['search_previous']['clicks'])); ?> vs previous</span></article><article><small>Impressions</small><strong><?php echo esc_html(number_format_i18n($data['search']['impressions'])); ?></strong><span><?php echo esc_html(mirrortalk_intelligence_change($data['search']['impressions'], $data['search_previous']['impressions'])); ?> vs previous</span></article><article><small>Average position</small><strong><?php echo esc_html($data['search']['position'] ?: '—'); ?></strong><span>Google + Bing rows</span></article><article><small>Broken links</small><strong><?php echo esc_html($data['seo']['broken_links']); ?></strong><span>latest crawler result</span></article><article><small>Redirects</small><strong><?php echo esc_html($data['seo']['redirects']); ?></strong><span>managed rules</span></article></div><?php mirrortalk_intelligence_table_view($data['search']['queries'], array('query' => 'Query', 'clicks' => 'Clicks', 'impressions' => 'Impressions')); ?></section>

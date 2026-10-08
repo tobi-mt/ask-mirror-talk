@@ -98,6 +98,10 @@ require_once get_stylesheet_directory() . '/inc/search-connectors.php';
 require_once get_stylesheet_directory() . '/inc/ai-visibility.php';
 require_once get_stylesheet_directory() . '/inc/intelligence-dashboard.php';
 require_once get_stylesheet_directory() . '/inc/seo-learning.php';
+require_once get_stylesheet_directory() . '/inc/knowledge-quality.php';
+require_once get_stylesheet_directory() . '/inc/editorial-composer.php';
+require_once get_stylesheet_directory() . '/inc/editorial-composer-v2.php';
+require_once get_stylesheet_directory() . '/inc/content-normalizer.php';
 require_once get_stylesheet_directory() . '/inc/navigation.php';
 require_once get_stylesheet_directory() . '/inc/contact-forms.php';
 

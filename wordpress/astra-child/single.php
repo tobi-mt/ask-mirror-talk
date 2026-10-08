@@ -31,10 +31,11 @@ get_header();
                 <figure class="mt-reading__image"><?php the_post_thumbnail('full', array('fetchpriority' => 'high')); ?></figure>
             <?php endif; ?>
         </header>
-        <div class="mt-reading__body mt-reading__shell entry-content">
+        <div class="mt-reading__body mt-reading__shell entry-content mt-editorial-content">
             <?php the_content(); ?>
             <?php wp_link_pages(); ?>
         </div>
+        <?php if (function_exists('mirrortalk_render_citation_brief')) mirrortalk_render_citation_brief(get_the_ID()); ?>
         <footer class="mt-reading__footer mt-reading__shell">
             <div class="mt-reading__tags"><?php the_tags('', ' ', ''); ?></div>
             <nav class="mt-reading__next" aria-label="<?php esc_attr_e('More conversations', 'astra-child'); ?>">

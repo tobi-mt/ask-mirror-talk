@@ -91,6 +91,153 @@ def test_theme_has_editorial_home_and_design_tokens():
     assert "new WP_Query" in template
 
 
+def test_legacy_editorial_content_is_normalized_without_rewriting_storage():
+    functions = (THEME_DIR / "functions.php").read_text()
+    normalizer = (THEME_DIR / "inc" / "content-normalizer.php").read_text()
+    single = (THEME_DIR / "single.php").read_text()
+    page = (THEME_DIR / "page.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "inc/content-normalizer.php" in functions
+    assert "add_filter('the_content', 'mirrortalk_normalize_editorial_content', 30)" in normalizer
+    assert "mirror-talk:preserve-format" in normalizer
+    assert "is_singular('post')" in normalizer
+    assert "<h2$1>" in normalizer and "</h2>" in normalizer
+    assert "&nbsp;|&#160;" in normalizer
+    assert "mt-editorial-content" in single
+    assert "mt-editorial-content" in page
+    assert ".mt-editorial-content table" in css
+    assert "overflow-x: auto" in css
+    assert "iframe[src*='youtube']" in css
+    assert "aspect-ratio: 16 / 9" in css
+    assert "container-type: inline-size" in css
+    assert "flex-direction: column" in css
+
+
+def test_world_class_knowledge_and_quality_engine_is_integrated():
+    functions = (THEME_DIR / "functions.php").read_text()
+    engine = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+    dashboard = (THEME_DIR / "inc" / "intelligence-dashboard.php").read_text()
+    single = (THEME_DIR / "single.php").read_text()
+    footer = (THEME_DIR / "footer.php").read_text()
+    personalization = (THEME_DIR / "knowledge.js").read_text()
+    gate = (Path(__file__).parents[1] / "scripts" / "release_quality_gate.py").read_text()
+
+    assert "inc/knowledge-quality.php" in functions
+    assert "mirrortalk_command_post_metrics" in engine
+    assert "google_impressions" in engine and "bing_impressions" in engine
+    assert "ai_referrals" in engine and "newsletter_subscribed" in engine
+    assert "mirrortalk_knowledge_graph" in engine
+    assert "knowledge-graph" in engine
+    assert "Guest biography (verified)" in engine
+    assert "Verified quotations" in engine
+    assert "mirrortalk_render_citation_brief" in single
+    assert "mirrortalk_quality_guardian_daily" in engine
+    for issue in ("broken_link", "broken_embed", "missing_visual", "duplicate_h1", "thin_content", "freshness", "orphan", "mobile_overflow", "accessibility", "invalid_schema", "declining_search", "slow_template", "runtime_failure"):
+        assert issue in engine
+    assert "#command-centre" in dashboard
+    assert "#knowledge" in dashboard and "#quality" in dashboard
+    assert "amt_analytics_consent_v1" in personalization
+    assert "mt_content_history_v1" in personalization
+    assert "safeTopics" in personalization
+    assert "ai-citations" in engine
+    assert "mirrortalk_seo_crawl" in engine and "mirrortalk_seo_repair_media" in engine
+    assert "/editorial-standards/" in footer and "/corrections/" in footer
+    assert "visible keyboard focus" in gate and "44px controls" in gate
+
+
+def test_intelligence_collects_redacted_internal_search_without_private_reflections():
+    engine = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+    dashboard = (THEME_DIR / "inc" / "intelligence-dashboard.php").read_text()
+    browser = (THEME_DIR / "intelligence.js").read_text()
+
+    assert "mirrortalk_intelligence_safe_search_term" in engine
+    assert "[email removed]" in engine and "[number removed]" in engine
+    assert "internal_search" in dashboard
+    assert "search_term varchar(300)" in dashboard
+    assert "url.searchParams.get('s')" in browser
+    assert "reflection" not in engine.split("mirrortalk_intelligence_safe_search_term", 1)[0]
+
+
+def test_citation_schema_requires_explicit_editorial_facts():
+    engine = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+
+    assert "Only publish facts that an editor can verify" in engine
+    assert "_mt_guest_bio" not in engine  # keys are generated from an allow-list
+    assert "'citation'" in engine
+    assert "'subjectOf'" in engine
+    assert "PodcastEpisode" in engine
+    assert "correction_note" in engine
+
+
+def test_automatic_editorial_composer_runs_a_guarded_save_pipeline():
+    functions = (THEME_DIR / "functions.php").read_text()
+    composer = (THEME_DIR / "inc" / "editorial-composer.php").read_text()
+    normalizer = (THEME_DIR / "inc" / "content-normalizer.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "inc/editorial-composer.php" in functions
+    assert "mirrortalk_composer_detect_type" in composer
+    for content_type in ("interview", "episode", "reflection", "resource", "article"):
+        assert "return '" + content_type + "'" in composer
+    assert "mirrortalk_composer_provisional_topic" in composer
+    assert "provisional-content" in composer
+    assert "verified-search-data" in composer
+    assert "mirrortalk_composer_search_title" in composer
+    assert "mirrortalk_seo_description_candidate" in composer
+    assert "mirrortalk_composer_assign_taxonomy" in composer
+    assert "mirrortalk_composer_internal_links" in composer
+    assert "mirrortalk_repair_media_alt" in composer
+    assert "mirrortalk_indexnow_queue_url" in composer
+    assert "_mt_composer_history" in composer
+    assert "mirrortalk_composer_rollback" in composer
+    assert "mirror_talk_composer" in composer
+    assert "preg_replace_callback('/<h([2-6])" in normalizer
+    assert ".mt-composer-intro" in css and ".mt-composer-takeaways" in css
+
+
+def test_composer_does_not_silently_rewrite_editorial_body_or_invent_facts():
+    composer = (THEME_DIR / "inc" / "editorial-composer.php").read_text()
+
+    run_body = composer.split("function mirrortalk_composer_run", 1)[1].split("add_action('save_post'", 1)[0]
+    assert "wp_update_post" not in run_body
+    assert "Stored body copy is never silently rewritten" in composer
+    assert "pspell_suggest" in composer
+    assert "Editor review" in composer
+    assert "mirror-talk:preserve-format" in composer
+
+
+def test_composer_v2_is_visible_reversible_and_server_rendered():
+    functions = (THEME_DIR / "functions.php").read_text()
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "inc/editorial-composer-v2.php" in functions
+    assert "MIRRORTALK_COMPOSER_V2_VERSION" in composer
+    assert "mirrortalk_composer_v2_render" in composer
+    assert "add_filter('the_content','mirrortalk_composer_v2_render',25)" in composer
+    assert "_mt_composer_decisions" in composer
+    for action in ("toggle", "approve", "run", "restore"):
+        assert "mirrortalk_composer_v2_" + action in composer
+    assert "mirror-talk:preserve-format" in composer
+    assert "wp_update_post" not in composer
+    assert "mirrortalk_composer_v2_backfill" in composer
+    assert "topic-rejected" in composer
+    assert "mt-composer-lead" in composer and "mt-composer-links" in composer
+    assert ".mt-composer-document" in css and ".mt-composer-section" in css
+
+
+def test_composer_v2_protects_special_flows_and_editorial_material():
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+
+    for slug in ("ask-mirror-talk", "contact", "join-us", "insights"):
+        assert "'" + slug + "'" in composer
+    for protected in ("blockquote", "figure", "pre", "code", "iframe", "audio", "video"):
+        assert protected in composer
+    assert "confidence'=>'rejected'" in composer
+    assert "rtrim" in composer
+
+
 def test_dark_editorial_system_covers_core_wordpress_views():
     css = (THEME_DIR / "mirror-talk-site.css").read_text()
     script = (THEME_DIR / "mirror-talk-site.js").read_text()
@@ -334,6 +481,29 @@ def test_visibility_automation_covers_pages_preserves_manual_control_and_is_audi
     assert "mirrortalk_seo_public_post_types()" in learning
     assert "mirrortalk_learning_internal_link_suggestion" in learning
     assert "Relevant internal link" in learning
+
+
+def test_standard_pages_do_not_render_duplicate_h1_when_content_has_own_hero():
+    page = (THEME_DIR / "page.php").read_text()
+    assert "$content_has_h1" in page
+    assert "preg_match('/<h1\\b/i'" in page
+    assert "!$is_ask_page && ($is_contact_page || !$content_has_h1)" in page
+
+
+def test_mobile_ask_dock_yields_to_expanded_living_mirror_player():
+    script = (THEME_DIR / "listen-connect.js").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+    assert "document.body.classList.toggle('mt-listen-open', expanded)" in script
+    assert ".mt-listen-open .mt-ask-dock" in css
+
+
+def test_web_vitals_emit_one_final_page_level_sample():
+    intelligence = (THEME_DIR / "intelligence.js").read_text()
+    assert "let cls = 0; let lcp = 0; let inp = 0; let vitalsSent = false" in intelligence
+    assert "lcp = Math.max(lcp, entry.startTime)" in intelligence
+    assert "inp = Math.max(inp, entry.duration || 0)" in intelligence
+    assert "const flushVitals" in intelligence
+    assert "addEventListener('pagehide', flushVitals" in intelligence
 
 
 def test_seo_crawler_is_incremental_and_player_storage_failures_are_nonfatal():
@@ -729,3 +899,34 @@ def test_light_premium_surfaces_have_explicit_readable_text_colors():
     assert "font-size: 11px" in css
     assert "amt-badge-count" in fixture
     assert "amt-stats-prompt-text" in fixture
+
+
+def test_editorial_composer_uses_complete_semantic_phrases():
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+
+    assert "MIRRORTALK_COMPOSER_V2_VERSION', '2.1.1'" in composer
+    assert "mirrortalk_composer_v2_focus_phrase" in composer
+    assert "array_key_first($term_scores)" not in composer
+    assert "preg_split('/\\s*:\\s*/u',$title,2" in composer
+    assert "$item = trim($sentence);" in composer
+    assert "wp_trim_words($sentence, 18" not in composer
+
+
+def test_editorial_composer_has_governed_corrections_and_audit_ledger():
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+
+    assert "mirrortalk_composer_v2_log" in composer
+    assert "_mt_composer_v2_events" in composer
+    assert "source_hash" in composer
+    assert "source_preserved" in composer
+    assert "url_locked" in composer
+    assert "Correct generated decisions" in composer
+    assert "mirrortalk_composer_v2_correct" in composer
+    assert "Save corrections and record change" in composer
+    assert "Change ledger" in composer
+    assert "Review, correct or restore" in composer
+    assert "wp_update_post" not in composer
+    assert "is_array($saved[$key]??null)" in composer
+    assert "$decisions[$key]=$merged" in composer
+    assert "is_array($result['topic']??null)" in composer
+    assert "$topic_result['keyword']" in composer

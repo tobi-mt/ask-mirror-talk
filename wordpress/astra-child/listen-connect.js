@@ -190,6 +190,7 @@
       panel.hidden = !expanded;
       launcher.setAttribute('aria-expanded', String(expanded));
       player.classList.toggle('is-open', expanded);
+      document.body.classList.toggle('mt-listen-open', expanded);
       if (expanded) close.focus();
       else launcher.focus();
     };

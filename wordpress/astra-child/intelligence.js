@@ -21,6 +21,12 @@
   };
   window.MirrorTalkTrack = send;
   window.addEventListener('mt:intelligence-event', (event) => send(event.detail?.name, event.detail?.metadata));
+  window.addEventListener('amt:product-event', (event) => {
+    const detail = event.detail || {}; const theme = String(detail.metadata?.theme || '').trim().slice(0, 80);
+    if (!theme || !['question_origin_selected', 'answer_rendered', 'continuation_action_used'].includes(detail.eventName)) return;
+    if (/\b(?:health|healing|faith|religion|trauma|grief|anxiety|depression|sexuality|politics)\b/i.test(theme)) return;
+    send('safe_topic_view', { path: location.pathname, search_term: theme });
+  });
 
   const revealConsent = () => {
     if (consent() !== 'unset' || !choice) return;
@@ -54,6 +60,8 @@
     let entryPath = cleanPath(url);
     try { entryPath = sessionStorage.getItem('mt_entry_path') || entryPath; } catch (_) {}
     send('site_page_view', { path: cleanPath(url), referrer_host: ref?.hostname || 'direct', campaign_source: url.searchParams.get('utm_source') || '', campaign_medium: url.searchParams.get('utm_medium') || '', campaign_name: url.searchParams.get('utm_campaign') || '', entry_path: entryPath, device_class: deviceClass, language: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, returning: visits > 1 });
+    const internalSearch = url.searchParams.get('s');
+    if (internalSearch) send('internal_search', { path: cleanPath(url), search_term: internalSearch });
     try { if (!sessionStorage.getItem('mt_entry_path')) sessionStorage.setItem('mt_entry_path', cleanPath(url)); } catch (_) {}
     setTimeout(() => send('site_engaged', { path: cleanPath(url) }), 30000);
   }
@@ -72,9 +80,17 @@
 
   const vital = (metric, value, boundaries) => send('web_vital', { metric, value: Math.round(value), rating: value <= boundaries[0] ? 'good' : value <= boundaries[1] ? 'needs-improvement' : 'poor', path: location.pathname, connection: navigator.connection?.effectiveType || '' });
   try {
-    new PerformanceObserver((list) => list.getEntries().forEach((entry) => vital('LCP', entry.startTime, [2500, 4000]))).observe({ type: 'largest-contentful-paint', buffered: true });
-    let cls = 0; new PerformanceObserver((list) => list.getEntries().forEach((entry) => { if (!entry.hadRecentInput) cls += entry.value; })).observe({ type: 'layout-shift', buffered: true });
-    addEventListener('pagehide', () => vital('CLS', cls * 1000, [100, 250]), { once: true });
-    new PerformanceObserver((list) => list.getEntries().forEach((entry) => vital('INP', entry.duration, [200, 500]))).observe({ type: 'event', buffered: true, durationThreshold: 40 });
+    let cls = 0; let lcp = 0; let inp = 0; let vitalsSent = false;
+    new PerformanceObserver((list) => list.getEntries().forEach((entry) => { lcp = Math.max(lcp, entry.startTime); })).observe({ type: 'largest-contentful-paint', buffered: true });
+    new PerformanceObserver((list) => list.getEntries().forEach((entry) => { if (!entry.hadRecentInput) cls += entry.value; })).observe({ type: 'layout-shift', buffered: true });
+    new PerformanceObserver((list) => list.getEntries().forEach((entry) => { inp = Math.max(inp, entry.duration || 0); })).observe({ type: 'event', buffered: true, durationThreshold: 40 });
+    const flushVitals = () => {
+      if (vitalsSent) return; vitalsSent = true;
+      if (lcp) vital('LCP', lcp, [2500, 4000]);
+      vital('CLS', cls * 1000, [100, 250]);
+      if (inp) vital('INP', inp, [200, 500]);
+    };
+    addEventListener('pagehide', flushVitals, { once: true });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushVitals(); }, { once: true });
   } catch (_) {}
 })();

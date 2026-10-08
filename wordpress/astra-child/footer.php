@@ -31,6 +31,8 @@ if (!defined('ABSPATH')) { exit; }
         <span>© <?php echo esc_html(wp_date('Y')); ?> <?php bloginfo('name'); ?></span>
         <span><?php esc_html_e('A reflective space—not medical, therapeutic or emergency care.', 'astra-child'); ?></span>
         <?php if (get_privacy_policy_url()) : ?><a href="<?php echo esc_url(get_privacy_policy_url()); ?>"><?php esc_html_e('Privacy', 'astra-child'); ?></a><?php endif; ?>
+        <a href="<?php echo esc_url(home_url('/editorial-standards/')); ?>"><?php esc_html_e('Editorial standards', 'astra-child'); ?></a>
+        <a href="<?php echo esc_url(home_url('/corrections/')); ?>"><?php esc_html_e('Corrections', 'astra-child'); ?></a>
     </div>
 </footer>
 <?php wp_footer(); ?>

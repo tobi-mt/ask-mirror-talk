@@ -15,6 +15,14 @@ function mirrortalk_is_staging_host() {
     return preg_replace('/:\\d+$/', '', $host) === 'calm.mirrortalkpodcast.com';
 }
 
+/** Authenticated previews bypass caches and must stay off background work. */
+function mirrortalk_is_editor_preview_request() {
+    return isset($_GET['preview']) && filter_var(wp_unslash($_GET['preview']), FILTER_VALIDATE_BOOLEAN);
+}
+
+if (mirrortalk_is_editor_preview_request()) remove_action('init', 'wp_cron');
+add_action('send_headers', function () { if (mirrortalk_is_editor_preview_request()) header('X-Mirror-Talk-Preview-Mode: fast'); }, 1000);
+
 // Staging must be a reliable review surface, not a three-day collection of
 // browser-specific page-cache variants.
 if (mirrortalk_is_staging_host() && !defined('DONOTCACHEPAGE')) {
@@ -101,6 +109,8 @@ require_once get_stylesheet_directory() . '/inc/seo-learning.php';
 require_once get_stylesheet_directory() . '/inc/knowledge-quality.php';
 require_once get_stylesheet_directory() . '/inc/editorial-composer.php';
 require_once get_stylesheet_directory() . '/inc/editorial-composer-v2.php';
+require_once get_stylesheet_directory() . '/inc/guarded-taxonomy.php';
+require_once get_stylesheet_directory() . '/inc/editorial-story-studio.php';
 require_once get_stylesheet_directory() . '/inc/content-normalizer.php';
 require_once get_stylesheet_directory() . '/inc/navigation.php';
 require_once get_stylesheet_directory() . '/inc/contact-forms.php';
@@ -249,6 +259,28 @@ function mirrortalk_streamline_owned_home_assets() {
     foreach ($scripts as $handle) wp_dequeue_script($handle);
 }
 add_action('wp_enqueue_scripts', 'mirrortalk_streamline_owned_home_assets', PHP_INT_MAX);
+
+/**
+ * Remove front-end assets that have no matching component in the document.
+ * This runs after plugin enqueues and never affects wp-admin or logged-in tools.
+ */
+function mirrortalk_frontend_performance_assets() {
+    if (is_admin()) return;
+    if (!is_admin_bar_showing()) {
+        wp_dequeue_style('admin-bar');
+        wp_dequeue_style('dashicons');
+    }
+    $content = is_singular() ? (string) get_post_field('post_content', get_queried_object_id()) : '';
+    $uses_paypal = strpos($content, 'wp:jetpack/paypal') !== false || has_shortcode($content, 'jetpack-paypal');
+    if (!$uses_paypal) {
+        $styles = wp_styles();
+        foreach ((array) $styles->queue as $handle) {
+            $registered = $styles->registered[$handle] ?? null;
+            if ($registered && strpos((string) $registered->src, 'jetpack-paypal-payments') !== false) wp_dequeue_style($handle);
+        }
+    }
+}
+add_action('wp_enqueue_scripts', 'mirrortalk_frontend_performance_assets', PHP_INT_MAX);
 
 add_filter('astra_the_title_enabled', function ($enabled) {
     return is_home() ? false : $enabled;

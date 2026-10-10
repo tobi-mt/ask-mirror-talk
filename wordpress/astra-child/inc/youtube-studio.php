@@ -36,9 +36,14 @@ function mirrortalk_youtube_video_id($url) {
     return preg_match('/^[A-Za-z0-9_-]{11}$/', $url) ? $url : '';
 }
 
-function mirrortalk_youtube_feed_video() {
+function mirrortalk_youtube_feed_video($force_refresh = false) {
     $cached = get_transient(MIRRORTALK_YOUTUBE_CACHE_KEY);
-    if (is_array($cached) && isset($cached['checked'])) return !empty($cached['id']) ? $cached : mirrortalk_youtube_fallback_video();
+    if (!$force_refresh && is_array($cached) && isset($cached['checked'])) return !empty($cached['id']) ? $cached : mirrortalk_youtube_fallback_video();
+    $last_good = get_option(MIRRORTALK_YOUTUBE_LAST_GOOD_KEY, array());
+    if (!$force_refresh && is_array($last_good) && !empty($last_good['id'])) {
+        if (!wp_next_scheduled('mirrortalk_refresh_youtube_feed')) wp_schedule_single_event(time() + 15, 'mirrortalk_refresh_youtube_feed');
+        return $last_good;
+    }
 
     $channel_id = sanitize_text_field((string) get_theme_mod('mirrortalk_youtube_channel_id', MIRRORTALK_YOUTUBE_CHANNEL_ID));
     if (!preg_match('/^UC[A-Za-z0-9_-]{20,30}$/', $channel_id)) $channel_id = MIRRORTALK_YOUTUBE_CHANNEL_ID;
@@ -94,6 +99,10 @@ function mirrortalk_youtube_feed_video() {
     return $fallback;
 }
 
+add_action('mirrortalk_refresh_youtube_feed', function () {
+    mirrortalk_youtube_feed_video(true);
+});
+
 function mirrortalk_latest_youtube_video() {
     $override = esc_url_raw((string) get_theme_mod('mirrortalk_youtube_pinned_url', ''));
     $override_id = mirrortalk_youtube_video_id($override);
@@ -110,9 +119,14 @@ function mirrortalk_latest_youtube_video() {
 }
 
 function mirrortalk_youtube_surface() {
-    if (is_admin() || is_404() || is_search() || isset($_GET['mirror_player'])) return '';
+    if (is_admin() || is_404() || is_search() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) return '';
     if (!(bool) get_theme_mod('mirrortalk_youtube_enabled', true)) return '';
     if (is_page(array('ask-mirror-talk', 'insights')) || is_page_template('answer-archive-template.php')) return '';
+    if (is_singular(array('post','page')) && function_exists('mirrortalk_story_studio_settings')) {
+        $story_settings = mirrortalk_story_studio_settings(get_queried_object_id());
+        $story_decisions = function_exists('mirrortalk_composer_v2_decisions') ? mirrortalk_composer_v2_decisions(get_queried_object_id()) : array();
+        if (!empty($story_settings['enabled']) && ($story_settings['youtube_mode']??'latest') !== 'none' && !empty($story_decisions['youtube_player']['enabled'])) return '';
+    }
     if (is_front_page()) return 'cinematic';
     if (is_singular('post')) return 'article';
     if (is_home() || is_archive() || get_query_var('mirror_topic')) return 'compact';

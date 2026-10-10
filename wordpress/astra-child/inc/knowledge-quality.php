@@ -23,6 +23,8 @@ function mirrortalk_knowledge_fields() {
         'guest_name' => __('Guest name', 'astra-child'),
         'guest_bio' => __('Guest biography (verified)', 'astra-child'),
         'guest_expertise' => __('Guest expertise (comma separated)', 'astra-child'),
+        'books_mentioned' => __('Books and named resources mentioned (one per line, verified)', 'astra-child'),
+        'named_concepts' => __('Named concepts discussed (one per line, verified)', 'astra-child'),
         'transcript_url' => __('Verified transcript URL', 'astra-child'),
         'editorial_summary' => __('Editorial summary', 'astra-child'),
         'key_moments' => __('Timestamped key ideas (one per line: 12:34 — Idea)', 'astra-child'),
@@ -54,7 +56,7 @@ function mirrortalk_knowledge_meta_box_html($post) {
     echo '<p>' . esc_html__('Only publish facts that an editor can verify. Empty fields are omitted everywhere; the system never fills credentials or quotations by guessing.', 'astra-child') . '</p><table class="form-table">';
     foreach (mirrortalk_knowledge_fields() as $key => $label) {
         $value = get_post_meta($post->ID, '_mt_' . $key, true);
-        $rows = in_array($key, array('guest_bio','editorial_summary','key_moments','key_questions','quotable_insights','sources','correction_note'), true) ? 4 : 1;
+        $rows = in_array($key, array('guest_bio','books_mentioned','named_concepts','editorial_summary','key_moments','key_questions','quotable_insights','sources','correction_note'), true) ? 4 : 1;
         echo '<tr><th><label for="mt-' . esc_attr($key) . '">' . esc_html($label) . '</label></th><td>';
         if ($rows > 1) echo '<textarea class="large-text" rows="' . esc_attr($rows) . '" id="mt-' . esc_attr($key) . '" name="mt_' . esc_attr($key) . '">' . esc_textarea($value) . '</textarea>';
         else echo '<input class="large-text" id="mt-' . esc_attr($key) . '" name="mt_' . esc_attr($key) . '" value="' . esc_attr($value) . '">';
@@ -91,6 +93,7 @@ function mirrortalk_knowledge_profile($post_id) {
         'id' => (int) $post_id, 'url' => get_permalink($post_id), 'title' => get_the_title($post_id),
         'summary' => $summary, 'guest' => $get('guest_name'), 'guest_bio' => $get('guest_bio'),
         'guest_expertise' => array_values(array_filter(array_map('trim', explode(',', $get('guest_expertise'))))),
+        'books' => mirrortalk_knowledge_lines($get('books_mentioned')), 'concepts' => mirrortalk_knowledge_lines($get('named_concepts')),
         'topics' => array_values($topics), 'questions' => $questions, 'quotes' => $quotes,
         'moments' => mirrortalk_knowledge_lines($get('key_moments')), 'sources' => mirrortalk_knowledge_lines($get('sources'), true),
         'transcript' => esc_url_raw($get('transcript_url')), 'reviewed_by' => $get('reviewed_by'),
@@ -286,4 +289,4 @@ function mirrortalk_create_trust_pages() {
 }
 add_action('admin_init','mirrortalk_create_trust_pages',20);
 
-add_action('wp_enqueue_scripts',function(){if(!is_singular('post'))return;wp_enqueue_script('mirror-talk-knowledge',get_stylesheet_directory_uri().'/knowledge.js',array(),function_exists('mirrortalk_asset_version')?mirrortalk_asset_version('knowledge.js'):wp_get_theme()->get('Version'),true);$profile=mirrortalk_knowledge_profile(get_queried_object_id());$blocked='/\b(?:health|healing|faith|religion|trauma|grief|anxiety|depression|sexuality|politics)\b/i';$safe=array_values(array_filter($profile['topics']??array(),function($topic)use($blocked){return !preg_match($blocked,$topic);}));wp_localize_script('mirror-talk-knowledge','MirrorTalkKnowledge',array('postId'=>get_queried_object_id(),'title'=>get_the_title(),'url'=>get_permalink(),'safeTopics'=>$safe));},30);
+add_action('wp_enqueue_scripts',function(){if(!is_singular('post')||(function_exists('mirrortalk_is_editor_preview_request')&&mirrortalk_is_editor_preview_request()))return;wp_enqueue_script('mirror-talk-knowledge',get_stylesheet_directory_uri().'/knowledge.js',array(),function_exists('mirrortalk_asset_version')?mirrortalk_asset_version('knowledge.js'):wp_get_theme()->get('Version'),true);$profile=mirrortalk_knowledge_profile(get_queried_object_id());$blocked='/\b(?:health|healing|faith|religion|trauma|grief|anxiety|depression|sexuality|politics)\b/i';$safe=array_values(array_filter($profile['topics']??array(),function($topic)use($blocked){return !preg_match($blocked,$topic);}));wp_localize_script('mirror-talk-knowledge','MirrorTalkKnowledge',array('postId'=>get_queried_object_id(),'title'=>get_the_title(),'url'=>get_permalink(),'safeTopics'=>$safe));},30);

@@ -118,36 +118,21 @@ function mirrortalk_composer_run($post_id, $post = null, $force = false) {
     if(function_exists('mirrortalk_seo_snapshot'))mirrortalk_seo_snapshot($post_id);delete_transient('mirrortalk_command_centre');return $result;
 }
 
-add_action('save_post',function($post_id,$post){if(wp_is_post_revision($post_id)||wp_is_post_autosave($post_id)||defined('DOING_AUTOSAVE')&&DOING_AUTOSAVE||!current_user_can('edit_post',$post_id))return;mirrortalk_composer_run($post_id,$post);},70,2);
-
 function mirrortalk_composer_backfill() {
     $ids=get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>25,'fields'=>'ids','orderby'=>'ID','order'=>'ASC','meta_query'=>array(array('key'=>'_mt_composer_fingerprint','compare'=>'NOT EXISTS'))));
     foreach($ids as$id)mirrortalk_composer_run($id);
     if(count($ids)===25&&!wp_next_scheduled('mirrortalk_composer_backfill'))wp_schedule_single_event(time()+5*MINUTE_IN_SECONDS,'mirrortalk_composer_backfill');
     if(count($ids)<25)update_option('mirrortalk_composer_backfill_version',MIRRORTALK_COMPOSER_VERSION,false);
 }
-add_action('mirrortalk_composer_backfill','mirrortalk_composer_backfill');
-add_action('init',function(){if(get_option('mirrortalk_composer_backfill_version')!==MIRRORTALK_COMPOSER_VERSION&&!wp_next_scheduled('mirrortalk_composer_backfill'))wp_schedule_single_event(time()+2*MINUTE_IN_SECONDS,'mirrortalk_composer_backfill');},125);
 add_action('switch_theme',function(){wp_clear_scheduled_hook('mirrortalk_composer_backfill');});
 
-// Some managed and staging hosts disable loopback WP-Cron. Compose the current
-// public document on its first real visit and advance a small, locked batch
-// whenever an editor enters wp-admin, so coverage does not depend on cron alone.
-add_action('wp', function () {
-    if (!is_singular(array('post', 'page')) || is_preview()) return;
-    $post_id = get_queried_object_id();
-    if ($post_id && !get_post_meta($post_id, '_mt_composer_fingerprint', true)) {
-        mirrortalk_composer_run($post_id);
-    }
-}, 30);
-
-add_action('admin_init', function () {
-    if (!current_user_can('edit_posts') || get_option('mirrortalk_composer_backfill_version') === MIRRORTALK_COMPOSER_VERSION || get_transient('mirrortalk_composer_admin_backfill_lock')) return;
-    set_transient('mirrortalk_composer_admin_backfill_lock', 1, MINUTE_IN_SECONDS);
-    $ids = get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>5,'fields'=>'ids','orderby'=>'ID','order'=>'ASC','meta_query'=>array(array('key'=>'_mt_composer_fingerprint','compare'=>'NOT EXISTS'))));
-    foreach ($ids as $id) mirrortalk_composer_run($id);
-    if (count($ids) < 5) update_option('mirrortalk_composer_backfill_version', MIRRORTALK_COMPOSER_VERSION, false);
-}, 90);
+// Composer v2 is authoritative. Retire any legacy cron event once and retain
+// these functions only so historic reports and rollback data remain readable.
+add_action('init',function(){
+    if(get_option('mirrortalk_legacy_composer_disabled')==='yes')return;
+    wp_clear_scheduled_hook('mirrortalk_composer_backfill');
+    update_option('mirrortalk_legacy_composer_disabled','yes',false);
+},124);
 
 function mirrortalk_composer_coverage() {
     $total=(int)(new WP_Query(array('post_type'=>array('post','page'),'post_status'=>'publish','posts_per_page'=>1,'fields'=>'ids')))->found_posts;$composed=(int)(new WP_Query(array('post_type'=>array('post','page'),'post_status'=>'publish','posts_per_page'=>1,'fields'=>'ids','meta_key'=>'_mt_composer_fingerprint')))->found_posts;

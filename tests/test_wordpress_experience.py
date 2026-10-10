@@ -930,3 +930,100 @@ def test_editorial_composer_has_governed_corrections_and_audit_ledger():
     assert "$decisions[$key]=$merged" in composer
     assert "is_array($result['topic']??null)" in composer
     assert "$topic_result['keyword']" in composer
+
+
+def test_frontend_performance_work_never_blocks_reader_requests():
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    legacy_composer = (THEME_DIR / "inc" / "editorial-composer.php").read_text()
+    feed = (THEME_DIR / "inc" / "listen-and-connect.php").read_text()
+    youtube = (THEME_DIR / "inc" / "youtube-studio.php").read_text()
+    functions = (THEME_DIR / "functions.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "add_action('wp',function()" not in composer
+    assert "add_action('admin_init',function()" not in composer
+    assert "if(!$result)return $content" in composer
+    assert "mirrortalk_compose_saved_content" in composer
+    assert "mirrortalk_composer_v2_queue_saved_content" in composer
+    assert "mirrortalk_composer_v2_run($post_id,true);},75,2);" not in composer
+    assert "add_action('save_post'" not in legacy_composer
+    assert "add_action('wp', function ()" not in legacy_composer
+    assert "add_action('admin_init', function ()" not in legacy_composer
+    assert "mirrortalk_legacy_composer_disabled" in legacy_composer
+    assert "mirrortalk_feed_episodes_last_good_v2" in feed
+    assert "mirrortalk_refresh_podcast_feed" in feed
+    assert "mirrortalk_refresh_youtube_feed" in youtube
+    assert "mirrortalk_frontend_performance_assets" in functions
+    assert "wp_dequeue_style('admin-bar')" in functions
+    assert "jetpack-paypal-payments" in functions
+    assert "content-visibility: auto" in css
+
+
+def test_story_studio_guides_and_composes_media_without_rewriting_source():
+    studio = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    functions = (THEME_DIR / "functions.php").read_text()
+    script = (THEME_DIR / "editorial-story-studio.js").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "editorial-story-studio.php" in functions
+    assert "Mirror Talk Story Studio" in studio
+    assert "mirrortalk_story_studio_episode_options" in studio
+    assert "mirrortalk_story_studio_resolve_video" in studio
+    assert "Latest episode automatically" in studio
+    assert "latest channel video when blank" in studio
+    assert "mirrortalk_story_studio_insert_after" in studio
+    assert "_mt_story_studio" in composer
+    assert "podcast_player" in composer
+    assert "youtube_player" in composer
+    assert "follow_cta" in composer
+    assert "newsletter_cta" in composer
+    assert "wp_update_post" not in studio
+    assert "youtube-nocookie.com/embed/" in script
+    assert "data-mt-story-audio" in studio
+    assert ".mt-story-podcast" in css
+    assert ".mt-story-video" in css
+    assert ".mt-story-newsletter" in css
+
+
+def test_guarded_taxonomy_is_evidence_led_owned_and_reversible():
+    taxonomy = (THEME_DIR / "inc" / "guarded-taxonomy.php").read_text()
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    knowledge = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+    functions = (THEME_DIR / "functions.php").read_text()
+
+    assert "guarded-taxonomy.php" in functions
+    assert "mirrortalk_taxonomy_approved_category_ids" in taxonomy
+    assert "mirrortalk_taxonomy_verified_topic" in taxonomy
+    assert "confidence']??'')==='high'" in taxonomy
+    assert "_mt_taxonomy_owned_categories" in taxonomy
+    assert "_mt_taxonomy_owned_tags" in taxonomy
+    assert "_mt_taxonomy_exclusions" in taxonomy
+    assert "mirrortalk_taxonomy_distinct_tags" in taxonomy
+    assert "levenshtein" in taxonomy
+    assert "mirrortalk_taxonomy_remove" in taxonomy
+    assert "mirrortalk_taxonomy_restore" in taxonomy
+    assert "mirrortalk_taxonomy_recheck" in taxonomy
+    assert "Taxonomy governance" in taxonomy
+    assert "mirrortalk_composer_v2_report_after_decisions" in composer
+    assert "mirrortalk_guarded_taxonomy_run" in composer
+    assert "books_mentioned" in knowledge
+    assert "named_concepts" in knowledge
+
+
+def test_authenticated_previews_do_not_start_background_or_global_work():
+    functions = (THEME_DIR / "functions.php").read_text()
+    listen = (THEME_DIR / "inc" / "listen-and-connect.php").read_text()
+    youtube = (THEME_DIR / "inc" / "youtube-studio.php").read_text()
+    intelligence = (THEME_DIR / "inc" / "intelligence-seo.php").read_text()
+    journey = (THEME_DIR / "inc" / "journey.php").read_text()
+    knowledge = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+
+    assert "mirrortalk_is_editor_preview_request" in functions
+    assert "remove_action('init', 'wp_cron')" in functions
+    assert "X-Mirror-Talk-Preview-Mode: fast" in functions
+    assert "mirrortalk_is_editor_preview_request" in listen
+    assert "mirrortalk_is_editor_preview_request" in youtube
+    assert "mirrortalk_is_editor_preview_request" in intelligence
+    assert "mirrortalk_is_editor_preview_request" in journey
+    assert "mirrortalk_is_editor_preview_request" in knowledge

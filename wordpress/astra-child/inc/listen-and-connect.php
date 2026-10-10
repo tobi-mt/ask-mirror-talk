@@ -12,10 +12,19 @@ function mirrortalk_feed_tag_url($item, $tag_name) {
     return '';
 }
 
-function mirrortalk_get_feed_episodes($limit = 8) {
+function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
     $cached = get_transient('mirrortalk_feed_episodes_v2');
-    if (is_array($cached) && !empty($cached)) {
+    if (!$force_refresh && is_array($cached) && !empty($cached)) {
+        update_option('mirrortalk_feed_episodes_last_good_v2', $cached, false);
         return array_slice($cached, 0, $limit);
+    }
+
+    $last_good = get_option('mirrortalk_feed_episodes_last_good_v2', array());
+    if (!$force_refresh && is_array($last_good) && !empty($last_good)) {
+        if (!wp_next_scheduled('mirrortalk_refresh_podcast_feed')) {
+            wp_schedule_single_event(time() + 10, 'mirrortalk_refresh_podcast_feed');
+        }
+        return array_slice($last_good, 0, $limit);
     }
 
     include_once ABSPATH . WPINC . '/feed.php';
@@ -25,7 +34,7 @@ function mirrortalk_get_feed_episodes($limit = 8) {
     );
     $feed = fetch_feed($feed_url);
     if (is_wp_error($feed)) {
-        return array();
+        return is_array($last_good) ? array_slice($last_good, 0, $limit) : array();
     }
 
     $episodes = array();
@@ -47,12 +56,17 @@ function mirrortalk_get_feed_episodes($limit = 8) {
 
     if (!empty($episodes)) {
         set_transient('mirrortalk_feed_episodes_v2', $episodes, 6 * HOUR_IN_SECONDS);
+        update_option('mirrortalk_feed_episodes_last_good_v2', $episodes, false);
     }
     return $episodes;
 }
 
+add_action('mirrortalk_refresh_podcast_feed', function () {
+    mirrortalk_get_feed_episodes(8, true);
+});
+
 function mirrortalk_render_listen_companion() {
-    if (is_admin() || is_404() || isset($_GET['mirror_player'])) { return; }
+    if (is_admin() || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }
     $episodes = mirrortalk_get_feed_episodes();
     if (empty($episodes)) { return; }
     $latest = $episodes[0];
@@ -124,7 +138,7 @@ function mirrortalk_render_listen_companion() {
 add_action('wp_footer', 'mirrortalk_render_listen_companion', 18);
 
 function mirrortalk_render_invitation_dialogs() {
-    if (is_admin() || is_404() || isset($_GET['mirror_player'])) { return; }
+    if (is_admin() || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }
     $ask_url = home_url('/ask-mirror-talk/');
     $quick_paths = array(
         __('I need clarity', 'astra-child') => __('I need clarity. What might help me see my situation and next meaningful step more clearly?', 'astra-child'),

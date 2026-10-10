@@ -46,7 +46,7 @@ function mirrortalk_robots_directives($robots) {
 add_filter('wp_robots', 'mirrortalk_robots_directives', 20);
 
 function mirrortalk_intelligence_assets() {
-    if (is_admin() || isset($_GET['mirror_player'])) {
+    if (is_admin() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) {
         return;
     }
     wp_enqueue_script('mirror-talk-intelligence', get_stylesheet_directory_uri() . '/intelligence.js', array(), wp_get_theme()->get('Version'), true);
@@ -59,7 +59,7 @@ function mirrortalk_intelligence_assets() {
 add_action('wp_enqueue_scripts', 'mirrortalk_intelligence_assets', 30);
 
 function mirrortalk_render_analytics_consent() {
-    if (is_admin() || isset($_GET['mirror_player'])) {
+    if (is_admin() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) {
         return;
     }
     ?>

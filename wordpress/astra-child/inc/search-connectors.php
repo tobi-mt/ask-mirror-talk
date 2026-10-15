@@ -69,7 +69,7 @@ function mirrortalk_google_api($method, $path, $body = null) {
     if (empty($token['access_token'])) return new WP_Error('google_not_connected', __('Google Search Console is not connected.', 'astra-child'));
     if ((int) ($token['expires_at'] ?? 0) <= time() + 120) {
         if (empty($token['refresh_token']) || empty($credentials['client_id']) || empty($credentials['client_secret'])) return new WP_Error('google_refresh_missing', __('Google needs to be reconnected to renew access.', 'astra-child'));
-        $response = wp_remote_post('https://oauth2.googleapis.com/token', array('timeout' => 20, 'body' => array(
+        $response = wp_remote_post('https://oauth2.googleapis.com/token', array('timeout' => 8, 'body' => array(
             'client_id' => $credentials['client_id'], 'client_secret' => $credentials['client_secret'],
             'refresh_token' => $token['refresh_token'], 'grant_type' => 'refresh_token',
         )));
@@ -81,7 +81,7 @@ function mirrortalk_google_api($method, $path, $body = null) {
         $credentials['token'] = $token;
         $saved = mirrortalk_connector_store('google', $credentials); if (is_wp_error($saved)) return $saved;
     }
-    $args = array('method' => strtoupper($method), 'timeout' => 25, 'headers' => array('Authorization' => 'Bearer ' . $token['access_token'], 'Accept' => 'application/json'));
+    $args = array('method' => strtoupper($method), 'timeout' => 10, 'headers' => array('Authorization' => 'Bearer ' . $token['access_token'], 'Accept' => 'application/json'));
     if ($body !== null) { $args['headers']['Content-Type'] = 'application/json'; $args['body'] = wp_json_encode($body); }
     elseif (in_array(strtoupper($method), array('POST', 'PUT', 'PATCH'), true)) {
         // Google sitemap submission uses an empty PUT but still requires an
@@ -205,7 +205,7 @@ add_action('admin_post_mirrortalk_connector_settings', function () {
         $result = ($client_id && $secret) ? mirrortalk_connector_store('google', array('client_id' => $client_id, 'client_secret' => $secret, 'token' => $existing['token'] ?? array())) : new WP_Error('missing_fields', __('Google client ID and secret are required.', 'astra-child'));
     } elseif ($engine === 'bing') {
         $key = trim((string) wp_unslash($_POST['api_key'] ?? '')); $result = $key ? mirrortalk_connector_store('bing', array('api_key' => sanitize_text_field($key))) : new WP_Error('missing_fields', __('A Bing Webmaster API key is required.', 'astra-child'));
-        if (!is_wp_error($result)) { $result = mirrortalk_bing_sync(); if (is_wp_error($result)) mirrortalk_connector_record_error('bing', $result); }
+        if (!is_wp_error($result)) mirrortalk_runtime_queue('mirrortalk_connector_sync_manual');
     } else $result = new WP_Error('invalid_engine', __('Unknown search provider.', 'astra-child'));
     wp_safe_redirect(mirrortalk_connector_notice_url($engine ?: 'search', is_wp_error($result) ? 'error' : 'saved', is_wp_error($result) ? $result->get_error_message() : '')); exit;
 });
@@ -224,25 +224,26 @@ add_action('admin_post_mirrortalk_google_callback', function () {
     if (!$state || !$expected || !hash_equals($expected, hash('sha256', $state))) { wp_safe_redirect(mirrortalk_connector_notice_url('google', 'error', __('Google connection state expired or was invalid.', 'astra-child'))); exit; }
     if (!empty($_GET['error']) || empty($_GET['code'])) { wp_safe_redirect(mirrortalk_connector_notice_url('google', 'error', sanitize_text_field(wp_unslash($_GET['error_description'] ?? $_GET['error'] ?? __('Authorization was not completed.', 'astra-child'))))); exit; }
     $credentials = mirrortalk_connector_credentials('google');
-    $response = wp_remote_post('https://oauth2.googleapis.com/token', array('timeout' => 20, 'body' => array('code' => sanitize_text_field(wp_unslash($_GET['code'])), 'client_id' => $credentials['client_id'], 'client_secret' => $credentials['client_secret'], 'redirect_uri' => mirrortalk_google_callback_url(), 'grant_type' => 'authorization_code')));
+    $response = wp_remote_post('https://oauth2.googleapis.com/token', array('timeout' => 8, 'body' => array('code' => sanitize_text_field(wp_unslash($_GET['code'])), 'client_id' => $credentials['client_id'], 'client_secret' => $credentials['client_secret'], 'redirect_uri' => mirrortalk_google_callback_url(), 'grant_type' => 'authorization_code')));
     $token = is_wp_error($response) ? array() : json_decode(wp_remote_retrieve_body($response), true);
     if (is_wp_error($response) || wp_remote_retrieve_response_code($response) >= 300 || empty($token['access_token'])) { $message = is_wp_error($response) ? $response->get_error_message() : sanitize_text_field($token['error_description'] ?? $token['error'] ?? __('Google token exchange failed.', 'astra-child')); wp_safe_redirect(mirrortalk_connector_notice_url('google', 'error', $message)); exit; }
     $credentials['token'] = array('access_token' => $token['access_token'], 'refresh_token' => $token['refresh_token'] ?? '', 'expires_at' => time() + max(300, (int) ($token['expires_in'] ?? 3600)), 'scope' => sanitize_text_field($token['scope'] ?? MIRRORTALK_GOOGLE_SCOPE));
-    $saved = mirrortalk_connector_store('google', $credentials); $result = is_wp_error($saved) ? $saved : mirrortalk_google_sync(); if (is_wp_error($result)) mirrortalk_connector_record_error('google', $result);
+    $saved = mirrortalk_connector_store('google', $credentials); $result = $saved;if(!is_wp_error($saved))mirrortalk_runtime_queue('mirrortalk_connector_sync_manual');
     wp_safe_redirect(mirrortalk_connector_notice_url('google', is_wp_error($result) ? 'error' : 'connected', is_wp_error($result) ? $result->get_error_message() : '')); exit;
 });
 
 add_action('admin_post_mirrortalk_connector_sync', function () {
-    mirrortalk_connector_require_admin(); check_admin_referer('mirrortalk_connector_sync'); mirrortalk_search_connectors_sync();
-    wp_safe_redirect(mirrortalk_connector_notice_url('search', 'synced')); exit;
+    mirrortalk_connector_require_admin(); check_admin_referer('mirrortalk_connector_sync'); mirrortalk_runtime_queue('mirrortalk_connector_sync_manual');
+    wp_safe_redirect(mirrortalk_connector_notice_url('search', 'queued')); exit;
 });
+add_action('mirrortalk_connector_sync_manual',function(){mirrortalk_runtime_run('search_sync','mirrortalk_search_connectors_sync',20*MINUTE_IN_SECONDS);});
 
 add_action('admin_post_mirrortalk_connector_disconnect', function () {
     mirrortalk_connector_require_admin(); check_admin_referer('mirrortalk_connector_disconnect'); $engine = sanitize_key($_GET['engine'] ?? '');
     if (in_array($engine, array('google', 'bing'), true)) {
         if ($engine === 'google') {
             $credentials = mirrortalk_connector_credentials('google'); $token = $credentials['token']['refresh_token'] ?? $credentials['token']['access_token'] ?? '';
-            if ($token) wp_remote_post('https://oauth2.googleapis.com/revoke', array('timeout' => 10, 'body' => array('token' => $token)));
+            if ($token) wp_remote_post('https://oauth2.googleapis.com/revoke', array('timeout' => 3, 'blocking' => false, 'body' => array('token' => $token)));
         }
         delete_option('mirrortalk_' . $engine . '_credentials'); delete_option('mirrortalk_' . $engine . '_status'); mirrortalk_search_store_engine_rows($engine, array());
     }

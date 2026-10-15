@@ -56,9 +56,12 @@ function mirrortalk_resolve_topic_context($post_id = 0) {
     $searchable = '';
 
     if ($post_id) {
+        $post = get_post($post_id);
         $searchable .= ' ' . get_the_title($post_id);
-        $searchable .= ' ' . get_the_excerpt($post_id);
-        $post_content = get_post_field('post_content', $post_id);
+        // Read the stored excerpt directly. Filtered excerpt helpers may apply
+        // the_content, which contains this feature and caused recursion.
+        $searchable .= ' ' . ($post ? (string)$post->post_excerpt : '');
+        $post_content = $post ? (string)$post->post_content : '';
         $searchable .= ' ' . wp_trim_words(wp_strip_all_tags((string) $post_content), 120, '');
         $categories = get_the_category($post_id);
         foreach ($categories as $category) {
@@ -114,7 +117,10 @@ function mirrortalk_refresh_topic_routes_once() {
         update_option('mirrortalk_topic_routes_version', $route_version, false);
     }
 }
-add_action('init', 'mirrortalk_refresh_topic_routes_once', 99);
+// Keep public requests read-only; activation and wp-admin provide a safe
+// recovery path if the rewrite table is stale after deployment.
+add_action('after_switch_theme', 'mirrortalk_refresh_topic_routes_once', 61);
+add_action('admin_init', 'mirrortalk_refresh_topic_routes_once', 61);
 
 function mirrortalk_build_ask_url($post_id = 0, $context = array()) {
     $post_id = $post_id ?: (is_singular() ? get_queried_object_id() : 0);
@@ -133,9 +139,12 @@ function mirrortalk_build_ask_url($post_id = 0, $context = array()) {
 }
 
 function mirrortalk_append_reflection_bridge($content) {
+    static $rendering = false;
     if (!is_singular('post') || !in_the_loop() || !is_main_query()) {
         return $content;
     }
+    if ($rendering) return $content;
+    $rendering = true;
 
     $post_id = get_the_ID();
     $topic = mirrortalk_resolve_topic_context($post_id);
@@ -151,7 +160,9 @@ function mirrortalk_append_reflection_bridge($content) {
         <small><?php esc_html_e('You will be able to edit the question before sending it.', 'astra-child'); ?></small>
     </aside>
     <?php
-    return $content . ob_get_clean();
+    $result = $content . ob_get_clean();
+    $rendering = false;
+    return $result;
 }
 add_filter('the_content', 'mirrortalk_append_reflection_bridge', 24);
 

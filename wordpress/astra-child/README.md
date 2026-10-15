@@ -121,6 +121,7 @@ This ensures you're only using the child theme version.
 - **Editorial SEO Guidance:** Search-description editor, content-quality checks and internal-link prompts inside the WordPress editor
 - **Weekly Site Audit:** WordPress checks priority routes, records broken links and redirects, and emails the administrator a weekly report
 - **Listening Companion:** Site-wide RSS-powered player with the latest episode, expandable queue and Media Session metadata
+- **Listen Everywhere:** A dedicated `/listen/` hub, one verified platform registry for the page/homepage/posts/footer/follow dialog, privacy-safe device ordering, RSS fallback, consent-gated selection analytics and guarded daily destination health checks
 - **Continuous Listening:** Explicit mini-player window preserves the selected episode and timestamp while the main site navigates
 - **Intentional Invitations:** Accessible Ask, newsletter and follow/support dialogs with engagement-based frequency caps
 - **Direct Newsletter Signup:** Name, email and explicit consent are collected inside the modal and stored as private WordPress subscriber records without a contact-page redirect
@@ -173,6 +174,10 @@ When you need to update the widget code:
 
 1. Edit files in `/wp-content/themes/astra-child/` (NOT the parent theme)
 2. Or update your local files and re-upload the entire child theme folder
+
+## Owned Content Migration (v8.16.0)
+
+WordPress administrators can use **Mirror Talk Intelligence → Elementor Migration** to inventory Elementor dependencies, preview semantic conversions, run resumable automatic migration, replace forms and sliders with first-party components, recover unknown widgets through safe semantic adapters, restore individual snapshots and verify when Elementor is genuinely safe to deactivate.
 
 ## Support
 

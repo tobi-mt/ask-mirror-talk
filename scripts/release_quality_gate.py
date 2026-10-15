@@ -13,7 +13,7 @@ THEME = ROOT / "wordpress" / "astra-child"
 
 def local_checks():
     failures = []
-    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "inc/knowledge-quality.php", "inc/editorial-composer.php"]
+    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/editorial-composer.php"]
     for name in required:
         if not (THEME / name).exists():
             failures.append(f"missing {name}")
@@ -29,6 +29,9 @@ def local_checks():
         "knowledge engine loaded": "inc/knowledge-quality.php" in functions,
         "editorial composer loaded": "inc/editorial-composer.php" in functions,
         "citation brief rendered": "mirrortalk_render_citation_brief" in single,
+        "listen route loaded": "inc/listen-everywhere.php" in functions,
+        "listen route canonical": "mirror_listen" in (THEME / "inc" / "intelligence-seo.php").read_text(),
+        "unverified platforms hidden": "'enabled'=>0" in (THEME / "inc" / "listen-everywhere.php").read_text(),
     }
     failures.extend(label for label, passed in expectations.items() if not passed)
     return failures
@@ -36,7 +39,7 @@ def local_checks():
 
 def remote_checks(base):
     failures = []
-    for path in ("/", "/blog/", "/ask-mirror-talk/", "/contact/", "/llms.txt", "/mirror-talk-sitemap/"):
+    for path in ("/", "/listen/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/", "/llms.txt", "/mirror-talk-sitemap/"):
         url = base.rstrip("/") + path
         try:
             request = urllib.request.Request(url, headers={"User-Agent": "MirrorTalkReleaseGate/1.0"})
@@ -44,7 +47,7 @@ def remote_checks(base):
                 body = response.read(2_000_000).decode("utf-8", "replace")
                 if response.status != 200:
                     failures.append(f"{path}: HTTP {response.status}")
-                if path in ("/", "/blog/", "/ask-mirror-talk/", "/contact/") and not re.search(r"<main\b", body, re.I):
+                if path in ("/", "/listen/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/") and not re.search(r"<main\b", body, re.I):
                     failures.append(f"{path}: no main landmark")
         except Exception as error:
             failures.append(f"{path}: {error}")

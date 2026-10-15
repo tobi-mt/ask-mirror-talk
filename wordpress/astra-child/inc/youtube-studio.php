@@ -44,6 +44,10 @@ function mirrortalk_youtube_feed_video($force_refresh = false) {
         if (!wp_next_scheduled('mirrortalk_refresh_youtube_feed')) wp_schedule_single_event(time() + 15, 'mirrortalk_refresh_youtube_feed');
         return $last_good;
     }
+    if (!$force_refresh) {
+        if (!wp_next_scheduled('mirrortalk_refresh_youtube_feed')) wp_schedule_single_event(time()+5, 'mirrortalk_refresh_youtube_feed');
+        return mirrortalk_youtube_fallback_video();
+    }
 
     $channel_id = sanitize_text_field((string) get_theme_mod('mirrortalk_youtube_channel_id', MIRRORTALK_YOUTUBE_CHANNEL_ID));
     if (!preg_match('/^UC[A-Za-z0-9_-]{20,30}$/', $channel_id)) $channel_id = MIRRORTALK_YOUTUBE_CHANNEL_ID;
@@ -100,7 +104,7 @@ function mirrortalk_youtube_feed_video($force_refresh = false) {
 }
 
 add_action('mirrortalk_refresh_youtube_feed', function () {
-    mirrortalk_youtube_feed_video(true);
+    mirrortalk_runtime_run('youtube_feed',function(){return mirrortalk_youtube_feed_video(true);},10*MINUTE_IN_SECONDS);
 });
 
 function mirrortalk_latest_youtube_video() {
@@ -120,6 +124,7 @@ function mirrortalk_latest_youtube_video() {
 
 function mirrortalk_youtube_surface() {
     if (is_admin() || is_404() || is_search() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) return '';
+    if (function_exists('mirrortalk_is_trust_page') && mirrortalk_is_trust_page()) return '';
     if (!(bool) get_theme_mod('mirrortalk_youtube_enabled', true)) return '';
     if (is_page(array('ask-mirror-talk', 'insights')) || is_page_template('answer-archive-template.php')) return '';
     if (is_singular(array('post','page')) && function_exists('mirrortalk_story_studio_settings')) {

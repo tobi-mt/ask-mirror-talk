@@ -15,15 +15,14 @@ if (!defined('ABSPATH')) { exit; }
         <div class="mt-site-footer__links">
             <nav aria-label="<?php esc_attr_e('Explore Mirror Talk', 'astra-child'); ?>">
                 <strong><?php esc_html_e('Explore', 'astra-child'); ?></strong>
-                <a href="<?php echo esc_url(home_url('/podcast-episodes/')); ?>"><?php esc_html_e('Listen', 'astra-child'); ?></a>
+                <a href="<?php echo esc_url(home_url('/listen/')); ?>"><?php esc_html_e('Listen', 'astra-child'); ?></a>
+                <a href="<?php echo esc_url(home_url('/podcast-episodes/')); ?>"><?php esc_html_e('Browse episodes', 'astra-child'); ?></a>
                 <a href="<?php echo esc_url(home_url('/insights/')); ?>"><?php esc_html_e('Insights', 'astra-child'); ?></a>
                 <a href="<?php echo esc_url(home_url('/contact/')); ?>"><?php esc_html_e('Connect', 'astra-child'); ?></a>
             </nav>
             <nav aria-label="<?php esc_attr_e('Follow Mirror Talk', 'astra-child'); ?>">
                 <strong><?php esc_html_e('Follow', 'astra-child'); ?></strong>
-                <a href="https://podcasts.apple.com/podcast/mirror-talk/id1518394292" target="_blank" rel="noopener">Apple Podcasts</a>
-                <a href="https://open.spotify.com/show/0trwqguYCic32smqh3Ny60" target="_blank" rel="noopener">Spotify</a>
-                <a href="https://www.youtube.com/channel/UCFj3nBFVYJhsEGciiu52eEw/" target="_blank" rel="noopener">YouTube</a>
+                <?php foreach (array_slice(function_exists('mirrortalk_listen_platforms') ? mirrortalk_listen_platforms(true) : array(), 0, 3) as $platform) : ?><a href="<?php echo esc_url($platform['url']); ?>" target="_blank" rel="noopener" data-mt-platform-link="<?php echo esc_attr($platform['id']); ?>"><?php echo esc_html($platform['name']); ?></a><?php endforeach; ?>
             </nav>
         </div>
     </div>

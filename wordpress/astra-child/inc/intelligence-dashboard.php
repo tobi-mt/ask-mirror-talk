@@ -110,6 +110,13 @@ function mirrortalk_intelligence_collect(WP_REST_Request $request) {
     $event = sanitize_key($body['event_name'] ?? '');
     if (!in_array($event, mirrortalk_intelligence_allowed_events(), true)) return new WP_Error('invalid_event', __('Unsupported analytics event.', 'astra-child'), array('status' => 400));
     $meta = is_array($body['metadata'] ?? null) ? $body['metadata'] : array();
+    if ($event === 'site_internal_journey') {
+        $previous = mirrortalk_intelligence_clean_path($meta['previous_path'] ?? '');
+        $destination = mirrortalk_intelligence_clean_path($meta['destination_path'] ?? '');
+        if (preg_match('#^/(?:wp-admin|wp-login\.php)(?:/|$)#i', $previous) || preg_match('#^/(?:wp-admin|wp-login\.php)(?:/|$)#i', $destination)) {
+            return new WP_REST_Response(array('recorded' => false), 202);
+        }
+    }
     $device_id = substr(sanitize_text_field((string) ($meta['device_id'] ?? '')), 0, 100);
     $visitor = $device_id ? hash_hmac('sha256', $device_id, wp_salt('auth')) : '';
     $clean = function ($key, $limit = 191) use ($meta) { return substr(sanitize_text_field((string) ($meta[$key] ?? '')), 0, $limit); };
@@ -192,6 +199,13 @@ function mirrortalk_intelligence_search_snapshot($days, $previous = false) {
 }
 
 function mirrortalk_intelligence_snapshot($days = 30) {
+    $days = in_array((int) $days, array(7, 30, 90, 365), true) ? (int) $days : 30;
+    // The dashboard performs several grouped analytics queries. Cache a
+    // coherent two-minute snapshot so tab changes and refreshes do not repeat
+    // the full query set while keeping operational data effectively current.
+    $cache_key = 'mt_intel_snapshot_' . $days . '_' . (int) floor(time() / 120);
+    $cached = get_transient($cache_key);
+    if (is_array($cached) && isset($cached['totals'], $cached['days'])) return $cached;
     global $wpdb;
     $table = mirrortalk_intelligence_table();
     list($start, $end) = mirrortalk_intelligence_bounds($days);
@@ -223,7 +237,7 @@ function mirrortalk_intelligence_snapshot($days = 30) {
         'referrers' => mirrortalk_intelligence_group("CASE WHEN referrer_host='' OR referrer_host='direct' THEN 'Direct / unknown' ELSE referrer_host END label, COUNT(*) total", "CASE WHEN referrer_host='' OR referrer_host='direct' THEN 'Direct / unknown' ELSE referrer_host END", "event_name='site_page_view'", $days),
         'campaigns' => mirrortalk_intelligence_group("CASE WHEN campaign_source='' THEN 'Unattributed' ELSE CONCAT(campaign_source, IF(campaign_medium='', '', CONCAT(' / ', campaign_medium)), IF(campaign_name='', '', CONCAT(' / ', campaign_name))) END label, COUNT(*) total", "CASE WHEN campaign_source='' THEN 'Unattributed' ELSE CONCAT(campaign_source, IF(campaign_medium='', '', CONCAT(' / ', campaign_medium)), IF(campaign_name='', '', CONCAT(' / ', campaign_name))) END", "event_name='site_page_view'", $days),
         'episodes' => $episodes,
-        'journeys' => mirrortalk_intelligence_group("CONCAT(previous_path, ' → ', destination_path) label, COUNT(*) total", 'previous_path,destination_path', "event_name='site_internal_journey' AND destination_path <> ''", $days),
+        'journeys' => mirrortalk_intelligence_group("CONCAT(previous_path, ' → ', destination_path) label, COUNT(*) total", 'previous_path,destination_path', "event_name='site_internal_journey' AND destination_path <> '' AND previous_path NOT LIKE '/wp-admin%' AND destination_path NOT LIKE '/wp-admin%' AND previous_path NOT LIKE '/wp-login.php%' AND destination_path NOT LIKE '/wp-login.php%'", $days),
         'devices' => mirrortalk_intelligence_group("CASE WHEN device_class='' THEN 'Unknown' ELSE device_class END label, COUNT(*) total", "CASE WHEN device_class='' THEN 'Unknown' ELSE device_class END", "event_name='site_page_view'", $days),
         'audience_type' => mirrortalk_intelligence_group("IF(is_returning=1, 'Returning', 'New') label, COUNT(*) total", 'is_returning', "event_name='site_page_view'", $days),
         'geography' => mirrortalk_intelligence_group("CASE WHEN country='' THEN 'Unknown' ELSE country END label, COUNT(*) total", "CASE WHEN country='' THEN 'Unknown' ELSE country END", "event_name='site_page_view'", $days),
@@ -235,6 +249,7 @@ function mirrortalk_intelligence_snapshot($days = 30) {
         'ai_readiness' => function_exists('mirrortalk_ai_readiness') ? mirrortalk_ai_readiness() : array('score' => 0, 'checks' => array()),
         'seo' => array('broken_links' => count(array_filter((array) get_option('mirrortalk_link_health', array()), function ($row) { return function_exists('mirrortalk_seo_link_state') ? mirrortalk_seo_link_state($row) === 'broken' : empty($row['status']) || (int) $row['status'] >= 400; })), 'redirects' => count((array) get_option('mirrortalk_redirects', array())), 'last_audit' => (array) get_option('mirrortalk_last_seo_audit', array())),
     );
+    set_transient($cache_key, $snapshot, 3 * MINUTE_IN_SECONDS);
     return $snapshot;
 }
 
@@ -261,8 +276,21 @@ function mirrortalk_intelligence_table_view($rows, $columns) {
 
 function mirrortalk_intelligence_admin_menu() {
     add_menu_page(__('Mirror Talk Intelligence', 'astra-child'), __('Mirror Talk Intelligence', 'astra-child'), 'manage_mirrortalk_seo', 'mirror-talk-intelligence', 'mirrortalk_intelligence_admin_page', 'dashicons-chart-line', 4);
+    // Register the overview explicitly before feature modules attach their
+    // submenus. Without this, WordPress can promote the first child slug to
+    // the top-level link when a child is loaded before its parent.
+    add_submenu_page(
+        'mirror-talk-intelligence',
+        __('Mirror Talk Intelligence', 'astra-child'),
+        __('Overview', 'astra-child'),
+        'manage_mirrortalk_seo',
+        'mirror-talk-intelligence',
+        'mirrortalk_intelligence_admin_page'
+    );
 }
-add_action('admin_menu', 'mirrortalk_intelligence_admin_menu');
+// The dashboard parent must exist before Listening Platforms, Composer and
+// taxonomy modules register their child pages.
+add_action('admin_menu', 'mirrortalk_intelligence_admin_menu', 5);
 
 function mirrortalk_intelligence_admin_page() {
     if (!current_user_can('manage_mirrortalk_seo')) return;
@@ -312,21 +340,26 @@ function mirrortalk_intelligence_weekly_snapshot() {
     update_option('mirrortalk_intelligence_weekly_reports', array_slice($reports, -52), false);
     return $report;
 }
-add_action('mirrortalk_weekly_seo_report', 'mirrortalk_intelligence_weekly_snapshot', 5);
+add_action('mirrortalk_weekly_seo_report', function(){mirrortalk_runtime_queue('mirrortalk_intelligence_report_manual');}, 5);
 
 add_action('admin_post_mirrortalk_intelligence_report_now', function () {
     if (!current_user_can('manage_mirrortalk_seo')) wp_die(esc_html__('You cannot generate this report.', 'astra-child'));
     check_admin_referer('mirrortalk_intelligence_report_now');
-    mirrortalk_intelligence_weekly_snapshot();
-    wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence&period=7#reports')); exit;
+    mirrortalk_runtime_queue('mirrortalk_intelligence_report_manual');
+    wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence&period=7&mt_job=queued#reports')); exit;
 });
+add_action('mirrortalk_intelligence_report_manual',function(){mirrortalk_runtime_run('weekly_report','mirrortalk_intelligence_weekly_snapshot',10*MINUTE_IN_SECONDS);});
 
 function mirrortalk_intelligence_cleanup() {
     global $wpdb;
     $wpdb->query($wpdb->prepare('DELETE FROM ' . mirrortalk_intelligence_table() . ' WHERE occurred_at < %s', gmdate('Y-m-d H:i:s', time() - 400 * DAY_IN_SECONDS)));
 }
 add_action('mirrortalk_intelligence_cleanup', 'mirrortalk_intelligence_cleanup');
-add_action('init', function () { if (!wp_next_scheduled('mirrortalk_intelligence_cleanup')) wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', 'mirrortalk_intelligence_cleanup'); });
+function mirrortalk_intelligence_schedule_cleanup() {
+    if (!wp_next_scheduled('mirrortalk_intelligence_cleanup')) wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', 'mirrortalk_intelligence_cleanup');
+}
+add_action('after_switch_theme', 'mirrortalk_intelligence_schedule_cleanup', 40);
+add_action('admin_init', 'mirrortalk_intelligence_schedule_cleanup', 40);
 add_action('switch_theme', function () { wp_clear_scheduled_hook('mirrortalk_intelligence_cleanup'); });
 
 add_action('admin_enqueue_scripts', function ($hook) {

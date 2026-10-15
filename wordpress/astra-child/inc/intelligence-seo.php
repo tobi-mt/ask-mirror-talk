@@ -72,6 +72,7 @@ function mirrortalk_render_analytics_consent() {
 add_action('wp_footer', 'mirrortalk_render_analytics_consent', 90);
 
 function mirrortalk_seo_description($post_id = 0) {
+    if (get_query_var('mirror_listen')) return __('Listen to Mirror Talk: Soulful Conversations on the website, Spotify, Apple Podcasts, YouTube and other verified podcast destinations.', 'astra-child');
     if (get_query_var('mirror_blog')) return __('Ideas, podcast conversations and grounded reflections for navigating purpose, relationships, healing, faith and meaningful growth.', 'astra-child');
     if (get_query_var('mirror_topic')) {
         $map = mirrortalk_topic_map();
@@ -109,6 +110,7 @@ add_filter('document_title_parts', 'mirrortalk_seo_title_parts');
 function mirrortalk_authoritative_document_title($title) {
     if (!mirrortalk_seo_authoritative()) return $title;
     if (is_front_page()) return __('Mirror Talk Podcast | Soulful Conversations for Clarity and Growth', 'astra-child');
+    if (get_query_var('mirror_listen')) return __('Listen to Mirror Talk Podcast | Spotify, Apple Podcasts & More', 'astra-child');
     if (get_query_var('mirror_blog')) return __('Conversations and Podcast Insights | Mirror Talk', 'astra-child');
     if (get_query_var('mirror_topic')) {
         $map = mirrortalk_topic_map(); $topic = $map[get_query_var('mirror_topic')] ?? null;
@@ -123,6 +125,7 @@ function mirrortalk_authoritative_document_title($title) {
 add_filter('pre_get_document_title', 'mirrortalk_authoritative_document_title', PHP_INT_MAX);
 
 function mirrortalk_canonical_url() {
+    if (get_query_var('mirror_listen')) return home_url('/listen/');
     $topic = get_query_var('mirror_topic');
     if ($topic) return home_url('/explore/' . sanitize_title($topic) . '/');
     if (is_singular()) return get_permalink();
@@ -277,7 +280,9 @@ add_filter('query_vars', function ($vars) { $vars[] = 'mirror_sitemap'; return $
 function mirrortalk_render_sitemap() {
     $request_path = wp_parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     if (!get_query_var('mirror_sitemap') && untrailingslashit((string) $request_path) !== '/mirror-talk-sitemap') return;
-    $urls = array(array('loc' => home_url('/'), 'modified' => gmdate('c')));
+    status_header(200); nocache_headers(); header('Content-Type: application/xml; charset=UTF-8');
+    $render = function () {
+    $urls = array(array('loc' => home_url('/'), 'modified' => gmdate('c')), array('loc' => home_url('/listen/'), 'modified' => gmdate('c')));
     $posts = get_posts(array('post_type' => array('post', 'page'), 'post_status' => 'publish', 'numberposts' => -1, 'orderby' => 'modified', 'order' => 'DESC'));
     foreach ($posts as $post) {
         if (get_post_meta($post->ID, '_mirrortalk_noindex', true)) continue;
@@ -287,14 +292,18 @@ function mirrortalk_render_sitemap() {
     $terms = get_terms(array('taxonomy' => array('category', 'post_tag'), 'hide_empty' => true));
     if (!is_wp_error($terms)) foreach ($terms as $term) $urls[] = array('loc' => get_term_link($term), 'modified' => gmdate('c'));
     foreach (array_keys(mirrortalk_topic_map()) as $slug) $urls[] = array('loc' => home_url('/explore/' . $slug . '/'), 'modified' => gmdate('c'));
-    status_header(200); header('Content-Type: application/xml; charset=UTF-8');
     echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\">\n";
     foreach ($urls as $url) {
         echo '<url><loc>' . esc_url($url['loc']) . '</loc><lastmod>' . esc_html($url['modified']) . '</lastmod>';
         if (!empty($url['image'])) echo '<image:image><image:loc>' . esc_url($url['image']) . '</image:loc></image:image>';
         echo '</url>' . "\n";
     }
-    echo '</urlset>'; exit;
+    echo '</urlset>';
+    };
+    echo function_exists('mirrortalk_discovery_document')
+        ? mirrortalk_discovery_document('mirrortalk_main_sitemap_v2', 3 * HOUR_IN_SECONDS, $render)
+        : (function () use ($render) { ob_start(); $render(); return (string) ob_get_clean(); })();
+    exit;
 }
 add_action('template_redirect', 'mirrortalk_render_sitemap', 0);
 
@@ -328,11 +337,11 @@ add_action('save_post', function ($post_id) {
 });
 
 function mirrortalk_weekly_seo_report() {
-    $urls = array(home_url('/'), home_url('/blog/'), home_url('/ask-mirror-talk/'));
+    $urls = array(home_url('/'), home_url('/listen/'), home_url('/podcast-episodes/'), home_url('/blog/'), home_url('/ask-mirror-talk/'));
     foreach (array_keys(mirrortalk_topic_map()) as $slug) $urls[] = home_url('/explore/' . $slug . '/');
     $issues = array(); $redirects = array();
     foreach ($urls as $url) {
-        $response = wp_remote_head($url, array('timeout' => 8, 'redirection' => 0));
+        $response = wp_remote_head($url, array('timeout' => 3, 'redirection' => 0));
         $code = is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response);
         if ($code >= 300 && $code < 400) $redirects[] = $url . ' — HTTP ' . $code . ' → ' . wp_remote_retrieve_header($response, 'location');
         if ($code < 200 || $code >= 400) $issues[] = $url . ' — HTTP ' . $code;
@@ -348,17 +357,16 @@ function mirrortalk_weekly_seo_report() {
     $body .= "\nIntelligence dashboard: " . admin_url('admin.php?page=mirror-talk-intelligence') . "\nSitemap: " . home_url('/mirror-talk-sitemap/');
     wp_mail(get_option('admin_email'), $subject, $body);
 }
-add_action('mirrortalk_weekly_seo_report', 'mirrortalk_weekly_seo_report');
-add_action('init', function () {
+add_action('mirrortalk_weekly_seo_report',function(){mirrortalk_runtime_queue('mirrortalk_weekly_seo_email',array(),10);});
+add_action('mirrortalk_weekly_seo_email',function(){mirrortalk_runtime_run('weekly_seo_email','mirrortalk_weekly_seo_report',15*MINUTE_IN_SECONDS);});
+function mirrortalk_intelligence_schedule_weekly_report() {
     $schema_version = function_exists('mirrortalk_release_version') ? mirrortalk_release_version() : '2';
     if (get_option('mirrortalk_intelligence_schema_version') !== $schema_version) {
         flush_rewrite_rules(false);
         update_option('mirrortalk_intelligence_schema_version', $schema_version, false);
     }
     if (!wp_next_scheduled('mirrortalk_weekly_seo_report')) wp_schedule_event(time() + HOUR_IN_SECONDS, 'weekly', 'mirrortalk_weekly_seo_report');
-}, 100);
-add_action('after_switch_theme', function () {
-    flush_rewrite_rules(false);
-    if (!wp_next_scheduled('mirrortalk_weekly_seo_report')) wp_schedule_event(time() + HOUR_IN_SECONDS, 'weekly', 'mirrortalk_weekly_seo_report');
-});
+}
+add_action('after_switch_theme', 'mirrortalk_intelligence_schedule_weekly_report', 40);
+add_action('admin_init', 'mirrortalk_intelligence_schedule_weekly_report', 40);
 add_action('switch_theme', function () { wp_clear_scheduled_hook('mirrortalk_weekly_seo_report'); });

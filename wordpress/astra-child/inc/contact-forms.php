@@ -108,7 +108,8 @@ function mirrortalk_render_contact_form() {
 }
 
 function mirrortalk_contact_assets() {
-    if (!is_page(array('contact', 'join-us'))) return;
+    $content = is_singular(array('post','page')) ? (string)get_post_field('post_content',get_queried_object_id()) : '';
+    if (!is_page(array('contact', 'join-us')) && !has_shortcode($content,'mirror_talk_contact')) return;
     wp_enqueue_script('mirror-talk-contact', get_stylesheet_directory_uri() . '/contact-form.js', array(), function_exists('mirrortalk_asset_version') ? mirrortalk_asset_version('contact-form.js') : wp_get_theme()->get('Version'), true);
     wp_script_add_data('mirror-talk-contact', 'strategy', 'defer');
     $issued_at = time();
@@ -120,6 +121,14 @@ function mirrortalk_contact_assets() {
     ));
 }
 add_action('wp_enqueue_scripts', 'mirrortalk_contact_assets', 30);
+
+add_shortcode('mirror_talk_contact', function () {
+    ob_start(); mirrortalk_render_contact_form(); return (string)ob_get_clean();
+});
+
+add_shortcode('mirror_talk_newsletter', function () {
+    return '<aside class="mt-story-newsletter mt-migrated-newsletter"><div><p class="mt-section-kicker">'.esc_html__('A thoughtful note, not more noise','astra-child').'</p><h2>'.esc_html__('Let the reflection continue gently.','astra-child').'</h2><p>'.esc_html__('Receive new conversations and carefully chosen prompts for living with greater clarity and intention.','astra-child').'</p></div><button class="mt-button" type="button" data-mt-open-dialog="mt-newsletter-invite">'.esc_html__('Join the newsletter','astra-child').'</button></aside>';
+});
 
 function mirrortalk_remove_third_party_contact_assets() {
     if (!is_page(array('contact', 'join-us'))) return;

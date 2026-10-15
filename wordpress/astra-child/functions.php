@@ -20,6 +20,35 @@ function mirrortalk_is_editor_preview_request() {
     return isset($_GET['preview']) && filter_var(wp_unslash($_GET['preview']), FILTER_VALIDATE_BOOLEAN);
 }
 
+/** Trust documents are factual service pages, not articles to be recomposed. */
+function mirrortalk_is_trust_page($post_id = 0) {
+    $post_id = $post_id ? absint($post_id) : get_queried_object_id();
+    if (!$post_id || get_post_type($post_id) !== 'page') return false;
+    return in_array(get_post_field('post_name', $post_id), array('corrections', 'editorial-standards'), true);
+}
+
+function mirrortalk_trust_page_details($post_id) {
+    $slug = (string) get_post_field('post_name', $post_id);
+    if ($slug === 'corrections') {
+        return array(
+            'eyebrow' => __('Accountability', 'astra-child'),
+            'summary' => __('How Mirror Talk reviews evidence, corrects material errors and clearly records what changed.', 'astra-child'),
+            'aside_title' => __('Request a correction', 'astra-child'),
+            'aside_copy' => __('Please identify the page, the statement concerned and a reliable supporting source. Every specific request is reviewed with care.', 'astra-child'),
+            'aside_label' => __('Contact the editorial team', 'astra-child'),
+            'aside_url' => home_url('/contact/'),
+        );
+    }
+    return array(
+        'eyebrow' => __('Trust & transparency', 'astra-child'),
+        'summary' => __('The principles that guide Mirror Talk’s original conversations, editorial decisions, attribution and reader care.', 'astra-child'),
+        'aside_title' => __('Our editorial promise', 'astra-child'),
+        'aside_copy' => __('We value accuracy, clear attribution, independence and transparent corrections. Automated tools may support quality checks but never invent editorial facts.', 'astra-child'),
+        'aside_label' => __('Read our corrections policy', 'astra-child'),
+        'aside_url' => home_url('/corrections/'),
+    );
+}
+
 if (mirrortalk_is_editor_preview_request()) remove_action('init', 'wp_cron');
 add_action('send_headers', function () { if (mirrortalk_is_editor_preview_request()) header('X-Mirror-Talk-Preview-Mode: fast'); }, 1000);
 
@@ -97,8 +126,10 @@ add_action('after_setup_theme', 'mirrortalk_theme_setup');
  * This file contains the shortcode, AJAX handlers, and PWA setup
  */
 require_once get_stylesheet_directory() . '/ask-mirror-talk.php';
+require_once get_stylesheet_directory() . '/inc/runtime-resilience.php';
 require_once get_stylesheet_directory() . '/inc/journey.php';
 require_once get_stylesheet_directory() . '/inc/listen-and-connect.php';
+require_once get_stylesheet_directory() . '/inc/listen-everywhere.php';
 require_once get_stylesheet_directory() . '/inc/youtube-studio.php';
 require_once get_stylesheet_directory() . '/inc/intelligence-seo.php';
 require_once get_stylesheet_directory() . '/inc/seo-platform.php';
@@ -112,6 +143,7 @@ require_once get_stylesheet_directory() . '/inc/editorial-composer-v2.php';
 require_once get_stylesheet_directory() . '/inc/guarded-taxonomy.php';
 require_once get_stylesheet_directory() . '/inc/editorial-story-studio.php';
 require_once get_stylesheet_directory() . '/inc/content-normalizer.php';
+require_once get_stylesheet_directory() . '/inc/elementor-migration.php';
 require_once get_stylesheet_directory() . '/inc/navigation.php';
 require_once get_stylesheet_directory() . '/inc/contact-forms.php';
 
@@ -226,6 +258,14 @@ function mirrortalk_child_enqueue_styles() {
         true
     );
     wp_script_add_data('mirror-talk-listen-connect', 'strategy', 'defer');
+    wp_enqueue_script(
+        'mirror-talk-listen-everywhere',
+        get_stylesheet_directory_uri() . '/listen-everywhere.js',
+        array(),
+        mirrortalk_asset_version('listen-everywhere.js'),
+        true
+    );
+    wp_script_add_data('mirror-talk-listen-everywhere', 'strategy', 'defer');
     $newsletter_issued_at = time();
     wp_localize_script('mirror-talk-listen-connect', 'MirrorTalkNewsletter', array(
         'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -240,12 +280,17 @@ function mirrortalk_child_enqueue_styles() {
 }
 
 function mirrortalk_streamline_owned_home_assets() {
-    if (!is_front_page() || !empty($_GET['legacy_home'])) return;
+    $owned_surface = is_front_page()
+        || (bool) get_query_var('mirror_listen')
+        || (bool) get_query_var('mirror_blog')
+        || (bool) get_query_var('mirror_topic');
+    if (!$owned_surface || (is_front_page() && !empty($_GET['legacy_home']))) return;
     $styles = array(
         'jetpack-forms-layout', 'hostinger-reach-subscription-block', 'mediaelement',
         'wp-mediaelement', 'contact-form-7', 'astra-contact-form-7',
         'uagb-block-positioning-css', 'uagb-slick-css', 'uagb-aos-css',
         'uag-style-296', 'aioseo/css/src/vue/standalone/blocks/table-of-contents/global.scss',
+        'wp-block-library', 'wp-block-library-theme',
     );
     $scripts = array(
         'jquery-migrate', 'jp-tracks', 'jp-tracks-functions', 'swv', 'contact-form-7',
@@ -257,6 +302,18 @@ function mirrortalk_streamline_owned_home_assets() {
     );
     foreach ($styles as $handle) wp_dequeue_style($handle);
     foreach ($scripts as $handle) wp_dequeue_script($handle);
+
+    // Spectra may register per-post generated handles whose names cannot be
+    // known in advance. Archive queries can enqueue dozens of those files even
+    // though the owned templates render their own cards instead of block HTML.
+    foreach (array(wp_styles(), wp_scripts()) as $registry) {
+        foreach ((array) $registry->queue as $handle) {
+            $registered = $registry->registered[$handle] ?? null;
+            $source = $registered ? (string) $registered->src : '';
+            if (strpos($source, '/uploads/uag-plugin/assets/') === false) continue;
+            $registry instanceof WP_Styles ? wp_dequeue_style($handle) : wp_dequeue_script($handle);
+        }
+    }
 }
 add_action('wp_enqueue_scripts', 'mirrortalk_streamline_owned_home_assets', PHP_INT_MAX);
 
@@ -281,6 +338,73 @@ function mirrortalk_frontend_performance_assets() {
     }
 }
 add_action('wp_enqueue_scripts', 'mirrortalk_frontend_performance_assets', PHP_INT_MAX);
+
+/**
+ * Form plugins enqueue their full front-end stacks site-wide. Preserve those
+ * assets wherever the document actually contains a supported form, but remove
+ * them from ordinary articles and pages. This also prevents the anti-spam
+ * challenge runtime from blocking the main thread on content-only visits.
+ */
+function mirrortalk_streamline_singular_form_assets() {
+    if (!is_singular(array('post', 'page'))) return;
+    $content = (string) get_post_field('post_content', get_queried_object_id());
+    $uses = array(
+        'cf7' => (bool) preg_match('/(?:\[contact-form-7\b|wp:contact-form-7\b|class=["\'][^"\']*wpcf7)/i', $content),
+        'wpforms' => (bool) preg_match('/(?:\[wpforms\b|wp:wpforms\b|class=["\'][^"\']*wpforms)/i', $content),
+        'mc4wp' => (bool) preg_match('/(?:\[mc4wp_form\b|class=["\'][^"\']*mc4wp)/i', $content),
+        'sureforms' => (bool) preg_match('/(?:\[sureforms\b|wp:sureforms\b|class=["\'][^"\']*sureforms)/i', $content),
+        'jetpack' => strpos($content, 'wp:jetpack/contact-form') !== false,
+        'hostinger' => (bool) preg_match('/(?:wp:hostinger-reach\b|class=["\'][^"\']*hostinger-reach)/i', $content),
+    );
+
+    // These editor/preview runtimes are never required by a public document.
+    wp_dequeue_script('starter-templates-zip-preview');
+    if (!$uses['cf7']) {
+        foreach (array('contact-form-7', 'astra-contact-form-7') as $handle) wp_dequeue_style($handle);
+        foreach (array('swv', 'contact-form-7') as $handle) wp_dequeue_script($handle);
+    }
+    if (!$uses['jetpack']) wp_dequeue_style('jetpack-forms-layout');
+    if (!$uses['hostinger']) {
+        wp_dequeue_style('hostinger-reach-subscription-block');
+        wp_dequeue_script('hostinger-reach-embed');
+    }
+    // Prosopo may protect Mailchimp, WPForms or SureForms; retain it only when
+    // one of those form families is genuinely rendered by this document.
+    if (!$uses['mc4wp'] && !$uses['wpforms'] && !$uses['sureforms']) wp_dequeue_script('prosopo-procaptcha');
+}
+add_action('wp_enqueue_scripts', 'mirrortalk_streamline_singular_form_assets', PHP_INT_MAX);
+
+/**
+ * Stop legacy Elementor YouTube widgets from loading/autoplaying before the
+ * visitor asks. The guard replaces only YouTube widgets, leaving stored content
+ * and editor output untouched, and upgrades them to youtube-nocookie on click.
+ */
+function mirrortalk_enqueue_legacy_video_guard() {
+    if (!is_singular(array('post', 'page'))) return;
+    $post_id = get_queried_object_id();
+    $content = (string) get_post_field('post_content', $post_id);
+    $elementor_data = (string) get_post_meta($post_id, '_elementor_data', true);
+    $has_rendered_widget = stripos($content, 'elementor-widget-video') !== false && stripos($content, 'youtu') !== false;
+    $has_elementor_widget = stripos($elementor_data, '"widgetType":"video"') !== false && stripos($elementor_data, 'youtu') !== false;
+    if (!$has_rendered_widget && !$has_elementor_widget) return;
+    wp_enqueue_script(
+        'mirror-talk-legacy-video-guard',
+        get_stylesheet_directory_uri() . '/legacy-video-guard.js',
+        array(),
+        mirrortalk_asset_version('legacy-video-guard.js'),
+        false
+    );
+}
+add_action('wp_enqueue_scripts', 'mirrortalk_enqueue_legacy_video_guard', 1);
+
+function mirrortalk_enqueue_owned_widgets() {
+    if (!is_singular(array('post','page'))) return;
+    $content=(string)get_post_field('post_content',get_queried_object_id());
+    if (strpos($content,'data-mt-owned-slider')===false) return;
+    wp_enqueue_script('mirror-talk-owned-widgets',get_stylesheet_directory_uri().'/owned-widgets.js',array(),mirrortalk_asset_version('owned-widgets.js'),true);
+    wp_script_add_data('mirror-talk-owned-widgets','strategy','defer');
+}
+add_action('wp_enqueue_scripts','mirrortalk_enqueue_owned_widgets',25);
 
 add_filter('astra_the_title_enabled', function ($enabled) {
     return is_home() ? false : $enabled;

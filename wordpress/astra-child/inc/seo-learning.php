@@ -205,7 +205,7 @@ function mirrortalk_seo_learning_cycle() {
     mirrortalk_learning_start_experiments();
     update_option('mirrortalk_seo_learning_last_run', time(), false);
 }
-add_action('mirrortalk_weekly_seo_report', 'mirrortalk_seo_learning_cycle', 20);
+add_action('mirrortalk_weekly_seo_report', function(){mirrortalk_runtime_queue('mirrortalk_learning_cycle_manual',array(),20);}, 20);
 
 function mirrortalk_learning_pause_and_restore() {
     $experiments = (array) get_option('mirrortalk_seo_experiments', array()); $changed = false;
@@ -305,5 +305,6 @@ add_action('admin_post_mirrortalk_learning_settings', function () {
 });
 add_action('admin_post_mirrortalk_learning_run', function () {
     if (!current_user_can('manage_mirrortalk_seo')) wp_die(esc_html__('You cannot run SEO learning.', 'astra-child')); check_admin_referer('mirrortalk_learning_run');
-    mirrortalk_seo_learning_cycle(); wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence#learning')); exit;
+    mirrortalk_runtime_queue('mirrortalk_learning_cycle_manual'); wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence&mt_job=queued#learning')); exit;
 });
+add_action('mirrortalk_learning_cycle_manual',function(){mirrortalk_runtime_run('seo_learning','mirrortalk_seo_learning_cycle',20*MINUTE_IN_SECONDS);});

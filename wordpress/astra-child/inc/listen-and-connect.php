@@ -15,7 +15,6 @@ function mirrortalk_feed_tag_url($item, $tag_name) {
 function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
     $cached = get_transient('mirrortalk_feed_episodes_v2');
     if (!$force_refresh && is_array($cached) && !empty($cached)) {
-        update_option('mirrortalk_feed_episodes_last_good_v2', $cached, false);
         return array_slice($cached, 0, $limit);
     }
 
@@ -25,6 +24,13 @@ function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
             wp_schedule_single_event(time() + 10, 'mirrortalk_refresh_podcast_feed');
         }
         return array_slice($last_good, 0, $limit);
+    }
+
+    // Public and editor requests never wait on the remote RSS host. The first
+    // refresh is queued and the UI uses its graceful empty/fallback state.
+    if (!$force_refresh) {
+        if (!wp_next_scheduled('mirrortalk_refresh_podcast_feed')) wp_schedule_single_event(time()+5, 'mirrortalk_refresh_podcast_feed');
+        return array();
     }
 
     include_once ABSPATH . WPINC . '/feed.php';
@@ -61,9 +67,7 @@ function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
     return $episodes;
 }
 
-add_action('mirrortalk_refresh_podcast_feed', function () {
-    mirrortalk_get_feed_episodes(8, true);
-});
+add_action('mirrortalk_refresh_podcast_feed', function () {mirrortalk_runtime_run('podcast_feed',function(){return mirrortalk_get_feed_episodes(8,true);},10*MINUTE_IN_SECONDS);});
 
 function mirrortalk_render_listen_companion() {
     if (is_admin() || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }
@@ -182,13 +186,12 @@ function mirrortalk_render_invitation_dialogs() {
         <button class="mt-dialog__close" type="button" data-mt-dialog-close aria-label="<?php esc_attr_e('Close', 'astra-child'); ?>">×</button>
         <p class="mt-section-kicker"><?php esc_html_e('Choose your way to stay connected', 'astra-child'); ?></p>
         <h2 id="mt-follow-dialog-title"><?php esc_html_e('Never miss a meaningful conversation.', 'astra-child'); ?></h2>
-        <div class="mt-platforms">
-            <a href="https://podcasts.apple.com/podcast/mirror-talk/id1518394292" target="_blank" rel="noopener"><strong>Apple Podcasts</strong><span><?php esc_html_e('Listen and follow', 'astra-child'); ?> ↗</span></a>
-            <a href="https://open.spotify.com/show/0trwqguYCic32smqh3Ny60" target="_blank" rel="noopener"><strong>Spotify</strong><span><?php esc_html_e('Listen and follow', 'astra-child'); ?> ↗</span></a>
-            <a href="https://www.youtube.com/channel/UCFj3nBFVYJhsEGciiu52eEw/" target="_blank" rel="noopener"><strong>YouTube</strong><span><?php esc_html_e('Watch and subscribe', 'astra-child'); ?> ↗</span></a>
-            <a href="https://www.whatsapp.com/channel/0029VaEER5vC1Fu8V82fFm0u" target="_blank" rel="noopener"><strong>WhatsApp</strong><span><?php esc_html_e('Join the channel', 'astra-child'); ?> ↗</span></a>
-            <a href="https://www.patreon.com/MirrorTalk" target="_blank" rel="noopener"><strong>Patreon</strong><span><?php esc_html_e('Support the work', 'astra-child'); ?> ↗</span></a>
+        <?php if (function_exists('mirrortalk_render_platform_cards')) mirrortalk_render_platform_cards('dialog'); ?>
+        <div class="mt-follow-community" aria-label="<?php esc_attr_e('Community and supporter channels', 'astra-child'); ?>">
+            <a href="https://whatsapp.com/channel/0029VaEER5vC1Fu8V82fFm0u" target="_blank" rel="noopener"><?php esc_html_e('Join the WhatsApp channel', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
+            <a href="https://www.patreon.com/MirrorTalk" target="_blank" rel="noopener"><?php esc_html_e('Support Mirror Talk on Patreon', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
         </div>
+        <p><a href="<?php echo esc_url(home_url('/listen/')); ?>"><?php esc_html_e('View every verified listening option', 'astra-child'); ?> →</a></p>
     </dialog>
     <?php
 }

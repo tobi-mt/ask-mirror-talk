@@ -15,6 +15,7 @@ get_header();
 
 $ask_url = home_url('/ask-mirror-talk/');
 $episodes_url = home_url('/podcast-episodes/');
+$listen_url = home_url('/listen/');
 $contact_url = home_url('/contact/');
 ?>
 <main id="primary" class="site-main mt-home">
@@ -26,7 +27,7 @@ $contact_url = home_url('/contact/');
             <p class="mt-home__lead"><?php esc_html_e('Honest conversations and grounded reflections for people navigating purpose, faith, resilience, relationships and personal growth.', 'astra-child'); ?></p>
             <div class="mt-home__actions">
                 <a class="mt-button" href="<?php echo esc_url($ask_url); ?>"><?php esc_html_e('Ask Mirror Talk', 'astra-child'); ?></a>
-                <a class="mt-button mt-button--quiet" href="<?php echo esc_url($episodes_url); ?>"><?php esc_html_e('Explore conversations', 'astra-child'); ?></a>
+                <a class="mt-button mt-button--quiet" href="<?php echo esc_url($listen_url); ?>"><?php esc_html_e('Start listening', 'astra-child'); ?></a>
             </div>
         </div>
         <div class="mt-home__mirror" aria-label="A quiet space for reflection">
@@ -192,6 +193,10 @@ $contact_url = home_url('/contact/');
                 <p><?php esc_html_e('New conversations are on the way.', 'astra-child'); ?></p>
             <?php endif; ?>
         </div>
+    </section>
+
+    <section class="mt-home__shell mt-home__section" aria-label="<?php esc_attr_e('Ways to listen to Mirror Talk', 'astra-child'); ?>">
+        <?php if (function_exists('mirrortalk_render_listen_invitation')) mirrortalk_render_listen_invitation('home'); ?>
     </section>
 
     <section class="mt-home__shell mt-home__section">

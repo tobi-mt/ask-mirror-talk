@@ -32,7 +32,7 @@ if (!defined('ABSPATH')) { exit; }
                 ?>
                 <ul class="mt-site-nav__list">
                     <li><a href="<?php echo esc_url(home_url('/')); ?>"><?php esc_html_e('Home', 'astra-child'); ?></a></li>
-                    <li><a href="<?php echo esc_url(home_url('/podcast-episodes/')); ?>"><?php esc_html_e('Listen', 'astra-child'); ?></a></li>
+                    <li><a href="<?php echo esc_url(home_url('/listen/')); ?>"><?php esc_html_e('Listen', 'astra-child'); ?></a></li>
                     <li><a href="<?php echo esc_url(home_url('/ask-mirror-talk/')); ?>"><?php esc_html_e('Ask Mirror Talk', 'astra-child'); ?></a><ul class="sub-menu"><li><a href="<?php echo esc_url(home_url('/insights/')); ?>"><?php esc_html_e('Insights', 'astra-child'); ?></a></li></ul></li>
                     <li><a href="<?php echo esc_url(home_url('/contact/')); ?>"><?php esc_html_e('Connect', 'astra-child'); ?></a></li>
                 </ul>

@@ -31,6 +31,13 @@ function mirrortalk_normalize_editorial_content($content) {
     // Remove only truly empty legacy paragraphs. Paragraphs containing media,
     // anchors, shortcodes or non-breaking content remain untouched.
     $content = preg_replace('/<p(?:\s[^>]*)?>\s*(?:&nbsp;|&#160;|\x{00a0})?\s*<\/p>/iu', '', (string) $content);
+
+    // Legacy provider embeds frequently omit a title. Supply a truthful,
+    // generic accessible name at render time without rewriting stored content
+    // or guessing the identity of a speaker, episode or video.
+    $content = preg_replace_callback('/<iframe\b(?![^>]*\btitle=)([^>]*)>/i', function ($match) {
+        return '<iframe title="' . esc_attr__('Embedded media', 'astra-child') . '"' . $match[1] . '>';
+    }, (string) $content);
     return $content;
 }
 add_filter('the_content', 'mirrortalk_normalize_editorial_content', 30);

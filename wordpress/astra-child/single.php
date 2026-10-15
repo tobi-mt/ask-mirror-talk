@@ -35,6 +35,7 @@ get_header();
             <?php the_content(); ?>
             <?php wp_link_pages(); ?>
         </div>
+        <div class="mt-reading__shell"><?php if (function_exists('mirrortalk_render_listen_invitation')) mirrortalk_render_listen_invitation('episode'); ?></div>
         <?php if (function_exists('mirrortalk_render_citation_brief')) mirrortalk_render_citation_brief(get_the_ID()); ?>
         <footer class="mt-reading__footer mt-reading__shell">
             <div class="mt-reading__tags"><?php the_tags('', ' ', ''); ?></div>

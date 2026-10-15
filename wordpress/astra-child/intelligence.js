@@ -70,8 +70,12 @@
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a[href]'); if (!link) return;
     const destination = new URL(link.href, location.href);
-    if (destination.hostname === location.hostname) send('site_internal_journey', { previous_path: location.pathname, destination_path: destination.pathname });
-    else send('site_outbound_click', { path: location.pathname, link_host: destination.hostname });
+    const privatePath = (path) => /^\/(?:wp-admin|wp-login\.php)(?:\/|$)/i.test(path);
+    if (destination.hostname === location.hostname) {
+      if (!privatePath(location.pathname) && !privatePath(destination.pathname)) {
+        send('site_internal_journey', { previous_path: location.pathname, destination_path: destination.pathname });
+      }
+    } else send('site_outbound_click', { path: location.pathname, link_host: destination.hostname });
   });
   window.addEventListener('error', (event) => {
     const target = event.target; const url = target?.src || target?.href;

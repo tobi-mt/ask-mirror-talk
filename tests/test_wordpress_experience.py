@@ -511,8 +511,8 @@ def test_seo_crawler_is_incremental_and_player_storage_failures_are_nonfatal():
     player = (THEME_DIR / "listen-connect.js").read_text()
     window = (THEME_DIR / "listen-window.js").read_text()
 
-    assert "array_slice($keys, $cursor, 30)" in platform
-    assert "'timeout' => 4" in platform
+    assert "array_slice($keys, $cursor, 8)" in platform
+    assert "'timeout' => 3" in platform
     assert "mirrortalk_link_crawl_cursor" in platform
     assert "function_exists('mb_strlen')" in platform
     assert "typeof HTMLDialogElement !== 'undefined'" in player
@@ -565,6 +565,7 @@ def test_single_posts_use_intelligent_topic_labels_and_home_images_are_bounded()
 
 def test_listening_companion_uses_rss_and_respectful_ctas():
     php = (THEME_DIR / "inc" / "listen-and-connect.php").read_text()
+    registry = (THEME_DIR / "inc" / "listen-everywhere.php").read_text()
     script = (THEME_DIR / "listen-connect.js").read_text()
 
     assert "fetch_feed($feed_url)" in php
@@ -572,9 +573,9 @@ def test_listening_companion_uses_rss_and_respectful_ctas():
     assert "set_transient('mirrortalk_feed_episodes_v2'" in php
     assert "preload=\"metadata\"" in php
     assert "data-mt-episode" in php
-    assert "podcasts.apple.com/podcast/mirror-talk/id1518394292" in php
-    assert "open.spotify.com/show/0trwqguYCic32smqh3Ny60" in php
-    assert "youtube.com/channel/UCFj3nBFVYJhsEGciiu52eEw" in php
+    assert "podcasts.apple.com/us/podcast/mirror-talk-soulful-conversations/id1518394292" in registry
+    assert "open.spotify.com/show/0trwqguYCic32smqh3Ny60" in registry
+    assert "youtube.com/channel/UCFj3nBFVYJhsEGciiu52eEw" in registry
     assert "whatsapp.com/channel/0029VaEER5vC1Fu8V82fFm0u" in php
     assert "patreon.com/MirrorTalk" in php
     assert "21 * 24 * 60 * 60 * 1000" in script
@@ -763,7 +764,8 @@ def test_primary_navigation_is_listener_first_and_self_healing():
     functions = (THEME_DIR / "functions.php").read_text()
 
     assert "mirrortalk_listener_first_menu" in navigation
-    assert "'/podcast-episodes/'" in navigation
+    assert "home_url('/listen/')" in navigation
+    assert "podcast-episodes" in navigation
     assert "'/insights/'" in navigation
     assert "'home' => 10, 'listen' => 20, 'explore' => 30, 'ask' => 40" in navigation
     assert "$has_nested_insights" in navigation
@@ -831,6 +833,45 @@ def test_staging_delivery_is_uncached_and_release_assets_are_fingerprinted():
     assert "remove_action('wp_footer', 'ask_mirror_talk_pwa_footer', 99)" in functions
     assert "registration.unregister()" in functions
     assert "caches.delete(key)" in functions
+
+
+def test_release_maintenance_never_flushes_rewrites_on_public_requests():
+    listen = (THEME_DIR / "inc" / "listen-everywhere.php").read_text()
+    journey = (THEME_DIR / "inc" / "journey.php").read_text()
+
+    assert "add_action('after_switch_theme', 'mirrortalk_refresh_listen_route_once'" in listen
+    assert "add_action('admin_init', 'mirrortalk_refresh_listen_route_once'" in listen
+    assert "add_action('init', 'mirrortalk_refresh_listen_route_once'" not in listen
+    assert "add_action('after_switch_theme', 'mirrortalk_refresh_topic_routes_once'" in journey
+    assert "add_action('admin_init', 'mirrortalk_refresh_topic_routes_once'" in journey
+    assert "add_action('init', 'mirrortalk_refresh_topic_routes_once'" not in journey
+
+
+def test_discovery_documents_are_cached_and_invalidated():
+    platform = (THEME_DIR / "inc" / "seo-platform.php").read_text()
+    sitemap = (THEME_DIR / "inc" / "intelligence-seo.php").read_text()
+
+    assert "function mirrortalk_discovery_document" in platform
+    assert "function mirrortalk_flush_discovery_documents" in platform
+    assert "add_action('save_post', 'mirrortalk_flush_discovery_documents'" in platform
+    for key in (
+        "mirrortalk_llms_short_v2",
+        "mirrortalk_llms_full_v2",
+        "mirrortalk_news_sitemap_v2",
+        "mirrortalk_video_sitemap_v2",
+    ):
+        assert key in platform
+    assert "mirrortalk_main_sitemap_v2" in sitemap
+
+
+def test_owned_surfaces_remove_generated_spectra_assets_without_touching_posts():
+    functions = (THEME_DIR / "functions.php").read_text()
+
+    assert "function mirrortalk_streamline_owned_home_assets" in functions
+    assert "get_query_var('mirror_blog')" in functions
+    assert "get_query_var('mirror_topic')" in functions
+    assert "'/uploads/uag-plugin/assets/'" in functions
+    assert "wp_dequeue_script($handle)" in functions
 
 
 def test_living_mirror_connects_listening_moments_to_private_reflection():

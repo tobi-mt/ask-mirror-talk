@@ -6,7 +6,8 @@ function mirrortalk_navigation_key($item) {
     $title = strtolower(trim(wp_strip_all_tags((string) $item->title)));
     $path = strtolower((string) wp_parse_url((string) $item->url, PHP_URL_PATH));
     if ($path === '/' || $title === 'home') return 'home';
-    if (strpos($path, 'podcast-episodes') !== false || in_array($title, array('listen', 'podcast', 'episodes'), true)) return 'listen';
+    if (strpos($path, '/listen') !== false || in_array($title, array('listen', 'podcast'), true)) return 'listen';
+    if (strpos($path, 'podcast-episodes') !== false || in_array($title, array('episodes', 'explore'), true)) return 'explore';
     if (strpos($path, 'ask-mirror-talk') !== false || strpos($title, 'ask mirror talk') !== false) return 'ask';
     if (strpos($path, 'insights') !== false || $title === 'insights') return 'insights';
     if (strpos($path, 'contact') !== false || in_array($title, array('contact', 'connect'), true)) return 'connect';
@@ -36,12 +37,12 @@ function mirrortalk_listener_first_menu($items, $args) {
         $present[$key] = true;
         if ((string) $item->menu_item_parent === '0') {
             if ($key === 'ask') $ask_parent_id = (int) $item->ID;
-            if ($key === 'listen') $item->title = __('Listen', 'astra-child');
+            if ($key === 'listen') { $item->title = __('Listen', 'astra-child'); $item->url = home_url('/listen/'); }
             if ($key === 'explore') $item->title = __('Explore', 'astra-child');
             if ($key === 'connect') $item->title = __('Connect', 'astra-child');
         }
     }
-    if (empty($present['listen'])) $items[] = mirrortalk_virtual_menu_item(-9101, __('Listen', 'astra-child'), '/podcast-episodes/');
+    if (empty($present['listen'])) $items[] = mirrortalk_virtual_menu_item(-9101, __('Listen', 'astra-child'), '/listen/');
     if (empty($present['insights'])) $items[] = mirrortalk_virtual_menu_item(-9102, __('Insights', 'astra-child'), '/insights/', $ask_parent_id);
 
     // Insights belongs to the Ask journey. If the editor has already nested it,

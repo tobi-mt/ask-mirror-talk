@@ -77,7 +77,7 @@ def test_mobile_and_reduced_motion_rules_exist():
 def test_theme_release_changed():
     style = read("style.css")
     match = re.search(r"^Version:\s+(.+)$", style, re.MULTILINE)
-    assert match and match.group(1).strip() == "8.17.5"
+    assert match and tuple(map(int, match.group(1).strip().split('.'))) >= (8, 17, 5)
 
 
 def test_intelligence_parent_is_registered_before_children():

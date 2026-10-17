@@ -67,9 +67,10 @@ function mirrortalk_intelligence_allowed_events() {
         'web_vital', 'broken_link_seen', 'newsletter_subscribed', 'contact_message_sent',
         'living_mirror_reflection_saved', 'youtube_module_viewable', 'youtube_media_allowed',
         'youtube_video_ready', 'youtube_video_start', 'youtube_video_progress', 'youtube_video_complete',
+        'composer_outline_click', 'composer_cta_click',
         'youtube_video_unmuted', 'youtube_video_muted', 'youtube_autoplay_blocked',
         'youtube_autoplay_fallback', 'youtube_video_error', 'youtube_api_error',
-        'internal_search', 'safe_topic_view',
+        'internal_search', 'safe_topic_view', 'listen_platform_selected', 'living_mirror_moment_saved',
     );
 }
 
@@ -84,6 +85,26 @@ function mirrortalk_intelligence_country() {
         if (preg_match('/^[A-Z]{2}$/', $value) && $value !== 'XX') return $value;
     }
     return '';
+}
+
+/** Record an authoritative aggregate outcome without personal information. */
+function mirrortalk_intelligence_record_operational_event($event, $meta = array()) {
+    $event = sanitize_key((string) $event);
+    if (!in_array($event, array('newsletter_subscribed', 'contact_message_sent'), true)) return false;
+    $meta = is_array($meta) ? $meta : array();
+    global $wpdb;
+    return (bool) $wpdb->insert(mirrortalk_intelligence_table(), array(
+        'occurred_at' => current_time('mysql', true), 'event_date' => current_time('Y-m-d', true),
+        'event_name' => $event, 'visitor_hash' => '',
+        'path' => mirrortalk_intelligence_clean_path($meta['path'] ?? '/'),
+        'referrer_host' => '', 'campaign_source' => sanitize_text_field((string) ($meta['campaign_source'] ?? '')),
+        'campaign_medium' => sanitize_text_field((string) ($meta['campaign_medium'] ?? '')),
+        'campaign_name' => sanitize_text_field((string) ($meta['campaign_name'] ?? '')),
+        'entry_path' => '', 'previous_path' => '', 'destination_path' => '', 'device_class' => '',
+        'is_returning' => 0, 'country' => '', 'language' => '', 'episode_id' => '', 'episode_title' => '',
+        'progress_bucket' => 0, 'metric' => '', 'metric_value' => 0, 'rating' => '', 'target' => '',
+        'status' => 'server-confirmed', 'search_term' => '',
+    ));
 }
 
 function mirrortalk_intelligence_same_origin() {
@@ -216,6 +237,7 @@ function mirrortalk_intelligence_snapshot($days = 30) {
         'completions' => mirrortalk_intelligence_event_total(array('podcast_complete'), $days),
         'conversions' => mirrortalk_intelligence_event_total(array('newsletter_subscribed', 'contact_message_sent'), $days),
         'engaged' => mirrortalk_intelligence_event_total(array('site_engaged'), $days),
+        'composer_actions' => mirrortalk_intelligence_event_total(array('composer_outline_click', 'composer_cta_click'), $days),
     );
     $previous = array(
         'page_views' => mirrortalk_intelligence_event_total(array('site_page_view'), $days, true),
@@ -224,10 +246,13 @@ function mirrortalk_intelligence_snapshot($days = 30) {
         'completions' => mirrortalk_intelligence_event_total(array('podcast_complete'), $days, true),
         'conversions' => mirrortalk_intelligence_event_total(array('newsletter_subscribed', 'contact_message_sent'), $days, true),
         'engaged' => mirrortalk_intelligence_event_total(array('site_engaged'), $days, true),
+        'composer_actions' => mirrortalk_intelligence_event_total(array('composer_outline_click', 'composer_cta_click'), $days, true),
     );
     $bucket = $days <= 31 ? 'event_date' : ($days <= 90 ? "DATE_FORMAT(event_date,'%x-W%v')" : "DATE_FORMAT(event_date,'%Y-%m')");
     $daily = $wpdb->get_results($wpdb->prepare("SELECT {$bucket} label, COUNT(*) total FROM {$table} WHERE occurred_at >= %s AND occurred_at < %s AND event_name='site_page_view' GROUP BY {$bucket} ORDER BY MIN(event_date)", $start, $end), ARRAY_A);
-    $vitals = $wpdb->get_results($wpdb->prepare("SELECT metric label, ROUND(AVG(metric_value),1) average, SUM(rating='good') good, SUM(rating='needs-improvement') needs_improvement, SUM(rating='poor') poor, COUNT(*) total FROM {$table} WHERE occurred_at >= %s AND occurred_at < %s AND event_name='web_vital' AND metric <> '' GROUP BY metric ORDER BY metric", $start, $end), ARRAY_A);
+    $vitals = $wpdb->get_results($wpdb->prepare("SELECT metric label, AVG(CASE WHEN metric='CLS' THEN metric_value/1000 ELSE metric_value END) average, SUM(rating='good') good, SUM(rating='needs-improvement') needs_improvement, SUM(rating='poor') poor, COUNT(*) total FROM {$table} WHERE occurred_at >= %s AND occurred_at < %s AND event_name='web_vital' AND metric <> '' GROUP BY metric ORDER BY metric", $start, $end), ARRAY_A);
+    foreach($vitals as&$vital)$vital['average']=($vital['label']??'')==='CLS'?number_format((float)$vital['average'],3,'.',''):number_format((float)$vital['average'],1,'.','');
+    unset($vital);
     $episodes = mirrortalk_intelligence_group("CASE WHEN episode_title='' THEN 'Unknown episode' ELSE episode_title END label, SUM(event_name='podcast_play') total, SUM(event_name='podcast_complete') secondary", "CASE WHEN episode_title='' THEN 'Unknown episode' ELSE episode_title END", "event_name IN ('podcast_play','podcast_complete')", $days);
     foreach ($episodes as &$episode) $episode['rate'] = !empty($episode['total']) ? round(((int) $episode['secondary'] / (int) $episode['total']) * 100, 1) . '%' : '0%';
     unset($episode);
@@ -242,6 +267,7 @@ function mirrortalk_intelligence_snapshot($days = 30) {
         'audience_type' => mirrortalk_intelligence_group("IF(is_returning=1, 'Returning', 'New') label, COUNT(*) total", 'is_returning', "event_name='site_page_view'", $days),
         'geography' => mirrortalk_intelligence_group("CASE WHEN country='' THEN 'Unknown' ELSE country END label, COUNT(*) total", "CASE WHEN country='' THEN 'Unknown' ELSE country END", "event_name='site_page_view'", $days),
         'conversions' => mirrortalk_intelligence_group("event_name label, COUNT(*) total", 'event_name', "event_name IN ('newsletter_subscribed','contact_message_sent')", $days),
+        'composer_actions' => mirrortalk_intelligence_group("event_name label, COUNT(*) total", 'event_name', "event_name IN ('composer_outline_click','composer_cta_click')", $days),
         'broken' => mirrortalk_intelligence_group("CASE WHEN target='' THEN path ELSE target END label, COUNT(*) total, MAX(status) detail", "CASE WHEN target='' THEN path ELSE target END", "event_name='broken_link_seen'", $days),
         'vitals' => $vitals, 'search' => mirrortalk_intelligence_search_snapshot($days),
         'search_previous' => mirrortalk_intelligence_search_snapshot($days, true),
@@ -301,10 +327,11 @@ function mirrortalk_intelligence_admin_page() {
       <div class="mti-head"><div><p class="mti-kicker">MIRROR TALK</p><h1><?php esc_html_e('Intelligence', 'astra-child'); ?></h1><p><?php esc_html_e('Website, listening, discovery and performance signals—measured privately and interpreted together.', 'astra-child'); ?></p></div><div class="mti-actions"><form method="get"><input type="hidden" name="page" value="mirror-talk-intelligence"><label><?php esc_html_e('Period', 'astra-child'); ?> <select name="period" onchange="this.form.submit()"><?php foreach (array(7,30,90,365) as $period) echo '<option value="' . esc_attr($period) . '" ' . selected($days, $period, false) . '>' . esc_html($period . ' days') . '</option>'; ?></select></label></form><a class="button button-primary" href="<?php echo esc_url($export_url); ?>"><?php esc_html_e('Export complete CSV', 'astra-child'); ?></a></div></div>
       <div class="mti-notice"><strong><?php esc_html_e('Privacy-respecting by design.', 'astra-child'); ?></strong> <?php esc_html_e('Website analytics include only visitors who allowed insights. No raw IP addresses, private Ask Mirror Talk questions, reflection text or email addresses are stored here. Consented site-search terms are redacted for contact details before storage.', 'astra-child'); ?></div>
       <div class="mti-cards">
-      <?php foreach (array('page_views' => 'Page views', 'visitors' => 'Unique visitors', 'plays' => 'Podcast plays', 'completions' => 'Completions', 'conversions' => 'Conversions') as $key => $label) : ?><article><small><?php echo esc_html($label); ?></small><strong><?php echo esc_html(number_format_i18n($data['totals'][$key])); ?></strong><span><?php echo esc_html(mirrortalk_intelligence_change($data['totals'][$key], $data['previous'][$key])); ?> <?php esc_html_e('vs previous period', 'astra-child'); ?></span></article><?php endforeach; ?>
+      <?php foreach (array('page_views' => 'Page views', 'visitors' => 'Unique visitors', 'plays' => 'Podcast plays', 'completions' => 'Completions', 'conversions' => 'Conversions', 'composer_actions' => 'Composer engagement') as $key => $label) : ?><article><small><?php echo esc_html($label); ?></small><strong><?php echo esc_html(number_format_i18n($data['totals'][$key])); ?></strong><span><?php echo esc_html(mirrortalk_intelligence_change($data['totals'][$key], $data['previous'][$key])); ?> <?php esc_html_e('vs previous period', 'astra-child'); ?></span></article><?php endforeach; ?>
       <article><small><?php esc_html_e('Completion rate', 'astra-child'); ?></small><strong><?php echo esc_html($data['totals']['plays'] ? round($data['totals']['completions'] / $data['totals']['plays'] * 100, 1) : 0); ?>%</strong><span><?php esc_html_e('completed plays ÷ starts', 'astra-child'); ?></span></article></div>
-      <nav class="mti-tabs" aria-label="Dashboard sections"><a href="#overview">Overview</a><a href="#command-centre">Command centre</a><a href="#knowledge">Knowledge</a><a href="#quality">Quality</a><a href="#audience">Audience</a><a href="#podcast">Podcast</a><a href="#search">Search &amp; SEO</a><a href="#ai">AI visibility</a><a href="#performance">Performance</a><a href="#learning">SEO learning</a><a href="#reports">Reports</a><label>Filter tables <input type="search" data-mti-filter placeholder="Find a page, episode or source"></label></nav>
-      <section id="overview" class="mti-panel"><header><div><p class="mti-kicker">OVERVIEW</p><h2><?php esc_html_e('Audience movement', 'astra-child'); ?></h2></div></header><?php mirrortalk_intelligence_bar_chart($data['daily'], __('Daily page views', 'astra-child')); ?><div class="mti-grid"><div><h3><?php esc_html_e('Top pages', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['pages'], array('label' => 'Page', 'total' => 'Views', 'secondary' => 'Visitors')); ?></div><div><h3><?php esc_html_e('Journeys', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['journeys'], array('label' => 'Path transition', 'total' => 'Times')); ?></div></div></section>
+      <nav class="mti-tabs" aria-label="Dashboard sections"><a href="#overview">Overview</a><a href="#pipeline">System health</a><a href="#command-centre">Command centre</a><a href="#knowledge">Knowledge</a><a href="#quality">Quality</a><a href="#audience">Audience</a><a href="#podcast">Podcast</a><a href="#search">Search &amp; SEO</a><a href="#ai">AI visibility</a><a href="#performance">Performance</a><a href="#learning">SEO learning</a><a href="#reports">Reports</a><label>Filter tables <input type="search" data-mti-filter placeholder="Find a page, episode or source"></label></nav>
+      <section id="overview" class="mti-panel"><header><div><p class="mti-kicker">OVERVIEW</p><h2><?php esc_html_e('Audience movement', 'astra-child'); ?></h2></div></header><?php mirrortalk_intelligence_bar_chart($data['daily'], __('Daily page views', 'astra-child')); ?><div class="mti-grid"><div><h3><?php esc_html_e('Top pages', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['pages'], array('label' => 'Page', 'total' => 'Views', 'secondary' => 'Visitors')); ?></div><div><h3><?php esc_html_e('Journeys', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['journeys'], array('label' => 'Path transition', 'total' => 'Times')); ?></div><div><h3><?php esc_html_e('Composer engagement', 'astra-child'); ?></h3><?php mirrortalk_intelligence_table_view($data['composer_actions'], array('label' => 'Action', 'total' => 'Times')); ?></div></div></section>
+      <?php if (function_exists('mirrortalk_pipeline_health_panel')) mirrortalk_pipeline_health_panel(); ?>
       <?php if (function_exists('mirrortalk_command_centre_panels')) mirrortalk_command_centre_panels($days); ?>
       <section id="audience" class="mti-panel"><header><div><p class="mti-kicker">ACQUISITION &amp; AUDIENCE</p><h2><?php esc_html_e('How people arrive', 'astra-child'); ?></h2></div></header><div class="mti-grid mti-grid--3"><div><h3>Referrers</h3><?php mirrortalk_intelligence_table_view($data['referrers'], array('label' => 'Source', 'total' => 'Visits')); ?></div><div><h3>Campaigns</h3><?php mirrortalk_intelligence_table_view($data['campaigns'], array('label' => 'Source / medium / campaign', 'total' => 'Visits')); ?></div><div><h3>Conversions</h3><?php mirrortalk_intelligence_table_view($data['conversions'], array('label' => 'Action', 'total' => 'Total')); ?></div><div><h3>Devices</h3><?php mirrortalk_intelligence_bar_chart($data['devices'], 'Device distribution'); ?></div><div><h3>New and returning</h3><?php mirrortalk_intelligence_bar_chart($data['audience_type'], 'New and returning page views'); ?></div><div><h3>Geography</h3><?php mirrortalk_intelligence_table_view($data['geography'], array('label' => 'Country', 'total' => 'Views')); ?><p class="description">Country appears only when the hosting/CDN request supplies a country code; Mirror Talk does not perform IP geolocation.</p></div></div></section>
       <section id="podcast" class="mti-panel"><header><div><p class="mti-kicker">PODCAST</p><h2><?php esc_html_e('Listening performance', 'astra-child'); ?></h2></div></header><?php mirrortalk_intelligence_table_view($data['episodes'], array('label' => 'Episode', 'total' => 'Plays', 'secondary' => 'Completions', 'rate' => 'Completion rate')); ?></section>
@@ -324,7 +351,7 @@ function mirrortalk_intelligence_export() {
     nocache_headers(); header('Content-Type: text/csv; charset=UTF-8'); header('Content-Disposition: attachment; filename="mirror-talk-intelligence-' . gmdate('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w'); fputcsv($out, array('Mirror Talk Intelligence', $days . ' days')); fputcsv($out, array());
     foreach ($data['totals'] as $key => $value) fputcsv($out, array('summary', $key, $value, $data['previous'][$key] ?? 0));
-    foreach (array('pages','referrers','campaigns','episodes','journeys','devices','audience_type','geography','conversions','vitals','broken') as $section) {
+    foreach (array('pages','referrers','campaigns','episodes','journeys','devices','audience_type','geography','conversions','composer_actions','vitals','broken') as $section) {
         fputcsv($out, array()); fputcsv($out, array(strtoupper($section)));
         if (!empty($data[$section])) { fputcsv($out, array_keys($data[$section][0])); foreach ($data[$section] as $row) fputcsv($out, $row); }
     }

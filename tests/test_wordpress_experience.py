@@ -467,7 +467,8 @@ def test_safe_seo_automation_repairs_only_high_confidence_internal_links():
     assert "mirrortalk_connector_host($url) !== mirrortalk_connector_host(home_url('/'))" in platform
     assert "mirrortalk_seo_repair_definitive_internal_links" in platform
     assert "wp_update_post" in platform and "mirrortalk_link_repair_log" in platform
-    assert "existing_redirect_or_old_slug" in platform
+    assert "verified_replacement" in platform
+    assert "repeated_external_failure_unlinked" in platform
 
 
 def test_visibility_automation_covers_pages_preserves_manual_control_and_is_auditable():
@@ -731,7 +732,45 @@ def test_first_party_contact_form_replaces_plugin_form_and_is_protected():
     assert "wp_mail" in php
     assert "srfm-form-submit" in php
     assert "data-mt-contact-form" in php
-    assert "contact_message_sent" in js
+    dashboard = (THEME_DIR / "inc" / "intelligence-dashboard.php").read_text()
+    assert "mirrortalk_intelligence_record_operational_event" in php
+    assert "contact_message_sent" in php and "contact_message_sent" in dashboard
+    assert "MirrorTalkTrack('contact_message_sent'" not in js
+
+
+def test_hardening_release_recovers_jobs_and_preserves_real_404s():
+    hardening = (THEME_DIR / "inc" / "production-hardening.php").read_text()
+    functions = (THEME_DIR / "functions.php").read_text()
+    assert "production-hardening.php" in functions
+    assert "action_scheduler_run_queue" in hardening
+    assert "mirrortalk_elementor_auto_batch" in hardening
+    assert "all-404-redirect-to-homepage" in hardening
+    assert "deactivate_plugins" in hardening
+    assert "wp_redirect(home_url" not in hardening
+
+
+def test_listening_and_conversion_measurement_is_complete_and_not_duplicated():
+    analytics = (THEME_DIR / "intelligence.js").read_text()
+    player = (THEME_DIR / "listen-connect.js").read_text()
+    story = (THEME_DIR / "editorial-story-studio.js").read_text()
+    newsletter = (THEME_DIR / "inc" / "listen-and-connect.php").read_text()
+    assert "aggregateEvents" in analytics and "podcast_play" in analytics
+    assert "podcast_progress" in analytics and "podcast_complete" in analytics
+    assert "document.querySelectorAll('audio').forEach(instrumentAudio)" in analytics
+    assert "[data-mt-audio],[data-mt-story-audio]" in analytics
+    assert "percent >= 95" in player and ">= 0.95" in story
+    assert "mirrortalk_intelligence_record_operational_event('newsletter_subscribed'" in newsletter
+    assert "MirrorTalkTrack('newsletter_subscribed'" not in (THEME_DIR / "listen-connect.js").read_text()
+
+
+def test_campaign_links_and_source_hygiene_are_guarded():
+    hardening = (THEME_DIR / "inc" / "production-hardening.php").read_text()
+    platforms = (THEME_DIR / "inc" / "listen-everywhere.php").read_text()
+    assert "utm_source" in hardening and "utm_campaign" in hardening
+    assert "mirrortalk_campaign_url" in platforms
+    assert "_mirrortalk_source_hygiene_snapshot_v1" in hardening
+    assert "'_elementor_data', 'compare' => 'NOT EXISTS'" in hardening
+    assert "title=\"" in hardening and "<h2$1>" in hardening
 
 
 def test_ai_source_discovery_is_explicit_and_collision_proof():
@@ -945,7 +984,7 @@ def test_light_premium_surfaces_have_explicit_readable_text_colors():
 def test_editorial_composer_uses_complete_semantic_phrases():
     composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
 
-    assert "MIRRORTALK_COMPOSER_V2_VERSION', '2.1.1'" in composer
+    assert "MIRRORTALK_COMPOSER_V2_VERSION', '2.2.0'" in composer
     assert "mirrortalk_composer_v2_focus_phrase" in composer
     assert "array_key_first($term_scores)" not in composer
     assert "preg_split('/\\s*:\\s*/u',$title,2" in composer
@@ -971,6 +1010,37 @@ def test_editorial_composer_has_governed_corrections_and_audit_ledger():
     assert "$decisions[$key]=$merged" in composer
     assert "is_array($result['topic']??null)" in composer
     assert "$topic_result['keyword']" in composer
+
+
+def test_story_studio_assets_are_not_gated_by_loop_state():
+    studio = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+
+    enqueue = studio.split("add_action('wp_enqueue_scripts'", 1)[1]
+    assert "mirrortalk_story_studio_should_enqueue" in enqueue
+    assert "mirrortalk_composer_v2_should_render(get_queried_object_id())" not in enqueue
+    assert "in_the_loop()" not in enqueue
+    assert "wp_enqueue_script('mirror-talk-story-studio'" in enqueue
+
+
+def test_story_studio_deduplicates_legacy_modules_and_utility_outline_items():
+    studio = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+    composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    quality = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+
+    assert "$plan = mirrortalk_story_studio_plan($post_id);" in studio
+    assert "!empty($plan['show_follow'])" in studio
+    assert "array('share this','like this')" in composer
+    assert "if (!empty($composer)) $related = array();" in quality
+
+
+def test_release_guardian_probes_composer_runtime_and_prunes_stale_links():
+    quality = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+    seo = (THEME_DIR / "inc" / "seo-platform.php").read_text()
+
+    assert "Story Studio interaction runtime" in quality
+    assert "editorial-story-studio.js" in quality
+    assert "Composer document runtime" in quality
+    assert "$results = array_intersect_key($results, $links);" in seo
 
 
 def test_frontend_performance_work_never_blocks_reader_requests():

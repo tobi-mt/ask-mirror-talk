@@ -1997,6 +1997,12 @@ body:has(.mt-topic-hub) .site-content > .ast-container > h1:first-child { displa
 .mt-composer-lead__context { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; font-family: var(--mt-body); }
 .mt-composer-lead__context span { padding: 6px 10px; border: 1px solid rgba(244,201,103,.24); border-radius: 999px; color: #f4c967; font-size: .66rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
 .mt-composer-lead > p { margin: 0 !important; color: #f4edf3 !important; font-size: clamp(1.16rem,2.4vw,1.42rem); line-height: 1.68; }
+.mt-composer-outline { margin: 0 0 clamp(34px,5vw,58px); padding: 18px clamp(18px,3vw,28px); border-left: 2px solid #f4c967; background: rgba(255,255,255,.025); }
+.mt-composer-outline > strong { display: block; margin-bottom: 10px; color: #fffaf3; font-family: var(--mt-body); font-size: .72rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.mt-composer-outline ol { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px 28px; margin: 0; padding-left: 1.25rem; }
+.mt-composer-outline li { color: #f4c967; }
+.mt-composer-outline a { color: #ddd3de; line-height: 1.45; text-decoration-color: rgba(244,201,103,.35); text-underline-offset: .2em; }
+.mt-composer-outline a:hover,.mt-composer-outline a:focus-visible { color: #fffaf3; text-decoration-color: #f4c967; }
 .mt-composer-section { position: relative; margin-top: clamp(54px,8vw,86px) !important; padding-top: 24px; }
 .mt-composer-section::before { position: absolute; top: 0; left: 0; width: 54px; height: 2px; background: linear-gradient(90deg,var(--mt-coral-dark),var(--mt-gold)); content: ''; }
 .mt-composer-takeaways { margin: 0 0 clamp(38px,6vw,68px); }
@@ -2007,7 +2013,7 @@ body:has(.mt-topic-hub) .site-content > .ast-container > h1:first-child { displa
 .mt-composer-links a { display: flex; min-height: 150px; padding: 20px; border: 1px solid rgba(248,242,233,.15); border-radius: 18px; flex-direction: column; justify-content: space-between; color: #fffaf3; background: rgba(255,255,255,.035); text-decoration: none; transition: border-color .18s ease,transform .18s ease; }
 .mt-composer-links a:hover,.mt-composer-links a:focus-visible { border-color: rgba(244,201,103,.55); transform: translateY(-2px); }
 .mt-composer-links a span { margin-top: 20px; color: #f4c967; font-family: var(--mt-body); font-size: .75rem; font-weight: 750; }
-@media(max-width:760px){.mt-composer-links>div{grid-template-columns:1fr}.mt-composer-links a{min-height:112px}.mt-composer-lead{padding:20px 18px}}
+@media(max-width:760px){.mt-composer-links>div,.mt-composer-outline ol{grid-template-columns:1fr}.mt-composer-links a{min-height:112px}.mt-composer-lead{padding:20px 18px}.mt-composer-outline{padding:16px 16px 16px 18px}}
 
 /* Trust pages: calm, factual documents with no article-composer ornamentation. */
 .mt-page--trust {

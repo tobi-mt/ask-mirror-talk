@@ -188,8 +188,8 @@ function mirrortalk_render_invitation_dialogs() {
         <h2 id="mt-follow-dialog-title"><?php esc_html_e('Never miss a meaningful conversation.', 'astra-child'); ?></h2>
         <?php if (function_exists('mirrortalk_render_platform_cards')) mirrortalk_render_platform_cards('dialog'); ?>
         <div class="mt-follow-community" aria-label="<?php esc_attr_e('Community and supporter channels', 'astra-child'); ?>">
-            <a href="https://whatsapp.com/channel/0029VaEER5vC1Fu8V82fFm0u" target="_blank" rel="noopener"><?php esc_html_e('Join the WhatsApp channel', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
-            <a href="https://www.patreon.com/MirrorTalk" target="_blank" rel="noopener"><?php esc_html_e('Support Mirror Talk on Patreon', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
+            <a href="<?php echo esc_url(mirrortalk_campaign_url('https://whatsapp.com/channel/0029VaEER5vC1Fu8V82fFm0u', 'community_cta', 'whatsapp')); ?>" target="_blank" rel="noopener"><?php esc_html_e('Join the WhatsApp channel', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
+            <a href="<?php echo esc_url(mirrortalk_campaign_url('https://www.patreon.com/MirrorTalk', 'community_cta', 'patreon')); ?>" target="_blank" rel="noopener"><?php esc_html_e('Support Mirror Talk on Patreon', 'astra-child'); ?> <span aria-hidden="true">↗</span></a>
         </div>
         <p><a href="<?php echo esc_url(home_url('/listen/')); ?>"><?php esc_html_e('View every verified listening option', 'astra-child'); ?> →</a></p>
     </dialog>
@@ -278,6 +278,7 @@ function mirrortalk_newsletter_signup() {
         update_post_meta($subscriber_id, '_mt_subscriber_email', strtolower($email));
         update_post_meta($subscriber_id, '_mt_subscriber_consent_at', gmdate('c'));
         update_post_meta($subscriber_id, '_mt_subscriber_source', 'website_modal');
+        update_post_meta($subscriber_id, '_mt_subscriber_source_path', wp_parse_url((string) wp_get_referer(), PHP_URL_PATH) ?: '/');
     } else {
         $subscriber_id = $existing[0];
     }
@@ -304,6 +305,11 @@ function mirrortalk_confirm_newsletter() {
     update_post_meta($subscriber_id, '_mt_subscriber_confirmed_at', gmdate('c'));
     delete_post_meta($subscriber_id, '_mt_subscriber_confirmation_hash');
     delete_post_meta($subscriber_id, '_mt_subscriber_confirmation_expires');
+    if (function_exists('mirrortalk_intelligence_record_operational_event')) {
+        mirrortalk_intelligence_record_operational_event('newsletter_subscribed', array(
+            'path' => (string) get_post_meta($subscriber_id, '_mt_subscriber_source_path', true) ?: '/',
+        ));
+    }
     $name = get_the_title($subscriber_id); $email = get_post_meta($subscriber_id, '_mt_subscriber_email', true);
     wp_mail(get_option('admin_email'), __('Confirmed Mirror Talk newsletter subscriber', 'astra-child'), sprintf("Name: %s\nEmail: %s", $name, $email));
     wp_safe_redirect(add_query_arg('newsletter', 'confirmed', home_url('/'))); exit;

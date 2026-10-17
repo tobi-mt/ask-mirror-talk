@@ -13,7 +13,7 @@ THEME = ROOT / "wordpress" / "astra-child"
 
 def local_checks():
     failures = []
-    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/editorial-composer.php"]
+    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/intelligence-pipeline.php", "inc/editorial-composer.php"]
     for name in required:
         if not (THEME / name).exists():
             failures.append(f"missing {name}")
@@ -27,11 +27,14 @@ def local_checks():
         "44px controls": "min-block-size: 44px" in css,
         "semantic main": '<main id="primary"' in single,
         "knowledge engine loaded": "inc/knowledge-quality.php" in functions,
+        "resilient intelligence pipeline loaded": "inc/intelligence-pipeline.php" in functions,
         "editorial composer loaded": "inc/editorial-composer.php" in functions,
         "citation brief rendered": "mirrortalk_render_citation_brief" in single,
         "listen route loaded": "inc/listen-everywhere.php" in functions,
         "listen route canonical": "mirror_listen" in (THEME / "inc" / "intelligence-seo.php").read_text(),
         "unverified platforms hidden": "'enabled'=>0" in (THEME / "inc" / "listen-everywhere.php").read_text(),
+        "pipeline stages isolated": all(marker in (THEME / "inc" / "intelligence-pipeline.php").read_text() for marker in ("intelligence_quality_stage", "intelligence_recommendations_stage", "intelligence_knowledge_stage")),
+        "pipeline watchdog enabled": "mirrortalk_pipeline_watchdog" in (THEME / "inc" / "intelligence-pipeline.php").read_text(),
     }
     failures.extend(label for label, passed in expectations.items() if not passed)
     return failures

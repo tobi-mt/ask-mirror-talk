@@ -127,6 +127,7 @@ add_action('after_setup_theme', 'mirrortalk_theme_setup');
  */
 require_once get_stylesheet_directory() . '/ask-mirror-talk.php';
 require_once get_stylesheet_directory() . '/inc/runtime-resilience.php';
+require_once get_stylesheet_directory() . '/inc/production-hardening.php';
 require_once get_stylesheet_directory() . '/inc/journey.php';
 require_once get_stylesheet_directory() . '/inc/listen-and-connect.php';
 require_once get_stylesheet_directory() . '/inc/listen-everywhere.php';
@@ -138,6 +139,7 @@ require_once get_stylesheet_directory() . '/inc/ai-visibility.php';
 require_once get_stylesheet_directory() . '/inc/intelligence-dashboard.php';
 require_once get_stylesheet_directory() . '/inc/seo-learning.php';
 require_once get_stylesheet_directory() . '/inc/knowledge-quality.php';
+require_once get_stylesheet_directory() . '/inc/intelligence-pipeline.php';
 require_once get_stylesheet_directory() . '/inc/editorial-composer.php';
 require_once get_stylesheet_directory() . '/inc/editorial-composer-v2.php';
 require_once get_stylesheet_directory() . '/inc/guarded-taxonomy.php';

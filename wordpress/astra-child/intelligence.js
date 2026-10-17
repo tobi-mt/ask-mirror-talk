@@ -14,9 +14,14 @@
       return value;
     } catch (_) { return ''; }
   };
+  const aggregateEvents = new Set(['podcast_play', 'podcast_pause', 'podcast_progress', 'podcast_complete', 'episode_discovered']);
   const send = (eventName, metadata = {}) => {
-    if (consent() !== 'granted') return;
-    const body = JSON.stringify({ event_name: eventName, metadata: { ...metadata, device_id: deviceId() } });
+    const granted = consent() === 'granted';
+    if (!granted && !aggregateEvents.has(eventName)) return;
+    const safeMetadata = { ...metadata };
+    if (granted) safeMetadata.device_id = deviceId();
+    else delete safeMetadata.device_id;
+    const body = JSON.stringify({ event_name: eventName, metadata: safeMetadata });
     fetch(config.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
   };
   window.MirrorTalkTrack = send;
@@ -66,6 +71,40 @@
     setTimeout(() => send('site_engaged', { path: cleanPath(url) }), 30000);
   }
   if (consent() === 'granted') trackPageView();
+
+  // Provider-neutral coverage for legacy WordPress and migrated players.
+  // Owned Living Mirror players emit richer events and are excluded here.
+  const instrumentAudio = (audio) => {
+    if (!(audio instanceof HTMLMediaElement) || audio.matches('[data-mt-audio],[data-mt-story-audio]') || audio.dataset.mtIntelligenceBound) return;
+    audio.dataset.mtIntelligenceBound = '1';
+    const reported = new Set();
+    const label = () => String(
+      audio.dataset.episodeTitle ||
+      audio.closest('.mt-listen-page__player')?.querySelector('[data-mt-listen-page-title]')?.textContent ||
+      audio.closest('article,section')?.querySelector('[data-episode-title],h2,h3')?.textContent ||
+      audio.getAttribute('aria-label') ||
+      document.querySelector('h1')?.textContent ||
+      document.title
+    ).trim().slice(0, 500);
+    const progress = () => audio.duration > 0 ? Math.round(audio.currentTime / audio.duration * 100) : 0;
+    audio.addEventListener('play', () => send('podcast_play', { path: location.pathname, episode_title: label() }));
+    audio.addEventListener('timeupdate', () => {
+      const percent = progress();
+      [25, 50, 75].forEach((bucket) => {
+        if (percent >= bucket && !reported.has(bucket)) { reported.add(bucket); send('podcast_progress', { path: location.pathname, episode_title: label(), progress_bucket: bucket }); }
+      });
+      if (percent >= 95 && !reported.has(100)) { reported.add(100); send('podcast_complete', { path: location.pathname, episode_title: label(), progress_bucket: 100 }); }
+    });
+    audio.addEventListener('ended', () => {
+      if (!reported.has(100)) { reported.add(100); send('podcast_complete', { path: location.pathname, episode_title: label(), progress_bucket: 100 }); }
+    });
+  };
+  document.querySelectorAll('audio').forEach(instrumentAudio);
+  new MutationObserver((records) => records.forEach((record) => record.addedNodes.forEach((node) => {
+    if (!(node instanceof Element)) return;
+    if (node.matches('audio')) instrumentAudio(node);
+    node.querySelectorAll?.('audio').forEach(instrumentAudio);
+  }))).observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a[href]'); if (!link) return;

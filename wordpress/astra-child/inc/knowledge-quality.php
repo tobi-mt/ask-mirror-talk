@@ -157,6 +157,12 @@ function mirrortalk_render_citation_brief($post_id) {
     $profile = mirrortalk_knowledge_profile($post_id); if (!$profile) return;
     $related = mirrortalk_related_posts($post_id);
     $has_brief = $profile['questions'] || $profile['moments'] || $profile['quotes'] || $profile['sources'] || $profile['guest'];
+    $composer = (array) get_post_meta($post_id, '_mt_composer_v2_result', true);
+    $decisions = function_exists('mirrortalk_composer_v2_decisions') ? mirrortalk_composer_v2_decisions($post_id) : array();
+    // Composer already places contextual related reading inside the article.
+    // Do not repeat the same cards in the source guide; retain the guide only
+    // when it contains real citation material beyond a generated summary.
+    if (!empty($composer)) $related = array();
     if (!$has_brief && !$related) return;
     echo '<aside class="mt-citation-brief mt-reading__shell" aria-labelledby="mt-citation-title" data-mt-knowledge-post="' . esc_attr($post_id) . '"><p class="mt-section-kicker">' . esc_html__('Source guide', 'astra-child') . '</p><h2 id="mt-citation-title">' . esc_html__('Continue with confidence', 'astra-child') . '</h2>';
     if ($profile['summary']) echo '<p class="mt-citation-brief__summary">' . esc_html($profile['summary']) . '</p>';
@@ -200,7 +206,10 @@ function mirrortalk_command_post_metrics($post_id, $days = 30) {
 
 function mirrortalk_command_recommendations($days = 30, $force = false) {
     $cached = get_transient('mirrortalk_command_centre'); if (!$force && is_array($cached)) return $cached;
-    $posts = get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>120,'orderby'=>'modified','order'=>'DESC')); $queue = array();
+    // Keep the command-centre stage bounded on shared hosting. Fifty recently
+    // changed documents plus search-led candidates provide useful decisions
+    // without hundreds of repeated event/search queries in one cron request.
+    $posts = get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>50,'orderby'=>'modified','order'=>'DESC')); $queue = array();
     foreach ($posts as $post) {
         $m = mirrortalk_command_post_metrics($post->ID, $days); $analysis = function_exists('mirrortalk_seo_editorial_analysis') ? mirrortalk_seo_editorial_analysis($post) : array('score'=>0,'issues'=>array());
         $impressions = $m['google_impressions'] + $m['bing_impressions']; $clicks = $m['google_clicks'] + $m['bing_clicks']; $ctr = $impressions ? $clicks / $impressions : 0; $evidence = array(); $action = ''; $impact = 'Medium'; $score = 0;
@@ -226,7 +235,8 @@ function mirrortalk_command_recommendations($days = 30, $force = false) {
 
 function mirrortalk_quality_scan($force = false) {
     $cached = get_option('mirrortalk_quality_guardian', array()); if (!$force && !empty($cached['time']) && $cached['time'] > time()-12*HOUR_IN_SECONDS) return $cached;
-    $posts=get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>300)); $issues=array(); $inbound=array();
+    $posts=get_posts(array('post_type'=>array('post','page'),'post_status'=>'publish','numberposts'=>300)); $issues=array(); $inbound=array();$search_urls=array();
+    foreach((array)get_option('mirrortalk_search_performance',array()) as $search_row){$search_url=esc_url_raw($search_row['page']??'');if($search_url)$search_urls[untrailingslashit($search_url)]=true;}
     foreach($posts as $post) if(preg_match_all('/href=["\']([^"\']+)["\']/i',$post->post_content,$links)) foreach($links[1] as $link){$id=url_to_postid($link);if($id)$inbound[$id]=($inbound[$id]??0)+1;}
     foreach($posts as $post){$plain=trim(wp_strip_all_tags(strip_shortcodes($post->post_content))); $word_count=str_word_count($plain); $h1=preg_match_all('/<h1\b/i',$post->post_content); $images=preg_match_all('/<img\b/i',$post->post_content);
         if(!$images&&!has_post_thumbnail($post->ID))$issues[]=array('severity'=>'medium','type'=>'missing_visual','content'=>get_the_title($post),'detail'=>__('No featured or in-content image.','astra-child'),'post_id'=>$post->ID);
@@ -239,7 +249,8 @@ function mirrortalk_quality_scan($force = false) {
         if(preg_match('/<iframe\b(?![^>]*\btitle=)[^>]*>/i',$post->post_content))$issues[]=array('severity'=>'high','type'=>'accessibility','content'=>get_the_title($post),'detail'=>__('An embedded frame is missing an accessible title.','astra-child'),'post_id'=>$post->ID);
         if(preg_match('/<iframe[^>]+src=["\']http:\/\//i',$post->post_content))$issues[]=array('severity'=>'high','type'=>'broken_embed','content'=>get_the_title($post),'detail'=>__('An insecure embed may be blocked by modern browsers.','astra-child'),'post_id'=>$post->ID);
         $profile=mirrortalk_knowledge_profile($post->ID); if(!$profile||!wp_json_encode($profile))$issues[]=array('severity'=>'high','type'=>'invalid_schema','content'=>get_the_title($post),'detail'=>__('The citation profile could not be encoded safely.','astra-child'),'post_id'=>$post->ID);
-        if(function_exists('mirrortalk_learning_metrics')){$recent=mirrortalk_learning_metrics(get_permalink($post),gmdate('Y-m-d',strtotime('-17 days')),gmdate('Y-m-d',strtotime('-3 days')));$prior=mirrortalk_learning_metrics(get_permalink($post),gmdate('Y-m-d',strtotime('-31 days')),gmdate('Y-m-d',strtotime('-18 days')));if(($prior['impressions']??0)>=50&&($recent['impressions']??0)<$prior['impressions']*.7)$issues[]=array('severity'=>'medium','type'=>'declining_search','content'=>get_the_title($post),'detail'=>sprintf(__('Search impressions declined from %d to %d across comparable 14-day windows.','astra-child'),$prior['impressions'],$recent['impressions']),'post_id'=>$post->ID);}
+        $permalink=get_permalink($post);
+        if(function_exists('mirrortalk_learning_metrics')&&!empty($search_urls[untrailingslashit($permalink)])){$recent=mirrortalk_learning_metrics($permalink,gmdate('Y-m-d',strtotime('-17 days')),gmdate('Y-m-d',strtotime('-3 days')));$prior=mirrortalk_learning_metrics($permalink,gmdate('Y-m-d',strtotime('-31 days')),gmdate('Y-m-d',strtotime('-18 days')));if(($prior['impressions']??0)>=50&&($recent['impressions']??0)<$prior['impressions']*.7)$issues[]=array('severity'=>'medium','type'=>'declining_search','content'=>get_the_title($post),'detail'=>sprintf(__('Search impressions declined from %d to %d across comparable 14-day windows.','astra-child'),$prior['impressions'],$recent['impressions']),'post_id'=>$post->ID);}
     }
     foreach((array)get_option('mirrortalk_link_health',array()) as $row)if(function_exists('mirrortalk_seo_link_state')&&mirrortalk_seo_link_state($row)==='broken')$issues[]=array('severity'=>'high','type'=>'broken_link','content'=>$row['source']??'','detail'=>$row['url']??'','post_id'=>url_to_postid($row['source']??''));
     if(function_exists('mirrortalk_intelligence_table')){
@@ -259,7 +270,10 @@ function mirrortalk_quality_runtime_probe($force = false) {
         array('label'=>'Ask Mirror Talk','url'=>home_url('/ask-mirror-talk/'),'marker'=>'ask-mirror-talk'),
         array('label'=>'Contact form','url'=>home_url('/contact/'),'marker'=>'data-mt-contact-form'),
         array('label'=>'Release manifest','url'=>home_url('/mirror-talk-release.json'),'marker'=>'release'),
-    ); $checks=array();
+    );
+    $composed=get_posts(array('post_type'=>'post','post_status'=>'publish','numberposts'=>1,'orderby'=>'modified','order'=>'DESC','meta_key'=>'_mt_composer_v2_result'));
+    if($composed){$url=get_permalink($composed[0]);$targets[]=array('label'=>'Composer document runtime','url'=>$url,'marker'=>'data-composer-version');$targets[]=array('label'=>'Story Studio interaction runtime','url'=>$url,'marker'=>'editorial-story-studio.js');}
+    $checks=array();
     foreach($targets as $target){$response=wp_remote_get($target['url'],array('timeout'=>4,'redirection'=>2,'limit_response_size'=>1048576,'user-agent'=>'MirrorTalkQualityGuardian/1.0'));if(is_wp_error($response)){$checks[]=array('label'=>$target['label'],'state'=>'unverified','detail'=>$response->get_error_message());continue;}$code=(int)wp_remote_retrieve_response_code($response);$body=(string)wp_remote_retrieve_body($response);$ok=$code===200&&strpos($body,$target['marker'])!==false;$checks[]=array('label'=>$target['label'],'state'=>$ok?'healthy':'broken','detail'=>$ok?__('HTTP 200 and expected marker present.','astra-child'):sprintf(__('HTTP %d or expected component marker missing.','astra-child'),$code));}
     update_option('mirrortalk_quality_runtime',array('time'=>time(),'checks'=>$checks),false);return $checks;
 }
@@ -279,8 +293,17 @@ function mirrortalk_command_centre_panels($days) {
     echo '<section id="quality" class="mti-panel"><header><div><p class="mti-kicker">CONTINUOUS QUALITY GUARDIAN</p><h2>' . esc_html__('Editorial and technical release gate', 'astra-child') . '</h2><p>' . esc_html(sprintf(__('%1$d public documents checked. Showing the first %2$d of %3$d ranked issues. Last completed %4$s.','astra-child'),$quality['checked']??0,count($visible_issues),count((array)($quality['issues']??array())),wp_date('j M Y H:i',$quality['time']??time()))) . '</p></div></header>'; mirrortalk_intelligence_table_view($rows,array('severity'=>'Severity','type'=>'Check','content'=>'Content','detail'=>'Evidence')); echo '</section>';
 }
 
-add_action('mirrortalk_intelligence_artifacts_refresh',function(){mirrortalk_runtime_run('intelligence_refresh',function(){$quality=mirrortalk_quality_scan(true);$queue=mirrortalk_command_recommendations(30,true);$graph=mirrortalk_knowledge_graph();set_transient('mirrortalk_knowledge_graph_cache',$graph,12*HOUR_IN_SECONDS);return array('quality'=>$quality,'queue'=>$queue);},30*MINUTE_IN_SECONDS);});
-add_action('admin_post_mirrortalk_quality_run',function(){if(!current_user_can('manage_mirrortalk_seo'))wp_die(esc_html__('You cannot run this audit.','astra-child'));check_admin_referer('mirrortalk_quality_run');mirrortalk_runtime_queue('mirrortalk_intelligence_artifacts_refresh');wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence&mt_job=queued#command-centre'));exit;});
+add_action('mirrortalk_intelligence_artifacts_refresh',function(){
+    if(function_exists('mirrortalk_pipeline_request'))mirrortalk_pipeline_request('legacy-hook');
+});
+add_action('admin_post_mirrortalk_quality_run',function(){
+    if(!current_user_can('manage_mirrortalk_seo'))wp_die(esc_html__('You cannot run this audit.','astra-child'));
+    check_admin_referer('mirrortalk_quality_run');
+    if(function_exists('mirrortalk_pipeline_request'))mirrortalk_pipeline_request('administrator');
+    else mirrortalk_runtime_queue('mirrortalk_intelligence_artifacts_refresh');
+    if(function_exists('mirrortalk_runtime_request_dispatch'))mirrortalk_runtime_request_dispatch();
+    wp_safe_redirect(admin_url('admin.php?page=mirror-talk-intelligence&mt_job=queued#pipeline'));exit;
+});
 
 function mirrortalk_create_trust_pages() {
     if(get_option('mirrortalk_trust_pages_version')===MIRRORTALK_KNOWLEDGE_VERSION)return;

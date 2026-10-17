@@ -406,6 +406,15 @@ function mirrortalk_seo_link_state($row) {
 }
 
 function mirrortalk_seo_internal_repair_target($url) {
+    $normalized = untrailingslashit(strtolower((string) preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $url)));
+    $known = array(
+        'https://anchor.fm/mirrortalk' => home_url('/listen/'),
+        'https://anchor.fm/mirrortalk/subscribe' => home_url('/listen/'),
+        'https://www.patreon.com/mirrortalk' => mirrortalk_campaign_url('https://www.patreon.com/MirrorTalk', 'link_repair', 'patreon'),
+        'http://patreon.com/mirrortalk' => mirrortalk_campaign_url('https://www.patreon.com/MirrorTalk', 'link_repair', 'patreon'),
+        'http://youtube.com/channel/ucfj3nbfvyjhsegciiu52eew' => mirrortalk_campaign_url('https://www.youtube.com/channel/UCFj3nBFVYJhsEGciiu52eEw/', 'link_repair', 'youtube'),
+    );
+    if (isset($known[$normalized])) return esc_url_raw($known[$normalized]);
     if (mirrortalk_connector_host($url) !== mirrortalk_connector_host(home_url('/'))) return '';
     $path = '/' . ltrim((string) wp_parse_url($url, PHP_URL_PATH), '/');
     $rules = (array) get_option('mirrortalk_redirects', array());
@@ -422,18 +431,30 @@ function mirrortalk_seo_repair_definitive_internal_links(&$results) {
         if (mirrortalk_seo_link_state($row) !== 'broken') continue;
         $target = mirrortalk_seo_internal_repair_target($row['url'] ?? '');
         $source_id = url_to_postid($row['source'] ?? '');
-        if (!$target || !$source_id || $target === ($row['url'] ?? '')) continue;
+        if (!$source_id) continue;
         $post = get_post($source_id); if (!$post || $post->post_status !== 'publish') continue;
         $old = (string) $row['url']; $changed = 0;
-        $content = preg_replace_callback('/(<a\b[^>]*\bhref\s*=\s*["\'])([^"\']+)(["\'])/i', function ($match) use ($old, $target, &$changed) {
-            if (html_entity_decode($match[2], ENT_QUOTES, 'UTF-8') !== $old) return $match[0];
-            $changed++; return $match[1] . esc_url($target) . $match[3];
-        }, $post->post_content);
+        if ($target && $target !== $old) {
+            $content = preg_replace_callback('/(<a\b[^>]*\bhref\s*=\s*["\'])([^"\']+)(["\'])/i', function ($match) use ($old, $target, &$changed) {
+                if (html_entity_decode($match[2], ENT_QUOTES, 'UTF-8') !== $old) return $match[0];
+                $changed++; return $match[1] . esc_url($target) . $match[3];
+            }, $post->post_content);
+            $reason = 'verified_replacement';
+        } elseif ((int) ($row['failures'] ?? 0) >= 2 && mirrortalk_connector_host($old) !== mirrortalk_connector_host(home_url('/'))) {
+            // A repeatedly confirmed dead external destination has no safe URL
+            // replacement. Preserve its words and remove only the dead anchor.
+            $content = preg_replace_callback('/<a\b([^>]*)\bhref\s*=\s*["\']([^"\']+)["\']([^>]*)>(.*?)<\/a>/is', function ($match) use ($old, &$changed) {
+                if (html_entity_decode($match[2], ENT_QUOTES, 'UTF-8') !== $old) return $match[0];
+                $changed++; return $match[4];
+            }, $post->post_content);
+            $target = '';
+            $reason = 'repeated_external_failure_unlinked';
+        } else continue;
         if (!$changed || $content === $post->post_content) continue;
         $updated = wp_update_post(wp_slash(array('ID' => $source_id, 'post_content' => $content)), true);
         if (is_wp_error($updated)) continue;
         $row['state'] = 'repaired'; $row['replacement'] = esc_url_raw($target); $row['repaired'] = time();
-        $log[] = array('time' => time(), 'source_id' => $source_id, 'old' => $old, 'new' => esc_url_raw($target), 'reason' => 'existing_redirect_or_old_slug');
+        $log[] = array('time' => time(), 'source_id' => $source_id, 'old' => $old, 'new' => esc_url_raw($target), 'reason' => $reason);
         mirrortalk_indexnow_queue_url(get_permalink($source_id));
     }
     unset($row);
@@ -448,11 +469,17 @@ function mirrortalk_seo_crawl() {
     $keys = array_keys($links); $cursor = (int) get_option('mirrortalk_link_crawl_cursor', 0);
     if ($cursor >= count($keys)) $cursor = 0;
     $batch = array_slice($keys, $cursor, 8); $results = (array) get_option('mirrortalk_link_health', array());
+    // Remove historical observations for links that no longer exist in any
+    // public document. Without this intersection repaired/deleted anchors
+    // remain counted forever and make the dashboard's broken-link total grow.
+    $results = array_intersect_key($results, $links);
     foreach ($batch as $key) {
         $item = $links[$key];
         $response = wp_remote_head($item['url'], array('timeout' => 3, 'redirection' => 2, 'user-agent' => 'MirrorTalkSEO/1.0; ' . home_url('/')));
         $result = array('url' => esc_url_raw($item['url']), 'source' => $item['source'], 'status' => is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response), 'message' => is_wp_error($response) ? $response->get_error_message() : '', 'checked' => time());
         $result['state'] = mirrortalk_seo_link_state($result);
+        $previous = (array) ($results[$key] ?? array());
+        $result['failures'] = $result['state'] === 'broken' ? ((int) ($previous['failures'] ?? 0) + 1) : 0;
         $results[$key] = $result;
     }
     $next = $cursor + count($batch); update_option('mirrortalk_link_crawl_cursor', $next >= count($keys) ? 0 : $next, false);

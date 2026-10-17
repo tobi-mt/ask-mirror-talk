@@ -74,6 +74,11 @@ function mirrortalk_contact_submit() {
     $subject = sprintf(__('Mirror Talk contact: %1$s — %2$s', 'astra-child'), ucfirst($topic), $name);
     $body = sprintf("Name: %s\nEmail: %s\nTopic: %s\n\n%s\n\nSaved message: %s", $name, $email, $topic, $message, admin_url('post.php?post=' . $message_id . '&action=edit'));
     wp_mail(get_option('admin_email'), $subject, $body, array('Reply-To: ' . $name . ' <' . $email . '>'));
+    if (function_exists('mirrortalk_intelligence_record_operational_event')) {
+        mirrortalk_intelligence_record_operational_event('contact_message_sent', array(
+            'path' => wp_parse_url((string) wp_get_referer(), PHP_URL_PATH) ?: '/contact/',
+        ));
+    }
     mirrortalk_contact_generic_success();
 }
 add_action('wp_ajax_mirrortalk_contact_submit', 'mirrortalk_contact_submit');

@@ -31,7 +31,9 @@
       const audio = document.querySelector('[data-mt-listen-page-audio]');
       const title = document.querySelector('[data-mt-listen-page-title]');
       if (!audio) return;
-      audio.src = episode.dataset.audio; if (title) title.textContent = episode.dataset.title;
+      audio.src = episode.dataset.audio;
+      audio.dataset.episodeTitle = episode.dataset.title || '';
+      if (title) title.textContent = episode.dataset.title;
       document.querySelectorAll('[data-mt-listen-page-episode]').forEach((item) => item.classList.toggle('is-current', item === episode));
       audio.play().catch(() => {});
     }

@@ -25,7 +25,6 @@
       status.classList.toggle('is-success', Boolean(result?.success));
       if (result?.success) {
         form.reset();
-        if (window.MirrorTalkTrack) window.MirrorTalkTrack('contact_message_sent', { path: location.pathname });
       }
     } catch (_) {
       status.textContent = 'We could not send your message just now. Please try again.';

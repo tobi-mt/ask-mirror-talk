@@ -54,6 +54,20 @@ function mirrortalk_runtime_status($job) {
     return (array) get_option('mirrortalk_runtime_' . sanitize_key($job), array());
 }
 
+/** Dispatch queued work after the response; never make editors wait for it. */
+function mirrortalk_runtime_request_dispatch() {
+    $GLOBALS['mirrortalk_runtime_dispatch_requested'] = true;
+}
+
+add_action('shutdown', function () {
+    if (empty($GLOBALS['mirrortalk_runtime_dispatch_requested'])) return;
+    if (function_exists('spawn_cron')) { spawn_cron(time()); return; }
+    wp_remote_post(site_url('wp-cron.php?doing_wp_cron=' . rawurlencode(sprintf('%.22F', microtime(true)))), array(
+        'timeout' => 0.01, 'blocking' => false,
+        'sslverify' => apply_filters('https_local_ssl_verify', false),
+    ));
+}, 1000);
+
 add_action('admin_notices', function () {
     if (!current_user_can('manage_options') || strpos(sanitize_key($_GET['page'] ?? ''), 'mirror-talk') !== 0) return;
     if (defined('DISABLE_WP_CRON') && DISABLE_WP_CRON) echo '<div class="notice notice-warning"><p><strong>'.esc_html__('Background processing requires the host cron.','astra-child').'</strong> '.esc_html__('WP-Cron is disabled; confirm that the hosting control panel calls wp-cron.php at least every five minutes.','astra-child').'</p></div>';

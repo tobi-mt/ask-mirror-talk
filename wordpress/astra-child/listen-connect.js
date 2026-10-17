@@ -52,7 +52,6 @@
       status.classList.toggle('is-success', Boolean(result.success));
       if (result.success) {
         newsletterForm.reset();
-        if (window.MirrorTalkTrack) window.MirrorTalkTrack('newsletter_subscribed', { path: location.pathname });
       }
     } catch (_) {
       status.textContent = 'We could not complete your subscription just now. Please try again.';
@@ -94,6 +93,7 @@
     let activeChapterIndex = -1;
     let reflectionState = null;
     let resumeAfterReflection = false;
+    let completionReported = false;
     const report = (name, metadata = {}) => window.dispatchEvent(new CustomEvent('mt:intelligence-event', {
       detail: { name, metadata: { episode_title: title.textContent.trim(), ...metadata } }
     }));
@@ -211,6 +211,7 @@
         audio.src = episode.dataset.audio;
         title.textContent = episode.dataset.title;
         progressReported = new Set();
+        completionReported = false;
         loadLivingData(episode);
         report('episode_discovered', { episode_id: episode.dataset.episodeId || '' });
         if ('mediaSession' in navigator) {
@@ -388,6 +389,7 @@
       [25, 50, 75].forEach((bucket) => {
         if (percent >= bucket && !progressReported.has(bucket)) { progressReported.add(bucket); report('podcast_progress', { progress_bucket: bucket }); }
       });
+      if (percent >= 95 && !completionReported) { completionReported = true; report('podcast_complete', { progress_bucket: 100 }); }
       const cueIndex = transcriptCues.findIndex((cue) => audio.currentTime >= cue.start && audio.currentTime < cue.end);
       if (cueIndex !== activeCueIndex) {
         const previousCue = transcriptRoot.querySelector('.is-active');
@@ -403,7 +405,7 @@
         activeChapterIndex = chapterIndex;
       }
     });
-    audio.addEventListener('ended', () => report('podcast_complete', { progress_bucket: 100 }));
+    audio.addEventListener('ended', () => { if (!completionReported) { completionReported = true; report('podcast_complete', { progress_bucket: 100 }); } });
     if ('mediaSession' in navigator && typeof navigator.mediaSession.setActionHandler === 'function') {
       try {
         navigator.mediaSession.setActionHandler('play', () => audio.play());

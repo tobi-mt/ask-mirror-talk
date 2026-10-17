@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mirror Talk Composer 8.20 runtime fixture</title>
+  <link rel="stylesheet" href="../wordpress/astra-child/mirror-talk-site.css">
+  <style>body{margin:0;padding:32px;color:#f8f2e9;background:#0e0b12;font-family:Arial,sans-serif}.fixture{width:min(980px,100%);margin:auto}.fixture-log{position:fixed;right:12px;bottom:12px;z-index:20;max-width:min(460px,calc(100vw - 24px));padding:12px;border:1px solid #f4c967;border-radius:12px;background:#17111b;color:#fff}</style>
+</head>
+<body>
+<main class="fixture mt-reading__body">
+  <h1>Composer 8.20 runtime test</h1>
+  <div class="mt-composer-document" data-composer-version="2.2.0">
+    <section class="mt-composer-lead" aria-label="Editorial introduction"><div class="mt-composer-lead__context"><span>Episode</span><span>Purpose</span><span>6 min read</span></div><p>A representative server-rendered article used to verify the interaction layer.</p></section>
+    <nav class="mt-composer-outline" aria-label="On this page"><strong>On this page</strong><ol><li><a href="#first-section">First meaningful section</a></li><li><a href="#second-section">Second meaningful section</a></li></ol></nav>
+    <h2 id="first-section">First meaningful section</h2><p>This paragraph represents preserved editorial source material.</p>
+    <aside class="mt-story-video" data-mt-story-video data-video-id="mnIFsOg-Npg" aria-labelledby="fixture-video-title"><div class="mt-story-video__copy"><p class="mt-section-kicker">Watch and notice</p><h2 id="fixture-video-title">A Mirror Talk video reflection</h2><p>The video should load only after the visitor chooses it.</p></div><div class="mt-story-video__media"><button type="button" data-mt-story-video-play aria-label="Play the Mirror Talk video"><span aria-hidden="true">▶</span><strong>Play the video</strong><small>YouTube privacy-enhanced mode</small></button><div data-mt-story-video-frame></div></div></aside>
+    <h2 id="second-section">Second meaningful section</h2><p>The remaining source is unchanged.</p>
+    <aside class="mt-story-follow"><p class="mt-section-kicker">Keep the conversation close</p><h2>Listen your way</h2><div><a href="https://example.com/spotify">Spotify</a></div></aside>
+    <aside class="mt-story-newsletter"><div><h2>Let the reflection continue gently.</h2></div><button type="button" data-mt-open-dialog="mt-newsletter-invite">Join the newsletter</button></aside>
+  </div>
+</main>
+<output class="fixture-log" aria-live="polite">Runtime loaded; no event yet.</output>
+<script>document.addEventListener('mt:intelligence-event',event=>{document.querySelector('.fixture-log').textContent=event.detail.name+' · '+JSON.stringify(event.detail.metadata||{});});</script>
+<script src="../wordpress/astra-child/editorial-story-studio.js"></script>
+</body>
+</html>

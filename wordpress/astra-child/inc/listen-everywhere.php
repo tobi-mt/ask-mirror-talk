@@ -84,7 +84,8 @@ function mirrortalk_render_platform_cards($context = 'directory', $limit = 0) {
         if (!empty($platform['icon_url'])) echo '<span class="mt-listen-platform__mark"><img src="' . esc_url($platform['icon_url']) . '" alt="" loading="lazy" decoding="async"></span><div>';
         else echo '<span class="mt-listen-platform__mark" aria-hidden="true">' . esc_html(mirrortalk_listen_platform_badge($platform)) . '</span><div>';
         echo '<h3>' . esc_html($platform['name']) . '</h3><p>' . esc_html($platform['description'] ?: __('Choose this verified way to listen to Mirror Talk.', 'astra-child')) . '</p>';
-        echo '<div class="mt-listen-platform__actions"><a href="' . esc_url($platform['url']) . '" target="_blank" rel="noopener" data-mt-platform-link="' . esc_attr($id) . '">' . esc_html($is_rss ? __('Open RSS feed', 'astra-child') : sprintf(__('Listen on %s', 'astra-child'), $platform['name'])) . ' <span aria-hidden="true">↗</span></a>';
+        $destination = $is_rss ? $platform['url'] : mirrortalk_campaign_url($platform['url'], 'listen_directory', $id);
+        echo '<div class="mt-listen-platform__actions"><a href="' . esc_url($destination) . '" target="_blank" rel="noopener" data-mt-platform-link="' . esc_attr($id) . '">' . esc_html($is_rss ? __('Open RSS feed', 'astra-child') : sprintf(__('Listen on %s', 'astra-child'), $platform['name'])) . ' <span aria-hidden="true">↗</span></a>';
         if ($is_rss) echo '<button type="button" data-mt-copy-rss="' . esc_url($platform['url']) . '">' . esc_html__('Copy feed URL', 'astra-child') . '</button>';
         echo '</div></div></article>';
     }

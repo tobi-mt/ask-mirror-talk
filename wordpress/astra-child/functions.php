@@ -144,6 +144,8 @@ require_once get_stylesheet_directory() . '/inc/editorial-composer.php';
 require_once get_stylesheet_directory() . '/inc/editorial-composer-v2.php';
 require_once get_stylesheet_directory() . '/inc/guarded-taxonomy.php';
 require_once get_stylesheet_directory() . '/inc/editorial-story-studio.php';
+require_once get_stylesheet_directory() . '/inc/rss-editorial-ingestion.php';
+require_once get_stylesheet_directory() . '/inc/editorial-presentations.php';
 require_once get_stylesheet_directory() . '/inc/content-normalizer.php';
 require_once get_stylesheet_directory() . '/inc/elementor-migration.php';
 require_once get_stylesheet_directory() . '/inc/navigation.php';

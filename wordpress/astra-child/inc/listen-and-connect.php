@@ -38,7 +38,12 @@ function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
         'mirrortalk_podcast_feed_url',
         get_theme_mod('mirrortalk_podcast_feed_url', 'https://anchor.fm/s/261b1464/podcast/rss')
     );
+    // SimplePie has its own cache in addition to ours. Keep both layers short
+    // enough for a newly published episode to reach the player promptly.
+    $feed_cache_lifetime = function () { return 10 * MINUTE_IN_SECONDS; };
+    add_filter('wp_feed_cache_transient_lifetime', $feed_cache_lifetime, 99);
     $feed = fetch_feed($feed_url);
+    remove_filter('wp_feed_cache_transient_lifetime', $feed_cache_lifetime, 99);
     if (is_wp_error($feed)) {
         return is_array($last_good) ? array_slice($last_good, 0, $limit) : array();
     }
@@ -61,13 +66,22 @@ function mirrortalk_get_feed_episodes($limit = 8, $force_refresh = false) {
     }
 
     if (!empty($episodes)) {
-        set_transient('mirrortalk_feed_episodes_v2', $episodes, 6 * HOUR_IN_SECONDS);
+        set_transient('mirrortalk_feed_episodes_v2', $episodes, 15 * MINUTE_IN_SECONDS);
         update_option('mirrortalk_feed_episodes_last_good_v2', $episodes, false);
+        update_option('mirrortalk_feed_episodes_checked_at_v2', time(), false);
     }
     return $episodes;
 }
 
 add_action('mirrortalk_refresh_podcast_feed', function () {mirrortalk_runtime_run('podcast_feed',function(){return mirrortalk_get_feed_episodes(8,true);},10*MINUTE_IN_SECONDS);});
+
+add_filter('cron_schedules', function ($schedules) {
+    $schedules['mirrortalk_fifteen_minutes'] = array('interval'=>15*MINUTE_IN_SECONDS,'display'=>__('Every 15 minutes','astra-child'));
+    return $schedules;
+});
+add_action('init', function () {
+    if (!wp_next_scheduled('mirrortalk_refresh_podcast_feed')) wp_schedule_event(time()+60,'mirrortalk_fifteen_minutes','mirrortalk_refresh_podcast_feed');
+});
 
 function mirrortalk_render_listen_companion() {
     if (is_admin() || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }

@@ -22,7 +22,7 @@
       button.type = 'button';
       button.className = 'mt-legacy-video-facade__button';
       button.setAttribute('aria-label', 'Play this Mirror Talk video');
-      button.innerHTML = '<span aria-hidden="true">▶</span><strong>Play video</strong><small>YouTube privacy-enhanced mode</small>';
+      button.innerHTML = '<span aria-hidden="true">▶</span><strong>Play video</strong><small>Starts muted</small>';
       button.addEventListener('click', () => {
         const frame = document.createElement('iframe');
         frame.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`;

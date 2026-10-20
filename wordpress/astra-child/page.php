@@ -35,10 +35,12 @@ $is_trust_page = function_exists('mirrortalk_is_trust_page') && mirrortalk_is_tr
         </div>
     <?php else : ?>
     <?php $content_has_h1 = (bool) preg_match('/<h1\b/i', (string) get_post_field('post_content', get_the_ID())); ?>
-    <?php if (!$is_ask_page && ($is_contact_page || !$content_has_h1)) : ?>
-        <header class="mt-page__hero"><div class="mt-page__shell"><p class="mt-section-kicker"><?php esc_html_e('Mirror Talk', 'astra-child'); ?></p><h1><?php the_title(); ?></h1><?php if (has_excerpt()) : ?><p><?php echo esc_html(get_the_excerpt()); ?></p><?php endif; ?></div></header>
+    <?php $show_template_hero=!$is_ask_page&&($is_contact_page||!$content_has_h1); ?>
+    <?php if ($show_template_hero) : ?>
+        <header class="mt-page__hero"><div class="mt-page__shell"><p class="mt-section-kicker"><?php esc_html_e('Mirror Talk', 'astra-child'); ?></p><h1><?php the_title(); ?></h1><?php if (has_excerpt()) : ?><p><?php echo esc_html(get_the_excerpt()); ?></p><?php endif; ?><?php if(!$is_contact_page&&function_exists('mirrortalk_document_visual')): ?><figure class="mt-page__visual mt-document-visual"><?php echo mirrortalk_document_visual(get_the_ID(),'large',array('fetchpriority'=>'high')); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></figure><?php endif; ?></div></header>
     <?php endif; ?>
     <article <?php post_class('mt-page__body mt-page__shell entry-content mt-editorial-content'); ?>>
+        <?php if(!$show_template_hero&&!$is_ask_page&&function_exists('mirrortalk_document_visual')): ?><figure class="mt-page__visual mt-document-visual"><?php echo mirrortalk_document_visual(get_the_ID(),'large',array('fetchpriority'=>'high')); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></figure><?php endif; ?>
         <?php if ($is_ask_page && shortcode_exists('ask_mirror_talk')) : ?>
             <?php echo do_shortcode('[ask_mirror_talk]'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted shortcode renderer. ?>
         <?php elseif ($is_contact_page && function_exists('mirrortalk_render_contact_form')) : ?>

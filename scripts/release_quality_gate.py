@@ -13,7 +13,7 @@ THEME = ROOT / "wordpress" / "astra-child"
 
 def local_checks():
     failures = []
-    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/intelligence-pipeline.php", "inc/editorial-composer.php"]
+    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/intelligence-pipeline.php", "inc/editorial-composer.php", "inc/rss-editorial-ingestion.php", "inc/editorial-presentations.php"]
     for name in required:
         if not (THEME / name).exists():
             failures.append(f"missing {name}")
@@ -35,6 +35,23 @@ def local_checks():
         "unverified platforms hidden": "'enabled'=>0" in (THEME / "inc" / "listen-everywhere.php").read_text(),
         "pipeline stages isolated": all(marker in (THEME / "inc" / "intelligence-pipeline.php").read_text() for marker in ("intelligence_quality_stage", "intelligence_recommendations_stage", "intelligence_knowledge_stage")),
         "pipeline watchdog enabled": "mirrortalk_pipeline_watchdog" in (THEME / "inc" / "intelligence-pipeline.php").read_text(),
+        "RSS editorial pipeline loaded": "inc/rss-editorial-ingestion.php" in functions,
+        "RSS drafts stay unpublished": "'post_status'=>'draft'" in (THEME / "inc" / "rss-editorial-ingestion.php").read_text(),
+        "RSS background batches bounded": "MIRRORTALK_RSS_INGESTION_BATCH" in (THEME / "inc" / "rss-editorial-ingestion.php").read_text(),
+        "RSS source evidence protected": "editorial-review-required" in (THEME / "inc" / "rss-editorial-ingestion.php").read_text(),
+        "RSS workflow runs automatically": "mirrortalk_rss_ingestion_daily" in (THEME / "inc" / "rss-editorial-ingestion.php").read_text(),
+        "RSS publication has quality gate": "mirrortalk_rss_ingestion_publish_if_ready" in (THEME / "inc" / "rss-editorial-ingestion.php").read_text(),
+        "editorial presentations loaded": "inc/editorial-presentations.php" in functions,
+        "content-led archive profiles": "mirrortalk_editorial_profile" in (THEME / "inc" / "editorial-presentations.php").read_text(),
+        "cinematic major-conversation gate": "mirrortalk_is_major_conversation" in (THEME / "inc" / "editorial-presentations.php").read_text(),
+        "legacy semantic formatter loaded": "inc/content-normalizer.php" in functions,
+        "semantic headings repaired": "mirrortalk_semantic_heading_candidate" in (THEME / "inc" / "content-normalizer.php").read_text(),
+        "semantic lists repaired": "mirrortalk_semantic_repair_paragraph_runs" in (THEME / "inc" / "content-normalizer.php").read_text(),
+        "semantic chapters accessible": "mt-semantic-chapters" in css and "Episode chapters" in (THEME / "inc" / "content-normalizer.php").read_text(),
+        "semantic repair runs before composer": "'mirrortalk_normalize_editorial_content', 20" in (THEME / "inc" / "content-normalizer.php").read_text(),
+        "plain URLs are safely linkified": all(marker in (THEME / "inc" / "content-normalizer.php").read_text() for marker in ("mirrortalk_autolink_plain_urls", "wp_http_validate_url", "noopener noreferrer external", "mirrortalk_autolink_is_known_broken")),
+        "URL whitespace entities stay outside links": "(?:nbsp|#160|#x0*a0)" in (THEME / "inc" / "content-normalizer.php").read_text(),
+        "automatic links are reversible": "'automatic_links'" in (THEME / "inc" / "editorial-composer-v2.php").read_text(),
     }
     failures.extend(label for label, passed in expectations.items() if not passed)
     return failures

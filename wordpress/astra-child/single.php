@@ -16,8 +16,9 @@ get_header();
         number_format_i18n($reading_minutes)
     );
     ?>
-    <article <?php post_class('mt-reading__article'); ?>>
-        <header class="mt-reading__hero">
+    <?php $editorial_profile=function_exists('mirrortalk_editorial_profile')?mirrortalk_editorial_profile(get_the_ID()):'editorial';$major_conversation=function_exists('mirrortalk_is_major_conversation')&&mirrortalk_is_major_conversation(get_the_ID()); ?>
+    <article <?php post_class('mt-reading__article mt-reading__article--'.$editorial_profile.($major_conversation?' mt-reading__article--cinematic':'')); ?>>
+        <header class="mt-reading__hero<?php echo $major_conversation?' mt-reading__hero--cinematic':''; ?>">
             <div class="mt-reading__shell">
                 <a class="mt-reading__back" href="<?php echo esc_url(home_url('/blog/')); ?>">← <?php esc_html_e('All conversations', 'astra-child'); ?></a>
                 <p class="mt-section-kicker"><?php echo esc_html($section_label); ?></p>
@@ -27,9 +28,7 @@ get_header();
                     <span><?php echo esc_html($reading_label); ?></span>
                 </div>
             </div>
-            <?php if (has_post_thumbnail()) : ?>
-                <figure class="mt-reading__image"><?php the_post_thumbnail('full', array('fetchpriority' => 'high')); ?></figure>
-            <?php endif; ?>
+            <figure class="mt-reading__image mt-document-visual"><?php echo function_exists('mirrortalk_document_visual') ? mirrortalk_document_visual(get_the_ID(),'full',array('fetchpriority'=>'high')) : get_the_post_thumbnail(get_the_ID(),'full',array('fetchpriority'=>'high')); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></figure>
         </header>
         <div class="mt-reading__body mt-reading__shell entry-content mt-editorial-content">
             <?php the_content(); ?>

@@ -99,7 +99,22 @@ def test_legacy_editorial_content_is_normalized_without_rewriting_storage():
     css = (THEME_DIR / "mirror-talk-site.css").read_text()
 
     assert "inc/content-normalizer.php" in functions
-    assert "add_filter('the_content', 'mirrortalk_normalize_editorial_content', 30)" in normalizer
+    assert "add_filter('the_content', 'mirrortalk_normalize_editorial_content', 20)" in normalizer
+    assert "mirrortalk_semantic_repair_content" in normalizer
+    assert "mirrortalk_semantic_repair_paragraph_runs" in normalizer
+    assert "mirror-talk:preserve-format" in normalizer
+    assert "mirrortalk_autolink_plain_urls" in normalizer
+    assert "wp_html_split" in normalizer
+    assert "wp_http_validate_url" in normalizer
+    assert 'target="_blank" rel="noopener noreferrer external"' in normalizer
+    assert "mirrortalk_autolink_is_known_broken" in normalizer
+    assert "(?:nbsp|#160|#x0*a0)" in normalizer
+    assert ".mt-semantic-chapters" in css
+    assert ".mt-semantic-list" in css
+    assert ".mt-auto-link" in css
+    assert "mt-semantic-list-prose" in normalizer
+    assert "count($words) < 24" in normalizer
+    assert ".mt-semantic-list-prose" in css
     assert "mirror-talk:preserve-format" in normalizer
     assert "is_singular('post')" in normalizer
     assert "<h2$1>" in normalizer and "</h2>" in normalizer
@@ -144,6 +159,94 @@ def test_world_class_knowledge_and_quality_engine_is_integrated():
     assert "mirrortalk_seo_crawl" in engine and "mirrortalk_seo_repair_media" in engine
     assert "/editorial-standards/" in footer and "/corrections/" in footer
     assert "visible keyboard focus" in gate and "44px controls" in gate
+
+
+def test_rss_editorial_pipeline_is_bounded_review_first_and_reversible():
+    functions = (THEME_DIR / "functions.php").read_text()
+    pipeline = (THEME_DIR / "inc" / "rss-editorial-ingestion.php").read_text()
+    story = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+
+    assert "inc/rss-editorial-ingestion.php" in functions
+    assert "MIRRORTALK_RSS_INGESTION_BATCH" in pipeline
+    assert "mirrortalk_runtime_queue('mirrortalk_rss_ingestion_batch'" in pipeline
+    assert "'post_status'=>'draft'" in pipeline
+    assert "editorial-review-required" in pipeline
+    assert "mirrortalk_composer_v2_run($post_id, true)" in pipeline
+    assert "mirrortalk_rss_ingestion_match" in pipeline
+    assert "never publishes" in pipeline.lower()
+    assert "apply_filters('mirrortalk_story_studio_episode'" in story
+    assert "mirrortalk_rss_ingestion_daily" in pipeline
+    assert "wp_schedule_event" in pipeline and "'daily'" in pipeline
+    assert "mirrortalk_rss_ingestion_review" in pipeline
+    assert "mirrortalk_rss_ingestion_publish_if_ready" in pipeline
+    assert "source_identity_mismatch" in pipeline
+    assert "automatically-published" in pipeline
+
+
+def test_rss_pipeline_enriches_concise_sources_and_retries_owned_drafts_safely():
+    pipeline = (THEME_DIR / "inc" / "rss-editorial-ingestion.php").read_text()
+    studio = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+
+    assert "mirror-talk:rss-source-v2" in pipeline
+    assert "mirrortalk_rss_ingestion_note_insights" in pipeline
+    assert "mirrortalk_rss_ingestion_recompose_owned_draft" in pipeline
+    assert "_mt_rss_content_history" in pipeline
+    assert "_mt_rss_owned_content_hash" in pipeline
+    assert "source_notes_too_thin" not in pipeline
+    assert "primary_media_complete" in pipeline
+    assert "episode_player_not_ready" in pipeline
+    assert "video_companion_not_ready" in pipeline
+    assert "mirrortalk_rss_ingestion_enable_media" in pipeline
+    assert "mirrortalk_rss_ingestion_upgrade_reconcile" in pipeline
+    assert "podcast_audio" in pipeline and "youtube_mode" in pipeline
+    assert "mirrortalk_story_studio_ensure_post_media" in studio
+    assert "mirrortalk_story_media_backfill" in studio
+    assert "post_type='post'" in studio and "LIMIT 20" in studio
+
+
+def test_content_led_editorial_presentations_are_shared_and_responsive():
+    functions = (THEME_DIR / "functions.php").read_text()
+    presentations = (THEME_DIR / "inc" / "editorial-presentations.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+    single = (THEME_DIR / "single.php").read_text()
+    archive_templates = "\n".join((THEME_DIR / name).read_text() for name in ("home.php", "archive.php", "category.php", "topic.php", "search.php"))
+
+    assert "inc/editorial-presentations.php" in functions
+    for profile in ("compact", "editorial", "deep-dive"):
+        assert profile in presentations
+    assert "mirrortalk_is_major_conversation" in presentations
+    assert "'lead'" in presentations and "'supporting'" in presentations
+    assert "is_sticky" in presentations and "_mt_featured_conversation" in presentations
+    assert "mirrortalk_render_editorial_card" in archive_templates
+    assert "mt-reading__hero--cinematic" in single
+    assert ".mt-editorial-card--cinematic" in css
+    assert ".mt-editorial-card--deep-dive" in css
+    assert ".mt-editorial-card--lead" in css and ".mt-editorial-card--supporting" in css
+    assert "@media(max-width:700px)" in css
+    assert "prefers-reduced-motion:reduce" in css
+
+
+def test_story_video_uses_shared_consent_and_mobile_safe_muted_autoplay():
+    script = (THEME_DIR / "editorial-story-studio.js").read_text()
+    studio = (THEME_DIR / "inc" / "editorial-story-studio.php").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "mt_external_media_consent_v1" in script
+    assert "IntersectionObserver" in script
+    assert "mute: '1'" in script
+    assert "playsinline: '1'" in script
+    assert "iframe.allow = 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share'" in script
+    assert "button.hidden = true" in script
+    assert "button[hidden]{display:none!important}" in css
+    assert "Play video" in studio
+    assert "Allow privacy-enhanced YouTube once" not in studio
+    assert "mirrortalk_latest_youtube_video" in studio
+    assert "mirror_talk_video" in studio
+    assert "MIRRORTALK_STORY_STUDIO_VERSION', '1.2.0'" in studio
+    assert "if(get_post_type($post_id)==='post')$settings['enabled']='1'" in studio
+    assert "$reflection=strpos($content,'<aside class=\"mt-reflection-bridge\"')" in studio
+    assert "$content=$reflection===false?$content.$video" in studio
+    assert "Starts muted" in studio
 
 
 def test_intelligence_collects_redacted_internal_search_without_private_reflections():
@@ -488,7 +591,7 @@ def test_standard_pages_do_not_render_duplicate_h1_when_content_has_own_hero():
     page = (THEME_DIR / "page.php").read_text()
     assert "$content_has_h1" in page
     assert "preg_match('/<h1\\b/i'" in page
-    assert "!$is_ask_page && ($is_contact_page || !$content_has_h1)" in page
+    assert "$show_template_hero=!$is_ask_page&&($is_contact_page||!$content_has_h1)" in page
 
 
 def test_mobile_ask_dock_yields_to_expanded_living_mirror_player():
@@ -983,13 +1086,42 @@ def test_light_premium_surfaces_have_explicit_readable_text_colors():
 
 def test_editorial_composer_uses_complete_semantic_phrases():
     composer = (THEME_DIR / "inc" / "editorial-composer-v2.php").read_text()
+    normalizer = (THEME_DIR / "inc" / "content-normalizer.php").read_text()
 
-    assert "MIRRORTALK_COMPOSER_V2_VERSION', '2.2.0'" in composer
+    assert "MIRRORTALK_COMPOSER_V2_VERSION', '2.7.0'" in composer
+    assert "'semantic_formatting'" in composer
+    assert "'automatic_links'" in composer
     assert "mirrortalk_composer_v2_focus_phrase" in composer
     assert "array_key_first($term_scores)" not in composer
     assert "preg_split('/\\s*:\\s*/u',$title,2" in composer
     assert "$item = trim($sentence);" in composer
     assert "wp_trim_words($sentence, 18" not in composer
+    assert "mirrortalk_composer_v2_hook" in composer
+    assert "mirrortalk_composer_v2_similarity" in composer
+    assert "count($unique)>=2?$unique:array()" in composer
+    assert "mt-composer-lead__eyebrow" in composer
+    assert "mirrortalk_prepare_existing_editorial_links" in normalizer
+
+
+def test_elementor_migration_is_staged_verified_resumable_and_reversible():
+    migration = (THEME_DIR / "inc" / "elementor-migration.php").read_text()
+
+    assert "MIRRORTALK_ELEMENTOR_MIGRATION_VERSION = '2.0.2'" in migration
+    assert "strpos($template,'elementor_')===0" in migration
+    assert "mirrortalk_elementor_restore($post_id,true);mirrortalk_elementor_fail_stage" in migration
+    assert "mirrortalk_elementor_prepare_candidate" in migration
+    assert "mirrortalk_elementor_render_validation" in migration
+    assert "array('desktop','mobile')" in migration
+    assert "mirrortalk_elementor_process_stage" in migration
+    assert "mirrortalk_elementor_fail_stage" in migration
+    assert "'quarantined'" in migration
+    assert "mirrortalk_elementor_recover_documents" in migration
+    assert "_mirrortalk_elementor_snapshot" in migration
+    assert "mirrortalk_elementor_restore" in migration
+    assert "Complete migration audit log" in migration
+    assert "Exact queue and failure state" in migration
+    assert "Ignored stale metadata" in migration
+    assert "update_post_meta($post_id,'_mirrortalk_elementor_migrated'" in migration
 
 
 def test_editorial_composer_has_governed_corrections_and_audit_ledger():

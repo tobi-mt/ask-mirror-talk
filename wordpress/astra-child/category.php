@@ -54,21 +54,7 @@ $ask_url = mirrortalk_build_ask_url(
 
         <?php if (have_posts()) : ?>
             <div class="mt-topic-hub__grid">
-                <?php while (have_posts()) : the_post(); ?>
-                    <article <?php post_class('mt-card mt-topic-card'); ?>>
-                        <a class="mt-episode-card" href="<?php the_permalink(); ?>">
-                            <?php if (has_post_thumbnail()) : ?>
-                                <?php the_post_thumbnail('large', array('class' => 'mt-episode-card__image', 'loading' => 'lazy')); ?>
-                            <?php else : ?>
-                                <span class="mt-episode-card__image" aria-hidden="true"></span>
-                            <?php endif; ?>
-                            <p class="mt-topic-card__date"><?php echo esc_html(get_the_date()); ?></p>
-                            <h3><?php the_title(); ?></h3>
-                            <p><?php echo esc_html(wp_trim_words(get_the_excerpt(), 28)); ?></p>
-                            <span class="mt-episode-card__meta"><?php esc_html_e('Open conversation', 'astra-child'); ?></span>
-                        </a>
-                    </article>
-                <?php endwhile; ?>
+                <?php $mt_card_index=0;while (have_posts()) : the_post();mirrortalk_render_editorial_card(get_the_ID(),$mt_card_index++,'h3');endwhile; ?>
             </div>
             <nav class="mt-topic-hub__pagination" aria-label="<?php esc_attr_e('Topic pages', 'astra-child'); ?>">
                 <?php the_posts_pagination(array('mid_size' => 1)); ?>

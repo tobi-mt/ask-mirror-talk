@@ -141,13 +141,7 @@ function mirrortalk_canonical_url() {
 }
 
 function mirrortalk_social_image($post_id = 0) {
-    $fallback = array(
-        'url' => get_stylesheet_directory_uri() . '/assets/art/mirror-talk-hero-atmosphere-1600.jpg',
-        'width' => 1600,
-        'height' => 900,
-        'alt' => __('Mirror Talk: Soulful Conversations', 'astra-child'),
-        'mime' => 'image/jpeg',
-    );
+    $fallback = mirrortalk_fallback_visual($post_id);
     if (!$post_id) return $fallback;
     $attachment_id = get_post_thumbnail_id($post_id);
     if (!$attachment_id) return $fallback;
@@ -161,6 +155,31 @@ function mirrortalk_social_image($post_id = 0) {
         'alt' => $alt ?: get_the_title($post_id),
         'mime' => get_post_mime_type($attachment_id) ?: 'image/jpeg',
     );
+}
+
+/** Stable, varied brand art for documents without an editor-supplied image. */
+function mirrortalk_fallback_visual($post_id = 0) {
+    $choices = array(
+        array('file'=>'mirror-talk-hero-atmosphere-1600.jpg','width'=>1600,'height'=>900),
+        array('file'=>'topic-journey-atmosphere-1800.jpg','width'=>1800,'height'=>1200),
+        array('file'=>'ask-reflection-atmosphere-1600.jpg','width'=>1600,'height'=>900),
+    );
+    $seed = $post_id ? (string)get_post_field('post_name',$post_id) : 'mirror-talk';
+    $choice = $choices[abs(crc32($seed)) % count($choices)];
+    return array(
+        'url'=>get_stylesheet_directory_uri().'/assets/art/'.$choice['file'],
+        'width'=>$choice['width'],'height'=>$choice['height'],
+        'alt'=>$post_id ? sprintf(__('Atmospheric artwork for %s','astra-child'),get_the_title($post_id)) : __('Mirror Talk: Soulful Conversations','astra-child'),
+        'mime'=>'image/jpeg','fallback'=>true,
+    );
+}
+
+function mirrortalk_document_visual($post_id, $size='full', $attributes=array()) {
+    if (has_post_thumbnail($post_id)) return get_the_post_thumbnail($post_id,$size,$attributes);
+    $visual=mirrortalk_fallback_visual($post_id);$defaults=array('class'=>'mt-document-visual__image mt-document-visual__image--fallback','loading'=>'eager','decoding'=>'async');$attributes=array_merge($defaults,$attributes);
+    $html='<img src="'.esc_url($visual['url']).'" width="'.esc_attr($visual['width']).'" height="'.esc_attr($visual['height']).'" alt="'.esc_attr($visual['alt']).'"';
+    foreach($attributes as$key=>$value)$html.=' '.esc_attr($key).'="'.esc_attr($value).'"';
+    return $html.'>';
 }
 
 function mirrortalk_schema_graph() {

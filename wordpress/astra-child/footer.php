@@ -16,6 +16,7 @@ if (!defined('ABSPATH')) { exit; }
             <nav aria-label="<?php esc_attr_e('Explore Mirror Talk', 'astra-child'); ?>">
                 <strong><?php esc_html_e('Explore', 'astra-child'); ?></strong>
                 <a href="<?php echo esc_url(home_url('/listen/')); ?>"><?php esc_html_e('Listen', 'astra-child'); ?></a>
+                <a href="<?php echo esc_url(home_url('/listen-connect/')); ?>"><?php esc_html_e('Listen & connect', 'astra-child'); ?></a>
                 <a href="<?php echo esc_url(home_url('/podcast-episodes/')); ?>"><?php esc_html_e('Browse episodes', 'astra-child'); ?></a>
                 <a href="<?php echo esc_url(home_url('/insights/')); ?>"><?php esc_html_e('Insights', 'astra-child'); ?></a>
                 <a href="<?php echo esc_url(home_url('/contact/')); ?>"><?php esc_html_e('Connect', 'astra-child'); ?></a>

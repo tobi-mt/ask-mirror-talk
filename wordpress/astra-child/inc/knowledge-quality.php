@@ -143,14 +143,17 @@ add_filter('mirrortalk_schema_graph', function ($schema) {
 }, 30);
 
 function mirrortalk_related_posts($post_id, $limit = 3) {
+    $curated_ids = array_values(array_unique(array_filter(array_map('absint', (array) get_post_meta($post_id, '_mirrortalk_page_one_links', true)))));
+    $curated = $curated_ids ? get_posts(array('post_type'=>'post','post_status'=>'publish','post__in'=>$curated_ids,'orderby'=>'post__in','numberposts'=>$limit)) : array();
+    if (count($curated) >= $limit) return array_slice($curated, 0, $limit);
     $tax_query = array('relation' => 'OR');
     foreach (array('category', 'post_tag') as $taxonomy) {
         $terms = wp_get_post_terms($post_id, $taxonomy, array('fields' => 'ids'));
         if (!is_wp_error($terms) && $terms) $tax_query[] = array('taxonomy' => $taxonomy, 'field' => 'term_id', 'terms' => $terms, 'operator' => 'IN');
     }
-    $args = array('post_type' => 'post', 'post_status' => 'publish', 'post__not_in' => array($post_id), 'numberposts' => $limit, 'orderby' => 'date');
+    $args = array('post_type' => 'post', 'post_status' => 'publish', 'post__not_in' => array_merge(array($post_id), $curated_ids), 'numberposts' => $limit - count($curated), 'orderby' => 'date');
     if (count($tax_query) > 1) $args['tax_query'] = $tax_query;
-    return get_posts($args);
+    return array_merge($curated, get_posts($args));
 }
 
 function mirrortalk_render_citation_brief($post_id) {
@@ -162,7 +165,7 @@ function mirrortalk_render_citation_brief($post_id) {
     // Composer already places contextual related reading inside the article.
     // Do not repeat the same cards in the source guide; retain the guide only
     // when it contains real citation material beyond a generated summary.
-    if (!empty($composer)) $related = array();
+    if (!empty($composer) && !get_post_meta($post_id, '_mirrortalk_page_one_links', true)) $related = array();
     if (!$has_brief && !$related) return;
     echo '<aside class="mt-citation-brief mt-reading__shell" aria-labelledby="mt-citation-title" data-mt-knowledge-post="' . esc_attr($post_id) . '"><p class="mt-section-kicker">' . esc_html__('Source guide', 'astra-child') . '</p><h2 id="mt-citation-title">' . esc_html__('Continue with confidence', 'astra-child') . '</h2>';
     if ($profile['summary']) echo '<p class="mt-citation-brief__summary">' . esc_html($profile['summary']) . '</p>';

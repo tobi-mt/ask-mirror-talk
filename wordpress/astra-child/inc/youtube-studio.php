@@ -124,6 +124,7 @@ function mirrortalk_latest_youtube_video() {
 
 function mirrortalk_youtube_surface() {
     if (is_admin() || is_404() || is_search() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) return '';
+    if (get_query_var('mirror_links')) return '';
     if (function_exists('mirrortalk_is_trust_page') && mirrortalk_is_trust_page()) return '';
     if (!(bool) get_theme_mod('mirrortalk_youtube_enabled', true)) return '';
     if (is_page(array('ask-mirror-talk', 'insights')) || is_page_template('answer-archive-template.php')) return '';

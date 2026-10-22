@@ -13,7 +13,7 @@ THEME = ROOT / "wordpress" / "astra-child"
 
 def local_checks():
     failures = []
-    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/intelligence-pipeline.php", "inc/editorial-composer.php", "inc/rss-editorial-ingestion.php", "inc/editorial-presentations.php"]
+    required = ["header.php", "footer.php", "single.php", "page.php", "archive.php", "404.php", "listen.php", "listen-everywhere.js", "link-hub.php", "link-hub.css", "link-hub.js", "inc/link-hub.php", "inc/listen-everywhere.php", "inc/knowledge-quality.php", "inc/intelligence-pipeline.php", "inc/editorial-composer.php", "inc/rss-editorial-ingestion.php", "inc/editorial-presentations.php", "inc/page-one-growth.php"]
     for name in required:
         if not (THEME / name).exists():
             failures.append(f"missing {name}")
@@ -32,6 +32,10 @@ def local_checks():
         "citation brief rendered": "mirrortalk_render_citation_brief" in single,
         "listen route loaded": "inc/listen-everywhere.php" in functions,
         "listen route canonical": "mirror_listen" in (THEME / "inc" / "intelligence-seo.php").read_text(),
+        "owned link hub loaded": "inc/link-hub.php" in functions,
+        "owned link hub route": "mirror_links" in (THEME / "inc" / "link-hub.php").read_text(),
+        "owned link hub canonical": "mirror_links" in (THEME / "inc" / "intelligence-seo.php").read_text(),
+        "owned link hub measured": "link_hub_action" in (THEME / "inc" / "intelligence-dashboard.php").read_text(),
         "unverified platforms hidden": "'enabled'=>0" in (THEME / "inc" / "listen-everywhere.php").read_text(),
         "pipeline stages isolated": all(marker in (THEME / "inc" / "intelligence-pipeline.php").read_text() for marker in ("intelligence_quality_stage", "intelligence_recommendations_stage", "intelligence_knowledge_stage")),
         "pipeline watchdog enabled": "mirrortalk_pipeline_watchdog" in (THEME / "inc" / "intelligence-pipeline.php").read_text(),
@@ -52,6 +56,13 @@ def local_checks():
         "plain URLs are safely linkified": all(marker in (THEME / "inc" / "content-normalizer.php").read_text() for marker in ("mirrortalk_autolink_plain_urls", "wp_http_validate_url", "noopener noreferrer external", "mirrortalk_autolink_is_known_broken")),
         "URL whitespace entities stay outside links": "(?:nbsp|#160|#x0*a0)" in (THEME / "inc" / "content-normalizer.php").read_text(),
         "automatic links are reversible": "'automatic_links'" in (THEME / "inc" / "editorial-composer-v2.php").read_text(),
+        "page-one growth loaded": "inc/page-one-growth.php" in functions,
+        "page-one opportunities prioritize positions 4-20": "$position >= 4 && $position <= 20" in (THEME / "inc" / "page-one-growth.php").read_text(),
+        "page-one changes are reversible": "mirrortalk_page_one_restore" in (THEME / "inc" / "page-one-growth.php").read_text(),
+        "cannibalization stays review-led": "editorial_review" in (THEME / "inc" / "page-one-growth.php").read_text(),
+        "broken links require GET confirmation": "mirrortalk_seo_confirm_link" in (THEME / "inc" / "seo-platform.php").read_text(),
+        "broken links are cleaned per source": "md5($post->ID . '|' . $url)" in (THEME / "inc" / "seo-platform.php").read_text(),
+        "broken-link cleanup is bounded": "mirrortalk_seo_cleanup_broken_links_continue" in (THEME / "inc" / "seo-platform.php").read_text(),
     }
     failures.extend(label for label, passed in expectations.items() if not passed)
     return failures
@@ -59,7 +70,7 @@ def local_checks():
 
 def remote_checks(base):
     failures = []
-    for path in ("/", "/listen/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/", "/llms.txt", "/mirror-talk-sitemap/"):
+    for path in ("/", "/listen/", "/listen-connect/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/", "/llms.txt", "/mirror-talk-sitemap/"):
         url = base.rstrip("/") + path
         try:
             request = urllib.request.Request(url, headers={"User-Agent": "MirrorTalkReleaseGate/1.0"})
@@ -67,7 +78,7 @@ def remote_checks(base):
                 body = response.read(2_000_000).decode("utf-8", "replace")
                 if response.status != 200:
                     failures.append(f"{path}: HTTP {response.status}")
-                if path in ("/", "/listen/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/") and not re.search(r"<main\b", body, re.I):
+                if path in ("/", "/listen/", "/listen-connect/", "/podcast-episodes/", "/blog/", "/ask-mirror-talk/", "/contact/") and not re.search(r"<main\b", body, re.I):
                     failures.append(f"{path}: no main landmark")
         except Exception as error:
             failures.append(f"{path}: {error}")

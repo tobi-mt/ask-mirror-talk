@@ -84,7 +84,7 @@ add_action('init', function () {
 });
 
 function mirrortalk_render_listen_companion() {
-    if (is_admin() || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }
+    if (is_admin() || is_404() || get_query_var('mirror_links') || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) { return; }
     $episodes = mirrortalk_get_feed_episodes();
     if (empty($episodes)) { return; }
     $latest = $episodes[0];

@@ -167,7 +167,7 @@ function mirrortalk_append_reflection_bridge($content) {
 add_filter('the_content', 'mirrortalk_append_reflection_bridge', 24);
 
 function mirrortalk_render_ask_dock() {
-    if (is_admin() || is_page('ask-mirror-talk') || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) {
+    if (is_admin() || is_page('ask-mirror-talk') || get_query_var('mirror_links') || is_404() || isset($_GET['mirror_player']) || (function_exists('mirrortalk_is_editor_preview_request') && mirrortalk_is_editor_preview_request())) {
         return;
     }
 

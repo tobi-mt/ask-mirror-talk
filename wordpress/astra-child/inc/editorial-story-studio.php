@@ -8,7 +8,29 @@
  */
 if (!defined('ABSPATH')) exit;
 
-define('MIRRORTALK_STORY_STUDIO_VERSION', '1.2.0');
+define('MIRRORTALK_STORY_STUDIO_VERSION', '1.3.2');
+
+/** Extract a YouTube ID directly from source text, including encoded query URLs. */
+function mirrortalk_story_studio_find_video_id($source) {
+    $source = html_entity_decode((string) $source, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if (preg_match('~(?:https?:)?//(?:www\.)?(?:youtu\.be/|youtube(?:-nocookie)?\.com/(?:shorts/|embed/|watch\?[^\s"\'<>]*?\bv=))([A-Za-z0-9_-]{11})~i', $source, $match)) return $match[1];
+    return '';
+}
+
+/** Return a video explicitly owned by this document, never the channel fallback. */
+function mirrortalk_story_studio_source_video_id($post_id, $settings = array()) {
+    if (!$post_id || !function_exists('mirrortalk_youtube_video_id')) return '';
+    // Current editorial content is the strongest ownership signal. It must
+    // outrank stale Story Studio values left by historical fallback releases.
+    $content = (string) get_post_field('post_content', $post_id);
+    if (preg_match('/\[mirror_talk_video\b[^\]]*\bid=["\']([A-Za-z0-9_-]{11})["\']/i', $content, $match)) return $match[1];
+    if ($id = mirrortalk_story_studio_find_video_id($content)) return $id;
+    $manual = esc_url_raw((string) ($settings['youtube_url'] ?? ''));
+    if ($id = mirrortalk_youtube_video_id($manual)) return $id;
+    $legacy = stripslashes((string) get_post_meta($post_id, '_elementor_data', true));
+    if ($id = mirrortalk_story_studio_find_video_id($legacy)) return $id;
+    return '';
+}
 
 function mirrortalk_story_studio_defaults() {
     return array(
@@ -27,9 +49,10 @@ function mirrortalk_story_studio_settings($post_id) {
     $defaults = mirrortalk_story_studio_defaults();
     if (!is_array($saved)) {
         $post = get_post($post_id);
-        // Posts are editorial listening experiences, so the governed layer is
-        // useful by default. Pages remain quiet unless an editor opts in.
-        $defaults['enabled'] = $post && $post->post_type === 'post' ? '1' : ($post && $post->post_status === 'publish' ? '0' : '1');
+        // Posts are editorial listening experiences. Published pages remain
+        // quiet unless they own a YouTube video; that is strong author intent.
+        $owns_video = $post && $post->post_type === 'page' && mirrortalk_story_studio_source_video_id($post_id, $defaults);
+        $defaults['enabled'] = $post && ($post->post_type === 'post' || $owns_video) ? '1' : ($post && $post->post_status === 'publish' ? '0' : '1');
         return $defaults;
     }
     $settings=array_merge($defaults, $saved);
@@ -46,18 +69,25 @@ function mirrortalk_story_studio_settings($post_id) {
  * individual module; missing and automatic legacy settings are repaired.
  */
 function mirrortalk_story_studio_ensure_post_media($post_id) {
-    $post=get_post($post_id);if(!$post||$post->post_type!=='post'||in_array($post->post_status,array('trash','auto-draft'),true))return false;
+    $post=get_post($post_id);if(!$post||!in_array($post->post_type,array('post','page'),true)||in_array($post->post_status,array('trash','auto-draft'),true))return false;
     $settings=mirrortalk_story_studio_settings($post_id);$changed=false;
+    $page_video=$post->post_type==='page'?mirrortalk_story_studio_source_video_id($post_id,$settings):'';
+    if($post->post_type==='page'&&!$page_video)return false;
+    if($post->post_type==='page'){
+        if(($settings['enabled']??'')!=='1'){$settings['enabled']='1';$changed=true;}
+        if(($settings['youtube_mode']??'')==='none'||empty($settings['youtube_mode'])){$settings['youtube_mode']='latest';$changed=true;}
+    }
     foreach(array('enabled'=>'1','podcast_mode'=>'latest','youtube_mode'=>'latest','show_follow'=>'1','show_newsletter'=>'1')as$key=>$value){
+        if($post->post_type==='page'&&in_array($key,array('podcast_mode','show_follow','show_newsletter'),true))continue;
         if(!array_key_exists($key,$settings)||$settings[$key]===''){$settings[$key]=$value;$changed=true;}
     }
-    if($post->post_status==='publish'&&($settings['enabled']??'')!=='1'){$settings['enabled']='1';$changed=true;}
+    if($post->post_type==='post'&&$post->post_status==='publish'&&($settings['enabled']??'')!=='1'){$settings['enabled']='1';$changed=true;}
     $rss_audio=esc_url_raw((string)get_post_meta($post_id,'_mt_rss_audio_url',true));
     if($rss_audio&&($settings['podcast_audio']??'')!==$rss_audio){$settings['podcast_audio']=$rss_audio;$settings['podcast_mode']='latest';$changed=true;}
     if($changed||!is_array(get_post_meta($post_id,'_mt_story_studio',true)))update_post_meta($post_id,'_mt_story_studio',$settings);
     if(function_exists('mirrortalk_composer_v2_decisions')){
         $decisions=mirrortalk_composer_v2_decisions($post_id);$decision_changed=false;
-        foreach(array('podcast_player','youtube_player')as$key){
+        foreach($post->post_type==='page'?array('youtube_player'):array('podcast_player','youtube_player')as$key){
             if(($decisions[$key]['status']??'automatic')==='editorial')continue;
             if(empty($decisions[$key]['enabled'])){$decisions[$key]['enabled']=true;$decisions[$key]['status']='automatic';$decisions[$key]['updated_at']=time();$decision_changed=true;}
         }
@@ -75,7 +105,7 @@ add_action('save_post',function($post_id,$post){
 function mirrortalk_story_studio_media_backfill(){
     global $wpdb;$cursor=(int)get_option('mirrortalk_story_media_cursor',0);
     $ids=$wpdb->get_col($wpdb->prepare(
-        "SELECT ID FROM {$wpdb->posts} WHERE post_type='post' AND post_status IN ('publish','future','draft','pending','private') AND ID>%d ORDER BY ID ASC LIMIT 20",
+        "SELECT ID FROM {$wpdb->posts} WHERE post_type IN ('post','page') AND post_status IN ('publish','future','draft','pending','private') AND ID>%d ORDER BY ID ASC LIMIT 20",
         $cursor
     ));
     if(!$ids){update_option('mirrortalk_story_media_backfill_version',MIRRORTALK_STORY_STUDIO_VERSION,false);delete_option('mirrortalk_story_media_cursor');return;}
@@ -122,16 +152,8 @@ function mirrortalk_story_studio_resolve_episode($settings, $post_id = 0) {
 
 function mirrortalk_story_studio_resolve_video($settings, $post_id = 0) {
     if (($settings['youtube_mode'] ?? 'latest') === 'none') return array();
-    $url = esc_url_raw((string) ($settings['youtube_url'] ?? ''));
-    $id = function_exists('mirrortalk_youtube_video_id') ? mirrortalk_youtube_video_id($url) : '';
-    if ($id) return array('id'=>$id,'url'=>'https://www.youtube.com/watch?v='.$id,'title'=>__('Selected Mirror Talk video','astra-child'),'thumbnail'=>'https://i.ytimg.com/vi/'.$id.'/hqdefault.jpg');
-    if($post_id&&function_exists('mirrortalk_youtube_video_id')){
-        $content=(string)get_post_field('post_content',$post_id);
-        if(preg_match('/\[mirror_talk_video\b[^\]]*\bid=["\']([A-Za-z0-9_-]{11})["\']/i',$content,$shortcode))$id=$shortcode[1];
-        elseif(preg_match('#https?://(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/)[A-Za-z0-9_-]{11}[^\s"\'<]*#i',$content,$match))$id=mirrortalk_youtube_video_id($match[0]);
-        else {$legacy=(string)get_post_meta($post_id,'_elementor_data',true);if(preg_match('#https?://(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/)[A-Za-z0-9_-]{11}[^\s"\'<]*#i',$legacy,$match))$id=mirrortalk_youtube_video_id(stripslashes($match[0]));}
-        if($id)return array('id'=>$id,'url'=>'https://www.youtube.com/watch?v='.$id,'title'=>get_the_title($post_id),'thumbnail'=>'https://i.ytimg.com/vi/'.$id.'/hqdefault.jpg');
-    }
+    $id = mirrortalk_story_studio_source_video_id($post_id, $settings);
+    if($id)return array('id'=>$id,'url'=>'https://www.youtube.com/watch?v='.$id,'title'=>$post_id?get_the_title($post_id):__('Selected Mirror Talk video','astra-child'),'thumbnail'=>'https://i.ytimg.com/vi/'.$id.'/hqdefault.jpg','source'=>'document');
     if(function_exists('mirrortalk_latest_youtube_video'))return (array)mirrortalk_latest_youtube_video();
     return function_exists('mirrortalk_youtube_fallback_video') ? (array)mirrortalk_youtube_fallback_video() : array();
 }
@@ -240,7 +262,8 @@ function mirrortalk_story_studio_video($video, $post_id) {
     $title = (string) ($video['title'] ?? __('A Mirror Talk video reflection', 'astra-child'));
     $poster = get_the_post_thumbnail_url($post_id, 'large');
     $poster_style = $poster ? ' style="--mt-story-poster:url(\''.esc_url($poster).'\')"' : '';
-    return '<aside class="mt-story-video" data-mt-story-video data-video-id="'.esc_attr($video['id']).'" aria-labelledby="mt-story-video-'.$post_id.'"><div class="mt-story-video__copy"><p class="mt-section-kicker">'.esc_html__('Watch and notice','astra-child').'</p><h2 id="mt-story-video-'.$post_id.'">'.esc_html($title).'</h2></div><div class="mt-story-video__media"'.$poster_style.'><button type="button" data-mt-story-video-play aria-label="'.esc_attr(sprintf(__('Play %s','astra-child'),$title)).'"><span aria-hidden="true">▶</span><strong>'.esc_html__('Play video','astra-child').'</strong><small>'.esc_html__('Starts muted','astra-child').'</small></button><div data-mt-story-video-frame></div></div></aside>';
+    $source = ($video['source'] ?? '') === 'document' ? 'document' : 'latest';
+    return '<aside class="mt-story-video" data-mt-story-video data-video-id="'.esc_attr($video['id']).'" data-video-source="'.esc_attr($source).'" aria-labelledby="mt-story-video-'.$post_id.'"><div class="mt-story-video__copy"><p class="mt-section-kicker">'.esc_html__('Watch and notice','astra-child').'</p><h2 id="mt-story-video-'.$post_id.'">'.esc_html($title).'</h2></div><div class="mt-story-video__media"'.$poster_style.'><button type="button" data-mt-story-video-play aria-label="'.esc_attr(sprintf(__('Play %s','astra-child'),$title)).'"><span aria-hidden="true">▶</span><strong>'.esc_html__('Play video','astra-child').'</strong><small>'.esc_html__('Starts muted','astra-child').'</small></button><div data-mt-story-video-frame></div></div></aside>';
 }
 
 function mirrortalk_story_studio_follow($post_id) {
@@ -265,6 +288,29 @@ function mirrortalk_story_studio_insert_after($content, $module, $closing_tag, $
     return substr($content, 0, $offset).$module.substr($content, $offset);
 }
 
+/**
+ * Place video at a genuine editorial boundary. With two or more article H2s,
+ * insert immediately before the second section; otherwise place it before the
+ * related-content/reflection close. Existing players are always respected.
+ */
+function mirrortalk_story_studio_insert_video($content, $module) {
+    if (!$module || preg_match('/(?:data-mt-story-video|mt-legacy-video-facade|youtube(?:-nocookie)?\.com\/embed\/)/i', $content)) return $content;
+    $search_from = 0;
+    foreach (array('mt-composer-lead','mt-composer-takeaways') as $class) {
+        $start = strpos($content, $class);
+        if ($start !== false && preg_match('/<\/(?:section|aside)>/i', $content, $close, PREG_OFFSET_CAPTURE, $start)) $search_from = max($search_from, $close[0][1] + strlen($close[0][0]));
+    }
+    if (preg_match_all('/<h2\b[^>]*>/i', $content, $headings, PREG_OFFSET_CAPTURE, $search_from) && count($headings[0]) >= 2) {
+        $position = $headings[0][1][1];
+        return substr($content, 0, $position).$module.substr($content, $position);
+    }
+    foreach (array('<aside class="mt-composer-links"','<aside class="mt-reflection-bridge"') as $marker) {
+        $position = strpos($content, $marker, $search_from);
+        if ($position !== false) return substr($content, 0, $position).$module.substr($content, $position);
+    }
+    return $content.$module;
+}
+
 function mirrortalk_story_studio_render($content) {
     if (!function_exists('mirrortalk_composer_v2_should_render')) return $content;
     $post_id = get_the_ID();
@@ -285,10 +331,7 @@ function mirrortalk_story_studio_render($content) {
         $position = $takeaway !== false ? strpos($content, '</aside>', $takeaway) : false;
         $content = $position !== false ? substr($content,0,$position+8).$podcast.substr($content,$position+8) : mirrortalk_story_studio_insert_after($content,$podcast,'</section>',1);
     }
-    // Place video at a guaranteed top-level boundary near the article ending.
-    // Counting paragraph closings can nest a module inside a quote, column or
-    // generated card, so use the reflection bridge as the stable boundary.
-    if($video){$reflection=strpos($content,'<aside class="mt-reflection-bridge"');$content=$reflection===false?$content.$video:substr($content,0,$reflection).$video.substr($content,$reflection);}
+    if($video)$content=mirrortalk_story_studio_insert_video($content,$video);
     return $content.$follow.$newsletter;
 }
 add_filter('the_content', 'mirrortalk_story_studio_render', 27);

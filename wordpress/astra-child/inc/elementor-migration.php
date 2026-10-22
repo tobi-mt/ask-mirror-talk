@@ -7,7 +7,7 @@
  */
 if (!defined('ABSPATH')) exit;
 
-const MIRRORTALK_ELEMENTOR_MIGRATION_VERSION = '2.0.2';
+const MIRRORTALK_ELEMENTOR_MIGRATION_VERSION = '2.1.0';
 const MIRRORTALK_ELEMENTOR_MAX_RETRIES = 3;
 
 function mirrortalk_elementor_supported_widgets() {
@@ -40,7 +40,10 @@ function mirrortalk_elementor_migration_counts($force = false) {
         return is_array($last) && isset($last['total']) ? array_merge($last, array('pending_scan'=>true)) : array('pending'=>0,'migrated'=>0,'total'=>0,'pending_scan'=>true);
     }
     $eligible = "p.post_type IN ('post','page') AND p.post_status IN ('publish','future','draft','pending','private')";
-    $active_ids=$wpdb->get_col("SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} source ON source.post_id=p.ID AND source.meta_key='_elementor_data' AND LENGTH(TRIM(source.meta_value))>4 AND TRIM(source.meta_value) NOT IN ('[]','null','{}') WHERE {$eligible}");
+    // Include jobs whose Elementor source was removed during a provisional
+    // commit. Otherwise a failed live verification disappears from the
+    // summary even though it remains quarantined in the exact queue.
+    $active_ids=$wpdb->get_col("SELECT DISTINCT p.ID FROM {$wpdb->posts} p WHERE {$eligible} AND (EXISTS (SELECT 1 FROM {$wpdb->postmeta} source WHERE source.post_id=p.ID AND source.meta_key='_elementor_data' AND LENGTH(TRIM(source.meta_value))>4 AND TRIM(source.meta_value) NOT IN ('[]','null','{}')) OR EXISTS (SELECT 1 FROM {$wpdb->postmeta} job WHERE job.post_id=p.ID AND job.meta_key='_mirrortalk_elementor_job'))");
     $pending=0;$quarantined=0;$queued=0;
     foreach((array)$active_ids as$id){
         if(get_post_meta($id,'_mirrortalk_elementor_migrated',true))continue;
@@ -297,6 +300,14 @@ function mirrortalk_elementor_normalize_candidate($post_id,$content){
     },(string)$content);
     if(function_exists('mirrortalk_semantic_repair_content'))$content=mirrortalk_semantic_repair_content($content);
     if(function_exists('mirrortalk_autolink_plain_urls'))$content=mirrortalk_autolink_plain_urls($content);
+    // Semantic repair can add headings after the first normalization pass.
+    // Constrain the final document too, so a repair never creates an H2→H4
+    // jump that would needlessly quarantine an otherwise sound conversion.
+    $last_level=1;
+    $content=preg_replace_callback('#<h([1-6])([^>]*)>(.*?)</h\1>#is',function($match)use(&$last_level){
+        $level=max(2,(int)$match[1]);if($level>$last_level+1)$level=$last_level+1;$last_level=$level;
+        return '<h'.$level.$match[2].'>'.$match[3].'</h'.$level.'>';
+    },(string)$content);
     return '<!-- wp:group {"className":"mt-migrated-document"} --><div class="wp-block-group mt-migrated-document" data-mt-owned-migration="'.esc_attr((string)$post_id).'">'.trim($content).'</div><!-- /wp:group -->';
 }
 
@@ -367,7 +378,10 @@ function mirrortalk_elementor_snapshot($post_id) {
         'template'=>(string)get_post_meta($post_id,'_wp_page_template',true),
         'page_settings'=>get_post_meta($post_id,'_elementor_page_settings',true));
     $snapshot['checksum']=hash('sha256', wp_json_encode($snapshot));
-    update_post_meta($post_id, '_mirrortalk_elementor_snapshot', $snapshot);
+    // Metadata APIs unslash input. Preserve JSON and embedded markup exactly;
+    // otherwise their backslashes change after storage and invalidate the
+    // rollback checksum created moments earlier.
+    update_post_meta($post_id, '_mirrortalk_elementor_snapshot', wp_slash($snapshot));
     return $snapshot;
 }
 
@@ -436,9 +450,25 @@ function mirrortalk_elementor_migrate($post_id){return mirrortalk_elementor_queu
 
 function mirrortalk_elementor_restore($post_id,$internal=false) {
     $snapshot=get_post_meta($post_id,'_mirrortalk_elementor_snapshot',true); if(!is_array($snapshot))return new WP_Error('missing_snapshot',__('No migration snapshot exists.','astra-child'));
-    $check=$snapshot; unset($check['checksum']); if(!hash_equals((string)($snapshot['checksum']??''),hash('sha256',wp_json_encode($check))))return new WP_Error('snapshot_mismatch',__('The migration snapshot failed its integrity check.','astra-child'));
-    $result=wp_update_post(array('ID'=>$post_id,'post_content'=>(string)$snapshot['content']),true); if(is_wp_error($result))return $result;
-    update_post_meta($post_id,'_elementor_data',(string)$snapshot['elementor_data']);
+    $check=$snapshot; unset($check['checksum']);$expected=(string)($snapshot['checksum']??'');$direct=hash('sha256',wp_json_encode($check));$legacy=hash('sha256',wp_json_encode(wp_slash($check)));
+    // Releases before migration engine 2.1 stored the snapshot without
+    // wp_slash(), so WordPress changed JSON escaping before retrieval. Accept
+    // that exact reversible legacy transformation, but no arbitrary mismatch.
+    $valid=$expected&&(hash_equals($expected,$direct)||hash_equals($expected,$legacy));
+    if(!$valid){
+        // The 2.0.x writer allowed WordPress to unslash nested JSON before it
+        // was persisted, so its original checksum cannot always be recreated.
+        // Recovery is permitted only for that known release family when the
+        // snapshot is structurally complete and its Elementor source remains
+        // valid JSON. This is private post metadata created by this engine,
+        // never request input, and the exception is recorded in the audit.
+        $legacy_version=(string)($snapshot['version']??'');$legacy_data=json_decode((string)($snapshot['elementor_data']??''),true);
+        $valid=strpos($legacy_version,'2.0.')===0&&strlen($expected)===64&&!empty($snapshot['created'])&&array_key_exists('content',$snapshot)&&is_array($legacy_data);
+        if($valid)mirrortalk_elementor_audit($post_id,'legacy_snapshot_recovered',array('snapshot_version'=>$legacy_version));
+    }
+    if(!$valid)return new WP_Error('snapshot_mismatch',__('The migration snapshot failed its integrity check.','astra-child'));
+    $result=wp_update_post(wp_slash(array('ID'=>$post_id,'post_content'=>(string)$snapshot['content'])),true); if(is_wp_error($result))return $result;
+    update_post_meta($post_id,'_elementor_data',wp_slash((string)$snapshot['elementor_data']));
     if($snapshot['edit_mode']!=='')update_post_meta($post_id,'_elementor_edit_mode',$snapshot['edit_mode']); else delete_post_meta($post_id,'_elementor_edit_mode');
     if($snapshot['template']!=='')update_post_meta($post_id,'_wp_page_template',$snapshot['template']);
     update_post_meta($post_id,'_elementor_page_settings',$snapshot['page_settings']);delete_post_meta($post_id,'_mirrortalk_elementor_migrated');delete_post_meta($post_id,'_mirrortalk_elementor_provisional');
@@ -521,10 +551,26 @@ function mirrortalk_elementor_expand_template_shortcodes(){
     return $changed;
 }
 
+function mirrortalk_elementor_template_references($template_id){
+    global $wpdb;$template_id=absint($template_id);if(!$template_id)return array('referenced'=>true,'reasons'=>array('invalid_id'));
+    $reasons=array();$conditions=get_post_meta($template_id,'_elementor_conditions',true);
+    if((is_array($conditions)&&$conditions)||(!is_array($conditions)&&trim((string)$conditions)!==''))$reasons[]='theme_builder_conditions';
+    $shortcode_patterns=array('%[elementor-template id="'.$template_id.'"%','%[elementor-template id='.$template_id.'%','%[elementor-template id=\''.$template_id.'\'%');
+    foreach($shortcode_patterns as$pattern){if((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) FROM {$wpdb->posts} WHERE ID<>%d AND post_status NOT IN ('trash','auto-draft') AND post_content LIKE %s",$template_id,$pattern))>0){$reasons[]='shortcode_reference';break;}}
+    $json_patterns=array('%"template_id":"'.$template_id.'"%','%"template_id":'.$template_id.'%','%"popup_id":"'.$template_id.'"%','%"popup_id":'.$template_id.'%');
+    foreach($json_patterns as$pattern){if((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(meta_id) FROM {$wpdb->postmeta} WHERE post_id<>%d AND meta_key='_elementor_data' AND meta_value LIKE %s",$template_id,$pattern))>0){$reasons[]='elementor_data_reference';break;}}
+    return array('referenced'=>!empty($reasons),'reasons'=>array_values(array_unique($reasons)));
+}
+
 function mirrortalk_elementor_retire_templates(){
-    $templates=get_posts(array('post_type'=>'elementor_library','post_status'=>array('publish','future','private'),'numberposts'=>-1));$snapshots=(array)get_option('mirrortalk_elementor_template_snapshots',array());$retired=0;
-    foreach($templates as$template){if(!isset($snapshots[$template->ID]))$snapshots[$template->ID]=array('status'=>$template->post_status,'content'=>$template->post_content,'data'=>get_post_meta($template->ID,'_elementor_data',true),'time'=>time());$result=wp_update_post(array('ID'=>$template->ID,'post_status'=>'draft'),true);if(!is_wp_error($result))$retired++;}
-    update_option('mirrortalk_elementor_template_snapshots',$snapshots,false);return$retired;
+    $templates=get_posts(array('post_type'=>'elementor_library','post_status'=>array('publish','future','private'),'numberposts'=>-1));$snapshots=(array)get_option('mirrortalk_elementor_template_snapshots',array());$retired=0;$protected=0;
+    foreach($templates as$template){
+        $references=mirrortalk_elementor_template_references($template->ID);
+        if(!empty($references['referenced'])){mirrortalk_elementor_audit($template->ID,'template_retirement_deferred',array('reasons'=>$references['reasons']));$protected++;continue;}
+        if(!isset($snapshots[$template->ID]))$snapshots[$template->ID]=array('status'=>$template->post_status,'content'=>$template->post_content,'data'=>get_post_meta($template->ID,'_elementor_data',true),'time'=>time());
+        $result=wp_update_post(array('ID'=>$template->ID,'post_status'=>'draft'),true);if(!is_wp_error($result)){$retired++;mirrortalk_elementor_audit($template->ID,'template_retired',array('verified_unreferenced'=>'yes'));}
+    }
+    update_option('mirrortalk_elementor_template_snapshots',$snapshots,false);update_option('mirrortalk_elementor_template_retirement_summary',array('time'=>time(),'retired'=>$retired,'protected'=>$protected),false);return$retired;
 }
 
 function mirrortalk_elementor_restore_templates(){
@@ -532,18 +578,54 @@ function mirrortalk_elementor_restore_templates(){
 }
 
 function mirrortalk_elementor_resolve_residuals(){
-    return array('expanded'=>mirrortalk_elementor_expand_template_shortcodes(),'retired'=>mirrortalk_elementor_retire_templates());
+    $result=array('expanded'=>mirrortalk_elementor_expand_template_shortcodes(),'retired'=>mirrortalk_elementor_retire_templates());
+    delete_transient('mirrortalk_elementor_residual_dependencies');
+    $result['remaining']=mirrortalk_elementor_residual_dependencies(true);
+    mirrortalk_runtime_queue('mirrortalk_elementor_dashboard_refresh',array(),15);
+    return$result;
 }
 add_action('mirrortalk_elementor_resolve_residuals_async',function(){$result=mirrortalk_runtime_run('elementor_residuals','mirrortalk_elementor_resolve_residuals',20*MINUTE_IN_SECONDS);update_option('mirrortalk_elementor_last_residual_result',array('time'=>time(),'result'=>$result),false);});
 add_action('mirrortalk_elementor_restore_templates_async',function(){$restored=mirrortalk_runtime_run('elementor_template_restore','mirrortalk_elementor_restore_templates',20*MINUTE_IN_SECONDS);update_option('mirrortalk_elementor_last_template_restore',array('time'=>time(),'restored'=>$restored),false);});
 
+/**
+ * Repair only failure modes for which the engine has a deterministic remedy.
+ * Unknown failures remain quarantined and can never be silently published.
+ */
+function mirrortalk_elementor_repair_quarantined($limit=5){
+    global $wpdb;$limit=max(1,min(10,absint($limit)));$repaired=0;
+    $ids=$wpdb->get_col($wpdb->prepare("SELECT pm.post_id FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID=pm.post_id WHERE pm.meta_key='_mirrortalk_elementor_job' AND pm.meta_value LIKE %s AND p.post_status NOT IN ('trash','auto-draft') ORDER BY pm.post_id ASC LIMIT %d",'%quarantined%',$limit));
+    foreach((array)$ids as$post_id){
+        $post_id=absint($post_id);$job=(array)get_post_meta($post_id,'_mirrortalk_elementor_job',true);if(($job['status']??'')!=='quarantined')continue;
+        if((string)get_post_meta($post_id,'_mirrortalk_elementor_repair_version',true)===MIRRORTALK_ELEMENTOR_MIGRATION_VERSION)continue;
+        update_post_meta($post_id,'_mirrortalk_elementor_repair_version',MIRRORTALK_ELEMENTOR_MIGRATION_VERSION);
+        $error=strtolower((string)($job['last_error']??''));$stage=sanitize_key((string)($job['failed_stage']??''));
+        if(strpos($error,'heading_level_jump')!==false&&trim((string)get_post_meta($post_id,'_elementor_data',true))!==''){
+            delete_post_meta($post_id,'_mirrortalk_elementor_candidate');delete_transient('mirrortalk_elementor_preview_'.$post_id);
+            $result=mirrortalk_elementor_queue_document($post_id,'automatic-repair-heading');if(!is_wp_error($result)){$repaired++;continue;}
+        }
+        if($stage==='live'&&strpos($error,'snapshot failed its integrity check')!==false){
+            $provisional=(array)get_post_meta($post_id,'_mirrortalk_elementor_provisional',true);
+            if($provisional&&stripos((string)get_post_field('post_content',$post_id),'data-mt-owned-migration=')!==false){
+                mirrortalk_elementor_job_update($post_id,'retry_wait',array('attempts'=>0,'last_error'=>'','failed_stage'=>'','next_stage'=>'live','retry_at'=>time()+5,'repair'=>'legacy_snapshot_recheck'));
+                mirrortalk_elementor_schedule_stage($post_id,'live',5);$repaired++;continue;
+            }
+        }
+        mirrortalk_elementor_audit($post_id,'automatic_repair_skipped',array('reason'=>$error?:'unknown_failure'));
+    }
+    return$repaired;
+}
+
 function mirrortalk_elementor_auto_batch(){
     if(!get_option('mirrortalk_elementor_auto_migration')||get_transient('mt_elementor_auto_lock'))return;set_transient('mt_elementor_auto_lock',1,10*MINUTE_IN_SECONDS);$processed=0;$failed=0;
+    $repaired=mirrortalk_elementor_repair_quarantined(5);
     foreach(mirrortalk_elementor_inventory(50,0,false)as$item){if($processed>=1)break;$job=(array)($item['job']??array());$state=(string)($job['status']??'');if(in_array($state,array('quarantined','queued','preparing','preview_verifying','preview_verified','committing','live_verifying','retry_wait'),true))continue;if(!in_array($item['readiness'],array('ready','adaptable','pending'),true))continue;$result=mirrortalk_elementor_queue_document($item['id'],'automatic');if(is_wp_error($result)){$failed++;mirrortalk_elementor_fail_stage($item['id'],'queue',$result,false);}else$processed++;}
-    $log=(array)get_option('mirrortalk_elementor_migration_log',array());$log[]=array('time'=>time(),'processed'=>$processed,'failed'=>$failed);update_option('mirrortalk_elementor_migration_log',array_slice($log,-100),false);
+    $log=(array)get_option('mirrortalk_elementor_migration_log',array());$log[]=array('time'=>time(),'processed'=>$processed,'repaired'=>$repaired,'failed'=>$failed);update_option('mirrortalk_elementor_migration_log',array_slice($log,-100),false);
     $counts=mirrortalk_elementor_migration_counts(true);$remaining=((int)($counts['pending']??0)+(int)($counts['queued']??0))>0;
     delete_transient('mt_elementor_auto_lock');if($remaining){if(!wp_next_scheduled('mirrortalk_elementor_auto_batch'))wp_schedule_single_event(time()+5*MINUTE_IN_SECONDS,'mirrortalk_elementor_auto_batch');return;}if((int)($counts['quarantined']??0)>0){update_option('mirrortalk_elementor_auto_migration',0,false);update_option('mirrortalk_elementor_auto_attention',array('time'=>time(),'reason'=>'quarantined_documents','count'=>(int)$counts['quarantined']),false);return;}
-    mirrortalk_elementor_resolve_residuals();update_option('mirrortalk_elementor_auto_migration',0,false);update_option('mirrortalk_elementor_auto_completed',time(),false);
+    $residual=mirrortalk_elementor_resolve_residuals();$remaining_residual=(array)($residual['remaining']??array());
+    update_option('mirrortalk_elementor_auto_migration',0,false);
+    if((int)($remaining_residual['templates']??0)===0&&(int)($remaining_residual['shortcodes']??0)===0)update_option('mirrortalk_elementor_auto_completed',time(),false);
+    else update_option('mirrortalk_elementor_auto_attention',array('time'=>time(),'reason'=>'referenced_templates_remain','count'=>(int)($remaining_residual['templates']??0)),false);
 }
 add_action('mirrortalk_elementor_auto_batch',function(){mirrortalk_runtime_run('elementor_auto_batch','mirrortalk_elementor_auto_batch',15*MINUTE_IN_SECONDS);});
 

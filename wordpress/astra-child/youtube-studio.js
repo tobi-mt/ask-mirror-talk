@@ -27,7 +27,7 @@
   const hasConsent = () => {
     try { return localStorage.getItem(consentKey) === 'granted'; } catch (_) { return false; }
   };
-  const podcastAudio = () => document.querySelector('[data-mt-audio]');
+  const podcastAudio = () => document.querySelector('[data-mt-audio],[data-mt-link-hub-audio]');
   const podcastIsPlaying = () => {
     const audio = podcastAudio();
     return audio && !audio.paused && !audio.ended;
@@ -60,10 +60,11 @@
   const monitorSound = () => {
     window.clearInterval(soundCheck);
     soundCheck = window.setInterval(() => {
-      if (!player || !ready || typeof player.isMuted !== 'function') return;
+      if (!player || !ready || typeof player.isMuted !== 'function' || typeof player.getPlayerState !== 'function') return;
       if (!player.isMuted() && player.getPlayerState() === window.YT.PlayerState.PLAYING) pausePodcast();
-      const duration = Number(player.getDuration()) || 0;
-      const progress = duration ? (Number(player.getCurrentTime()) || 0) / duration * 100 : 0;
+      const duration = typeof player.getDuration === 'function' ? Number(player.getDuration()) || 0 : 0;
+      const currentTime = typeof player.getCurrentTime === 'function' ? Number(player.getCurrentTime()) || 0 : 0;
+      const progress = duration ? currentTime / duration * 100 : 0;
       [25, 50, 75].forEach((bucket) => {
         if (progress >= bucket && !progressReported.has(bucket)) {
           progressReported.add(bucket);
@@ -73,7 +74,7 @@
     }, 1000);
   };
   const startMuted = () => {
-    if (!ready || !shouldAutoplay()) return;
+    if (!ready || !shouldAutoplay() || !player || typeof player.mute !== 'function' || typeof player.playVideo !== 'function') return;
     player.mute();
     player.playVideo();
   };
@@ -129,6 +130,10 @@
       },
       events: {
         onReady: (event) => {
+          // YouTube may emit state events before the Player constructor has
+          // finished assigning its return value. The callback target is the
+          // authoritative, fully initialized controller.
+          player = event.target;
           ready = true;
           event.target.mute();
           soundButton.hidden = false;
@@ -136,7 +141,7 @@
           if (mayAutoplay && !reducedMotion && !saveData) event.target.playVideo();
           else revealNativePlayer(saveData ? 'Data Saver is on. Press play when you are ready.' : 'Press play whenever you are ready.');
           playbackFallback = window.setTimeout(() => {
-            if (player.getPlayerState() !== YT.PlayerState.PLAYING) {
+            if (!player || typeof player.getPlayerState !== 'function' || player.getPlayerState() !== YT.PlayerState.PLAYING) {
               revealNativePlayer('Your browser paused automatic playback. Press play when you are ready.');
               report('youtube_autoplay_fallback');
             }
@@ -145,11 +150,13 @@
           report('youtube_video_ready');
         },
         onStateChange: (event) => {
+          player = event.target || player;
           if (event.data === YT.PlayerState.PLAYING) {
             revealNativePlayer();
             root.classList.add('is-playing');
-            if (!started) { started = true; report('youtube_video_start', { muted: player.isMuted() }); }
-            status.textContent = player.isMuted() ? 'Playing quietly. Turn sound on whenever you are ready.' : 'Playing with sound.';
+            const muted = !player || typeof player.isMuted !== 'function' ? true : player.isMuted();
+            if (!started) { started = true; report('youtube_video_start', { muted }); }
+            status.textContent = muted ? 'Playing quietly. Turn sound on whenever you are ready.' : 'Playing with sound.';
           }
           if (event.data === YT.PlayerState.ENDED) report('youtube_video_complete');
         },
@@ -178,15 +185,15 @@
   });
 
   soundButton.addEventListener('click', () => {
-    if (!player || !ready) return;
+    if (!player || !ready || typeof player.isMuted !== 'function') return;
     if (player.isMuted()) {
       pausePodcast();
-      player.unMute();
+      if (typeof player.unMute === 'function') player.unMute();
       soundButton.textContent = 'Mute video';
       status.textContent = 'Playing with sound.';
       report('youtube_video_unmuted');
     } else {
-      player.mute();
+      if (typeof player.mute === 'function') player.mute();
       soundButton.textContent = 'Turn sound on';
       status.textContent = 'Playing quietly.';
       report('youtube_video_muted');
@@ -194,13 +201,13 @@
   });
 
   document.addEventListener('mt:podcast-play', () => {
-    if (player && ready && player.getPlayerState() === window.YT.PlayerState.PLAYING) {
+    if (player && ready && typeof player.getPlayerState === 'function' && typeof player.pauseVideo === 'function' && player.getPlayerState() === window.YT.PlayerState.PLAYING) {
       player.pauseVideo();
       status.textContent = 'Video paused while you listen to the podcast.';
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && player && ready) player.pauseVideo();
+    if (document.hidden && player && ready && typeof player.pauseVideo === 'function') player.pauseVideo();
   });
 
   const observer = new IntersectionObserver((entries) => {
@@ -209,7 +216,7 @@
     if (visible && hasConsent()) {
       if (!player) createPlayer(false);
       else startMuted();
-    } else if (player && ready) {
+    } else if (player && ready && typeof player.pauseVideo === 'function') {
       player.pauseVideo();
     }
   }, { threshold: [0, 0.5, 0.75] });

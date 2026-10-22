@@ -25,7 +25,16 @@
     fetch(config.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
   };
   window.MirrorTalkTrack = send;
-  window.addEventListener('mt:intelligence-event', (event) => send(event.detail?.name, event.detail?.metadata));
+  // Feature modules historically emit on either document or window. Observe
+  // both surfaces and de-duplicate bubbling events so no valid signal is lost.
+  const observedIntelligenceEvents = new WeakSet();
+  const receiveIntelligenceEvent = (event) => {
+    if (observedIntelligenceEvents.has(event)) return;
+    observedIntelligenceEvents.add(event);
+    send(event.detail?.name, event.detail?.metadata);
+  };
+  window.addEventListener('mt:intelligence-event', receiveIntelligenceEvent);
+  document.addEventListener('mt:intelligence-event', receiveIntelligenceEvent);
   window.addEventListener('amt:product-event', (event) => {
     const detail = event.detail || {}; const theme = String(detail.metadata?.theme || '').trim().slice(0, 80);
     if (!theme || !['question_origin_selected', 'answer_rendered', 'continuation_action_used'].includes(detail.eventName)) return;

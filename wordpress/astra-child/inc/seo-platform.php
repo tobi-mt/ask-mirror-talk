@@ -406,7 +406,8 @@ function mirrortalk_seo_link_state($row) {
 }
 
 function mirrortalk_seo_internal_repair_target($url) {
-    $normalized = untrailingslashit(strtolower((string) preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $url)));
+    $url = trim(html_entity_decode((string) preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $url), ENT_QUOTES, 'UTF-8'), " \t\n\r\0\x0B\xC2\xA0");
+    $normalized = untrailingslashit(strtolower($url));
     $known = array(
         'https://anchor.fm/mirrortalk' => home_url('/listen/'),
         'https://anchor.fm/mirrortalk/subscribe' => home_url('/listen/'),
@@ -416,6 +417,8 @@ function mirrortalk_seo_internal_repair_target($url) {
     );
     if (isset($known[$normalized])) return esc_url_raw($known[$normalized]);
     if (mirrortalk_connector_host($url) !== mirrortalk_connector_host(home_url('/'))) return '';
+    $canonical_id = url_to_postid(strtok($url, '#'));
+    if ($canonical_id && get_post_status($canonical_id) === 'publish') return esc_url_raw(get_permalink($canonical_id));
     $path = '/' . ltrim((string) wp_parse_url($url, PHP_URL_PATH), '/');
     $rules = (array) get_option('mirrortalk_redirects', array());
     if (!empty($rules[$path]['target'])) return esc_url_raw($rules[$path]['target']);
@@ -423,6 +426,22 @@ function mirrortalk_seo_internal_repair_target($url) {
     if (!$slug) return '';
     $matches = get_posts(array('post_type' => mirrortalk_seo_public_post_types(), 'post_status' => 'publish', 'numberposts' => 2, 'fields' => 'ids', 'meta_key' => '_wp_old_slug', 'meta_value' => $slug));
     return count($matches) === 1 ? get_permalink($matches[0]) : '';
+}
+
+/** A HEAD failure is never enough evidence to remove a public link. */
+function mirrortalk_seo_confirm_link($url) {
+    $response = wp_remote_get($url, array(
+        'timeout' => 6, 'redirection' => 4, 'limit_response_size' => 32768,
+        'headers' => array('Range' => 'bytes=0-32767'),
+        'user-agent' => 'MirrorTalkSEO/1.1; ' . home_url('/'),
+    ));
+    $row = array(
+        'status' => is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response),
+        'message' => is_wp_error($response) ? $response->get_error_message() : '',
+        'checked' => time(),
+    );
+    $row['state'] = mirrortalk_seo_link_state($row);
+    return $row;
 }
 
 function mirrortalk_seo_repair_definitive_internal_links(&$results) {
@@ -440,15 +459,16 @@ function mirrortalk_seo_repair_definitive_internal_links(&$results) {
                 $changed++; return $match[1] . esc_url($target) . $match[3];
             }, $post->post_content);
             $reason = 'verified_replacement';
-        } elseif ((int) ($row['failures'] ?? 0) >= 2 && mirrortalk_connector_host($old) !== mirrortalk_connector_host(home_url('/'))) {
-            // A repeatedly confirmed dead external destination has no safe URL
-            // replacement. Preserve its words and remove only the dead anchor.
+        } elseif ((int) ($row['failures'] ?? 0) >= 2) {
+            // A repeatedly confirmed dead destination has no safe replacement.
+            // Preserve its words and remove only the dead anchor. This is also
+            // safer for dead internal links than redirecting visitors home.
             $content = preg_replace_callback('/<a\b([^>]*)\bhref\s*=\s*["\']([^"\']+)["\']([^>]*)>(.*?)<\/a>/is', function ($match) use ($old, &$changed) {
                 if (html_entity_decode($match[2], ENT_QUOTES, 'UTF-8') !== $old) return $match[0];
                 $changed++; return $match[4];
             }, $post->post_content);
             $target = '';
-            $reason = 'repeated_external_failure_unlinked';
+            $reason = mirrortalk_connector_host($old) === mirrortalk_connector_host(home_url('/')) ? 'repeated_internal_failure_unlinked' : 'repeated_external_failure_unlinked';
         } else continue;
         if (!$changed || $content === $post->post_content) continue;
         $updated = wp_update_post(wp_slash(array('ID' => $source_id, 'post_content' => $content)), true);
@@ -460,11 +480,48 @@ function mirrortalk_seo_repair_definitive_internal_links(&$results) {
     unset($row);
     update_option('mirrortalk_link_repair_log', array_slice($log, -200), false);
 }
+
+/**
+ * Recheck known failures in small background batches and clean every source.
+ * A valid replacement wins; otherwise two independent failures are required
+ * before unlinking. WordPress revisions and the repair log provide rollback.
+ */
+function mirrortalk_seo_cleanup_broken_links() {
+    $results = (array) get_option('mirrortalk_link_health', array());
+    $broken_keys = array_keys(array_filter($results, function ($row) { return mirrortalk_seo_link_state($row) === 'broken'; }));
+    $cursor = (int) get_option('mirrortalk_broken_cleanup_cursor', 0);
+    if ($cursor >= count($broken_keys)) $cursor = 0;
+    $batch = array_slice($broken_keys, $cursor, 6);
+    foreach ($batch as $key) {
+        $previous = (array) ($results[$key] ?? array());
+        $confirmed = mirrortalk_seo_confirm_link($previous['url'] ?? '');
+        $results[$key] = array_merge($previous, $confirmed);
+        $results[$key]['failures'] = $confirmed['state'] === 'broken' ? max(2, (int) ($previous['failures'] ?? 0) + 1) : 0;
+    }
+    mirrortalk_seo_repair_definitive_internal_links($results);
+    update_option('mirrortalk_link_health', $results, false);
+    $next = $cursor + count($batch);
+    update_option('mirrortalk_broken_cleanup_cursor', $next >= count($broken_keys) ? 0 : $next, false);
+    if ($next < count($broken_keys)) mirrortalk_runtime_queue('mirrortalk_seo_cleanup_broken_links_continue', array(), 45);
+}
+add_action('mirrortalk_seo_cleanup_broken_links', function () { return mirrortalk_runtime_run('broken_link_cleanup', 'mirrortalk_seo_cleanup_broken_links', 10 * MINUTE_IN_SECONDS); });
+add_action('mirrortalk_seo_cleanup_broken_links_continue', 'mirrortalk_seo_cleanup_broken_links');
+
+function mirrortalk_seo_schedule_clean_link_upgrade() {
+    if (get_option('mirrortalk_clean_link_guardian_version') === '1.1.0') return;
+    update_option('mirrortalk_clean_link_guardian_version', '1.1.0', false);
+    mirrortalk_runtime_queue('mirrortalk_seo_crawl', array(), 20);
+    mirrortalk_runtime_queue('mirrortalk_seo_cleanup_broken_links', array(), 90);
+}
+add_action('admin_init', 'mirrortalk_seo_schedule_clean_link_upgrade', 45);
+
 function mirrortalk_seo_crawl() {
     $posts = get_posts(array('post_type' => mirrortalk_seo_public_post_types(), 'post_status' => 'publish', 'numberposts' => -1, 'orderby' => 'modified', 'order' => 'DESC'));
     $links = array();
     foreach ($posts as $post) foreach (mirrortalk_seo_extract_links($post->post_content, get_permalink($post)) as $url) {
-        $links[md5($url)] = array('url' => $url, 'source' => get_permalink($post));
+        // The same dead URL may appear in several documents. Track every
+        // source independently so cleaning one page never hides the others.
+        $links[md5($post->ID . '|' . $url)] = array('url' => $url, 'source' => get_permalink($post));
     }
     $keys = array_keys($links); $cursor = (int) get_option('mirrortalk_link_crawl_cursor', 0);
     if ($cursor >= count($keys)) $cursor = 0;
@@ -478,6 +535,10 @@ function mirrortalk_seo_crawl() {
         $response = wp_remote_head($item['url'], array('timeout' => 3, 'redirection' => 2, 'user-agent' => 'MirrorTalkSEO/1.0; ' . home_url('/')));
         $result = array('url' => esc_url_raw($item['url']), 'source' => $item['source'], 'status' => is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response), 'message' => is_wp_error($response) ? $response->get_error_message() : '', 'checked' => time());
         $result['state'] = mirrortalk_seo_link_state($result);
+        if ($result['state'] === 'broken') {
+            $confirmed = mirrortalk_seo_confirm_link($item['url']);
+            $result = array_merge($result, $confirmed);
+        }
         $previous = (array) ($results[$key] ?? array());
         $result['failures'] = $result['state'] === 'broken' ? ((int) ($previous['failures'] ?? 0) + 1) : 0;
         $results[$key] = $result;
@@ -487,6 +548,7 @@ function mirrortalk_seo_crawl() {
     $results = array_slice($results, 0, 5000, true);
     mirrortalk_seo_repair_definitive_internal_links($results);
     update_option('mirrortalk_link_health', $results, false);
+    if (array_filter($results, function ($row) { return mirrortalk_seo_link_state($row) === 'broken'; })) mirrortalk_runtime_queue('mirrortalk_seo_cleanup_broken_links', array(), 30);
     if ($next < count($keys) && !wp_next_scheduled('mirrortalk_seo_crawl_continue')) wp_schedule_single_event(time()+2*MINUTE_IN_SECONDS,'mirrortalk_seo_crawl_continue');
 }
 function mirrortalk_seo_crawl_guarded(){return mirrortalk_runtime_run('link_crawler','mirrortalk_seo_crawl',10*MINUTE_IN_SECONDS);}

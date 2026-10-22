@@ -91,6 +91,32 @@ def test_theme_has_editorial_home_and_design_tokens():
     assert "new WP_Query" in template
 
 
+def test_owned_link_hub_replaces_third_party_bio_pages():
+    functions = (THEME_DIR / "functions.php").read_text()
+    route = (THEME_DIR / "inc" / "link-hub.php").read_text()
+    template = (THEME_DIR / "link-hub.php").read_text()
+    css = (THEME_DIR / "link-hub.css").read_text()
+    js = (THEME_DIR / "link-hub.js").read_text()
+    seo = (THEME_DIR / "inc" / "intelligence-seo.php").read_text()
+
+    assert "inc/link-hub.php" in functions
+    assert "^listen-connect/?$" in route and "mirror_links" in route
+    assert "mirror_links_legacy" in route and "301" in route
+    assert "mirrortalk_link_hub_connections" in route
+    assert "ItemList" in route and "CollectionPage" in route
+    assert "data-mt-link-hub-audio" in template
+    assert "data-mt-platform-directory" in template
+    assert 'data-mt-open-dialog="mt-newsletter-invite"' in template
+    assert "data-mt-link-hub-share" in template
+    assert "/confessions-book/" in template
+    assert "Official Mirror Talk links" in template
+    assert "@media(max-width:620px)" in css
+    assert "prefers-reduced-motion" in css
+    assert "link_hub_action" in js
+    assert "navigator.share" in js and "navigator.clipboard.writeText" in js
+    assert "home_url('/listen-connect/')" in seo
+
+
 def test_legacy_editorial_content_is_normalized_without_rewriting_storage():
     functions = (THEME_DIR / "functions.php").read_text()
     normalizer = (THEME_DIR / "inc" / "content-normalizer.php").read_text()
@@ -201,7 +227,7 @@ def test_rss_pipeline_enriches_concise_sources_and_retries_owned_drafts_safely()
     assert "podcast_audio" in pipeline and "youtube_mode" in pipeline
     assert "mirrortalk_story_studio_ensure_post_media" in studio
     assert "mirrortalk_story_media_backfill" in studio
-    assert "post_type='post'" in studio and "LIMIT 20" in studio
+    assert "post_type IN ('post','page')" in studio and "LIMIT 20" in studio
 
 
 def test_content_led_editorial_presentations_are_shared_and_responsive():
@@ -242,10 +268,11 @@ def test_story_video_uses_shared_consent_and_mobile_safe_muted_autoplay():
     assert "Allow privacy-enhanced YouTube once" not in studio
     assert "mirrortalk_latest_youtube_video" in studio
     assert "mirror_talk_video" in studio
-    assert "MIRRORTALK_STORY_STUDIO_VERSION', '1.2.0'" in studio
+    assert "MIRRORTALK_STORY_STUDIO_VERSION', '1.3.2'" in studio
     assert "if(get_post_type($post_id)==='post')$settings['enabled']='1'" in studio
-    assert "$reflection=strpos($content,'<aside class=\"mt-reflection-bridge\"')" in studio
-    assert "$content=$reflection===false?$content.$video" in studio
+    assert "mirrortalk_story_studio_insert_video($content,$video)" in studio
+    assert "post_type IN ('post','page')" in studio
+    assert "return $content.$module" in studio
     assert "Starts muted" in studio
 
 
@@ -790,12 +817,45 @@ def test_youtube_studio_is_cached_contextual_and_privacy_aware():
 def test_youtube_and_podcast_players_coordinate_audio():
     youtube_js = (THEME_DIR / "youtube-studio.js").read_text()
     podcast_js = (THEME_DIR / "listen-connect.js").read_text()
+    hub_js = (THEME_DIR / "link-hub.js").read_text()
 
     assert "mt:podcast-play" in podcast_js
     assert "mt:podcast-play" in youtube_js
     assert "pausePodcast()" in youtube_js
     assert "youtube_video_unmuted" in youtube_js
     assert "youtube_video_complete" in youtube_js
+    assert "[data-mt-audio],[data-mt-link-hub-audio]" in youtube_js
+    assert "mt:podcast-play" in hub_js
+
+
+def test_link_hub_has_compact_latest_youtube_studio():
+    hub_php = (THEME_DIR / "inc" / "link-hub.php").read_text()
+    template = (THEME_DIR / "link-hub.php").read_text()
+    css = (THEME_DIR / "link-hub.css").read_text()
+    youtube_php = (THEME_DIR / "inc" / "youtube-studio.php").read_text()
+
+    assert "mirrortalk_render_link_hub_youtube" in hub_php
+    assert "mirrortalk_latest_youtube_video" in hub_php
+    assert "mirror-talk-youtube-studio" in hub_php
+    assert "data-mt-youtube-studio" in hub_php
+    assert "data-mt-youtube-media" in hub_php
+    assert "data-mt-youtube-consent" in hub_php
+    assert "data-mt-youtube-sound" in hub_php
+    assert "youtube-video" in hub_php and "youtube-subscribe" in hub_php
+    assert "mirrortalk_render_link_hub_youtube();" in template
+    assert template.index("mirrortalk_render_link_hub_youtube();") < template.index('class="mt-link-hub__primary"')
+    assert ".mt-youtube-studio--link-hub" in css
+    assert ".mt-youtube-studio--link-hub.is-short" in css
+    assert "if (get_query_var('mirror_links')) return '';" in youtube_php
+    assert "mirrortalk_link_hub_duration_label" in hub_php
+    assert "mirrortalk_link_hub_duration_label" in template
+
+
+def test_intelligence_collector_receives_window_and_document_feature_events():
+    js = (THEME_DIR / "intelligence.js").read_text()
+    assert "window.addEventListener('mt:intelligence-event', receiveIntelligenceEvent)" in js
+    assert "document.addEventListener('mt:intelligence-event', receiveIntelligenceEvent)" in js
+    assert "new WeakSet()" in js
 
 
 def test_youtube_studio_prevents_overlap_and_black_autoplay_state():
@@ -818,6 +878,9 @@ def test_youtube_studio_prevents_overlap_and_black_autoplay_state():
     assert "youtube_autoplay_fallback" in js
     assert "YouTube player API timed out" in js
     assert "poster.hidden = true" in js
+    assert "player = event.target" in js
+    assert "typeof player.pauseVideo === 'function'" in js
+    assert "typeof player.isMuted !== 'function' ? true : player.isMuted()" in js
 
 
 def test_first_party_contact_form_replaces_plugin_form_and_is_protected():
@@ -1106,7 +1169,7 @@ def test_editorial_composer_uses_complete_semantic_phrases():
 def test_elementor_migration_is_staged_verified_resumable_and_reversible():
     migration = (THEME_DIR / "inc" / "elementor-migration.php").read_text()
 
-    assert "MIRRORTALK_ELEMENTOR_MIGRATION_VERSION = '2.0.2'" in migration
+    assert "MIRRORTALK_ELEMENTOR_MIGRATION_VERSION = '2.1.0'" in migration
     assert "strpos($template,'elementor_')===0" in migration
     assert "mirrortalk_elementor_restore($post_id,true);mirrortalk_elementor_fail_stage" in migration
     assert "mirrortalk_elementor_prepare_candidate" in migration
@@ -1122,6 +1185,32 @@ def test_elementor_migration_is_staged_verified_resumable_and_reversible():
     assert "Exact queue and failure state" in migration
     assert "Ignored stale metadata" in migration
     assert "update_post_meta($post_id,'_mirrortalk_elementor_migrated'" in migration
+
+
+def test_elementor_migration_repairs_known_quarantines_and_counts_provisional_jobs():
+    migration = (THEME_DIR / "inc" / "elementor-migration.php").read_text()
+
+    assert "function mirrortalk_elementor_repair_quarantined" in migration
+    assert "automatic-repair-heading" in migration
+    assert "legacy_snapshot_recheck" in migration
+    assert "_mirrortalk_elementor_repair_version" in migration
+    assert "job.meta_key='_mirrortalk_elementor_job'" in migration
+    assert "wp_slash($snapshot)" in migration
+    assert "wp_json_encode(wp_slash($check))" in migration
+    assert "legacy_snapshot_recovered" in migration
+    assert "strpos($legacy_version,'2.0.')===0" in migration
+
+
+def test_elementor_template_retirement_is_reference_guarded():
+    migration = (THEME_DIR / "inc" / "elementor-migration.php").read_text()
+
+    assert "function mirrortalk_elementor_template_references" in migration
+    assert "theme_builder_conditions" in migration
+    assert "shortcode_reference" in migration
+    assert "elementor_data_reference" in migration
+    assert "template_retirement_deferred" in migration
+    assert "verified_unreferenced" in migration
+    assert "mirrortalk_elementor_residual_dependencies(true)" in migration
 
 
 def test_editorial_composer_has_governed_corrections_and_audit_ledger():
@@ -1162,7 +1251,7 @@ def test_story_studio_deduplicates_legacy_modules_and_utility_outline_items():
     assert "$plan = mirrortalk_story_studio_plan($post_id);" in studio
     assert "!empty($plan['show_follow'])" in studio
     assert "array('share this','like this')" in composer
-    assert "if (!empty($composer)) $related = array();" in quality
+    assert "if (!empty($composer) && !get_post_meta($post_id, '_mirrortalk_page_one_links', true)) $related = array();" in quality
 
 
 def test_release_guardian_probes_composer_runtime_and_prunes_stale_links():
@@ -1216,6 +1305,14 @@ def test_story_studio_guides_and_composes_media_without_rewriting_source():
     assert "Latest episode automatically" in studio
     assert "latest channel video when blank" in studio
     assert "mirrortalk_story_studio_insert_after" in studio
+    assert "mirrortalk_story_studio_source_video_id" in studio
+    assert "mirrortalk_story_studio_find_video_id" in studio
+    assert "html_entity_decode" in studio
+    assert "data-video-source" in studio
+    assert "mirrortalk_story_studio_insert_video" in studio
+    assert "'source'=>'document'" in studio
+    assert "count($headings[0]) >= 2" in studio
+    assert studio.index("get_post_field('post_content'") < studio.index("$manual = esc_url_raw")
     assert "_mt_story_studio" in composer
     assert "podcast_player" in composer
     assert "youtube_player" in composer
@@ -1270,3 +1367,43 @@ def test_authenticated_previews_do_not_start_background_or_global_work():
     assert "mirrortalk_is_editor_preview_request" in intelligence
     assert "mirrortalk_is_editor_preview_request" in journey
     assert "mirrortalk_is_editor_preview_request" in knowledge
+
+
+def test_page_one_growth_is_evidence_led_channel_aware_and_reversible():
+    growth = (THEME_DIR / "inc" / "page-one-growth.php").read_text()
+    functions = (THEME_DIR / "functions.php").read_text()
+    dashboard = (THEME_DIR / "inc" / "intelligence-dashboard.php").read_text()
+    knowledge = (THEME_DIR / "inc" / "knowledge-quality.php").read_text()
+
+    assert "page-one-growth.php" in functions
+    assert "mirrortalk_page_one_high_intent" in growth
+    assert "mirrortalk_learning_query_eligible" in growth
+    assert "$position >= 4 && $position <= 20" in growth
+    assert "mirrortalk_page_one_cannibalization" in growth
+    assert "verified transcript" in growth
+    assert "timestamped key moments" in growth
+    assert "AI citations" in growth
+    assert "mirrortalk_page_one_trend" in growth
+    assert "mirrortalk_page_one_history" in growth
+    assert "mirrortalk_page_one_restore" in growth
+    assert "mirrortalk_seo_crawl" in growth
+    assert "never fabricated" in growth
+    assert "#page-one" in dashboard
+    assert "_mirrortalk_page_one_links" in knowledge
+
+
+def test_link_guardian_replaces_or_unlinks_only_confirmed_failures():
+    platform = (THEME_DIR / "inc" / "seo-platform.php").read_text()
+    growth = (THEME_DIR / "inc" / "page-one-growth.php").read_text()
+
+    assert "mirrortalk_seo_confirm_link" in platform
+    assert "wp_remote_get" in platform
+    assert "limit_response_size" in platform
+    assert "max(2, (int) ($previous['failures'] ?? 0) + 1)" in platform
+    assert "repeated_internal_failure_unlinked" in platform
+    assert "repeated_external_failure_unlinked" in platform
+    assert "md5($post->ID . '|' . $url)" in platform
+    assert "mirrortalk_seo_cleanup_broken_links_continue" in platform
+    assert "mirrortalk_clean_link_guardian_version" in platform
+    assert "mirrortalk_link_repair_log" in platform
+    assert "mirrortalk_seo_cleanup_broken_links" in growth

@@ -72,6 +72,7 @@ function mirrortalk_render_analytics_consent() {
 add_action('wp_footer', 'mirrortalk_render_analytics_consent', 90);
 
 function mirrortalk_seo_description($post_id = 0) {
+    if (get_query_var('mirror_links')) return __('Listen to the latest Mirror Talk episode, choose a verified podcast platform, explore soulful conversations, reflect with Ask Mirror Talk and join the community.', 'astra-child');
     if (get_query_var('mirror_listen')) return __('Listen to Mirror Talk: Soulful Conversations on the website, Spotify, Apple Podcasts, YouTube and other verified podcast destinations.', 'astra-child');
     if (get_query_var('mirror_blog')) return __('Ideas, podcast conversations and grounded reflections for navigating purpose, relationships, healing, faith and meaningful growth.', 'astra-child');
     if (get_query_var('mirror_topic')) {
@@ -110,6 +111,7 @@ add_filter('document_title_parts', 'mirrortalk_seo_title_parts');
 function mirrortalk_authoritative_document_title($title) {
     if (!mirrortalk_seo_authoritative()) return $title;
     if (is_front_page()) return __('Mirror Talk Podcast | Soulful Conversations for Clarity and Growth', 'astra-child');
+    if (get_query_var('mirror_links')) return __('Mirror Talk | Listen, Reflect & Connect', 'astra-child');
     if (get_query_var('mirror_listen')) return __('Listen to Mirror Talk Podcast | Spotify, Apple Podcasts & More', 'astra-child');
     if (get_query_var('mirror_blog')) return __('Conversations and Podcast Insights | Mirror Talk', 'astra-child');
     if (get_query_var('mirror_topic')) {
@@ -125,6 +127,7 @@ function mirrortalk_authoritative_document_title($title) {
 add_filter('pre_get_document_title', 'mirrortalk_authoritative_document_title', PHP_INT_MAX);
 
 function mirrortalk_canonical_url() {
+    if (get_query_var('mirror_links')) return home_url('/listen-connect/');
     if (get_query_var('mirror_listen')) return home_url('/listen/');
     $topic = get_query_var('mirror_topic');
     if ($topic) return home_url('/explore/' . sanitize_title($topic) . '/');
@@ -141,6 +144,13 @@ function mirrortalk_canonical_url() {
 }
 
 function mirrortalk_social_image($post_id = 0) {
+    if (get_query_var('mirror_links')) return array(
+        'url' => get_stylesheet_directory_uri() . '/assets/art/mirror-talk-cover-art.jpg',
+        'width' => 1000,
+        'height' => 1000,
+        'alt' => __('Mirror Talk: Soulful Conversations podcast cover with host Tobi Ojekunle', 'astra-child'),
+        'mime' => 'image/jpeg',
+    );
     $fallback = mirrortalk_fallback_visual($post_id);
     if (!$post_id) return $fallback;
     $attachment_id = get_post_thumbnail_id($post_id);
@@ -301,7 +311,7 @@ function mirrortalk_render_sitemap() {
     if (!get_query_var('mirror_sitemap') && untrailingslashit((string) $request_path) !== '/mirror-talk-sitemap') return;
     status_header(200); nocache_headers(); header('Content-Type: application/xml; charset=UTF-8');
     $render = function () {
-    $urls = array(array('loc' => home_url('/'), 'modified' => gmdate('c')), array('loc' => home_url('/listen/'), 'modified' => gmdate('c')));
+    $urls = array(array('loc' => home_url('/'), 'modified' => gmdate('c')), array('loc' => home_url('/listen/'), 'modified' => gmdate('c')), array('loc' => home_url('/listen-connect/'), 'modified' => gmdate('c')));
     $posts = get_posts(array('post_type' => array('post', 'page'), 'post_status' => 'publish', 'numberposts' => -1, 'orderby' => 'modified', 'order' => 'DESC'));
     foreach ($posts as $post) {
         if (get_post_meta($post->ID, '_mirrortalk_noindex', true)) continue;
@@ -356,7 +366,7 @@ add_action('save_post', function ($post_id) {
 });
 
 function mirrortalk_weekly_seo_report() {
-    $urls = array(home_url('/'), home_url('/listen/'), home_url('/podcast-episodes/'), home_url('/blog/'), home_url('/ask-mirror-talk/'));
+    $urls = array(home_url('/'), home_url('/listen/'), home_url('/listen-connect/'), home_url('/podcast-episodes/'), home_url('/blog/'), home_url('/ask-mirror-talk/'));
     foreach (array_keys(mirrortalk_topic_map()) as $slug) $urls[] = home_url('/explore/' . $slug . '/');
     $issues = array(); $redirects = array();
     foreach ($urls as $url) {

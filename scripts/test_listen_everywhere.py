@@ -189,7 +189,7 @@ def test_elementor_migration_rejects_unknown_widgets_and_preserves_urls():
     migration = read("inc/elementor-migration.php")
     assert "$unsupported[$type]" in migration
     assert "'readiness'=>" in migration
-    assert "wp_update_post(array('ID'=>$post_id,'post_content'" in migration
+    assert "wp_update_post(wp_slash(array('ID'=>$post_id,'post_content'" in migration
     assert "post_name" not in migration
     assert "guid" not in migration
     assert "mirrortalk_indexnow_queue_url" in migration
@@ -241,12 +241,12 @@ def test_migration_intelligence_is_resumable_verified_and_self_recovering():
     migration = read("inc/elementor-migration.php")
     assert "mirrortalk_elementor_auto_batch" in migration
     assert "mirrortalk_elementor_recover_schedule" in migration
-    assert "mt_elementor_migrating_" in migration
+    assert "mt_elementor_stage_" in migration
     assert "mirrortalk_elementor_conversion_quality" in migration
     assert "low_text_retention" in migration
     assert "mirrortalk_elementor_verify_migration" in migration
-    assert "public_render_failure" in migration
-    assert "rolled_back" in migration
+    assert "render_failure" in migration
+    assert "mirrortalk_elementor_restore($post_id,true)" in migration
     assert "delete_post_meta($post_id,'_elementor_data')" in migration
 
 
@@ -284,10 +284,10 @@ def test_trust_pages_have_a_dedicated_non_composer_surface():
 def test_elementor_dashboard_is_bounded_paginated_and_non_blocking():
     migration = read("inc/elementor-migration.php")
     assert "function mirrortalk_elementor_inventory($limit = 50, $offset = 0, $include_migrated = true)" in migration
-    assert "min(100, max(1, absint($limit)))" in migration
+    assert "min(100,max(1,absint($limit)))" in migration
     assert "function mirrortalk_elementor_migration_counts($force = false)" in migration
     assert "mirrortalk_elementor_count_scan" in migration
-    assert "$snapshot['items']=mirrortalk_elementor_dashboard_items(12,0)" in migration
+    assert "$snapshot['items']=mirrortalk_elementor_dashboard_items(100,0)" in migration
     assert "mirrortalk_elementor_resolve_residuals_async" in migration
     assert "mirrortalk_elementor_restore_templates_async" in migration
     assert "migration-batch-queued" in migration
@@ -331,7 +331,7 @@ def test_elementor_snapshot_commits_progress_before_residual_scan():
     refresh = migration.split("function mirrortalk_elementor_refresh_dashboard_snapshot", 1)[1].split("add_action('mirrortalk_elementor_dashboard_refresh'", 1)[0]
     assert refresh.count("update_option('mirrortalk_elementor_dashboard_snapshot'") >= 4
     assert "mirrortalk_elementor_migration_counts(true)" in refresh
-    assert "mirrortalk_elementor_dashboard_items(12,0)" in refresh
+    assert "mirrortalk_elementor_dashboard_items(100,0)" in refresh
     assert "mirrortalk_elementor_residual_dependencies(true)" not in refresh
 
 

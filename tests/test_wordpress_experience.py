@@ -107,6 +107,8 @@ def test_living_question_is_resilient_sitewide_and_does_not_restore_page_caching
     assert "mirrortalk_qotd_word_count" in feature
     assert "$word_count < 250" in feature
     assert "$progress >= .30 && $progress <= .68" in feature
+    assert "mt-composer-document" in feature
+    assert "!empty($stack[0]['transparent'])" in feature
     assert "return $content . $card" not in feature
     assert "A thoughtful pause" in feature
     assert "if ($context === 'home')" in feature

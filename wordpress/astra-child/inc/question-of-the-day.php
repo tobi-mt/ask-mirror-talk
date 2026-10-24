@@ -151,12 +151,15 @@ function mirrortalk_qotd_safe_insertion_offset($content) {
             $tag = strtolower($closing[1]);
             if (!empty($stack)) {
                 $opened = array_pop($stack);
-                if ($opened !== $tag) {
+                if ($opened['tag'] !== $tag) {
                     $stack = array();
                     continue;
                 }
             }
-            if (empty($stack) && $tag === 'p') {
+            $at_safe_root = empty($stack) || (
+                count($stack) === 1 && !empty($stack[0]['transparent'])
+            );
+            if ($at_safe_root && $tag === 'p') {
                 $top_level_paragraph_ends[] = $offset + strlen($token);
             }
             continue;
@@ -164,11 +167,18 @@ function mirrortalk_qotd_safe_insertion_offset($content) {
 
         if (!preg_match('/^<\s*([a-zA-Z0-9:-]+)/', $token, $opening)) continue;
         $tag = strtolower($opening[1]);
-        $is_top_level = empty($stack);
-        if ($is_top_level && $tag === 'h2') $top_level_heading_offsets[] = $offset;
+        $at_safe_root = empty($stack) || (
+            count($stack) === 1 && !empty($stack[0]['transparent'])
+        );
+        if ($at_safe_root && $tag === 'h2') $top_level_heading_offsets[] = $offset;
 
         $self_closing = substr(rtrim($token), -2) === '/>' || in_array($tag, $void_elements, true);
-        if (!$self_closing) $stack[] = $tag;
+        if (!$self_closing) {
+            $is_composer_root = empty($stack)
+                && $tag === 'div'
+                && preg_match('/\bclass\s*=\s*(["\x{0027}])[^"\x{0027}]*\bmt-composer-document\b[^"\x{0027}]*\1/i', $token);
+            $stack[] = array('tag' => $tag, 'transparent' => (bool) $is_composer_root);
+        }
     }
 
     $progress_for = function($offset) use ($content, $word_count) {

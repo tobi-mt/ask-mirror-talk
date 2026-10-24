@@ -2268,3 +2268,31 @@ body:has(.mt-topic-hub) .site-content > .ast-container > h1:first-child { displa
 .mt-document-visual{overflow:hidden;background:#17121d}.mt-document-visual__image{display:block;width:100%;height:100%;object-fit:cover}.mt-document-visual__image--fallback{filter:saturate(.82) contrast(1.04)}
 .mt-page__visual{margin:clamp(28px,5vw,64px) 0 0;border-radius:clamp(20px,3vw,40px);aspect-ratio:16/7;box-shadow:0 24px 70px rgba(0,0,0,.28)}
 @media(max-width:720px){.mt-page__visual{margin-inline:calc(var(--mt-gutter,20px)*-1);border-radius:0;aspect-ratio:4/3}}
+
+/* 8.33 — The Living Question, shared by the home and editorial surfaces. */
+.mt-home__living-question{padding-block:clamp(56px,8vw,110px)}
+.mt-living-question{position:relative;isolation:isolate;display:grid;box-sizing:border-box;margin:clamp(46px,7vw,82px) 0;padding:clamp(28px,5vw,62px);border:1px solid rgba(244,201,103,.3);border-radius:clamp(24px,4vw,42px);grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:clamp(26px,5vw,70px);overflow:hidden;color:#fffaf3;background:radial-gradient(circle at 88% 10%,rgba(239,128,98,.24),transparent 24rem),radial-gradient(circle at 14% 100%,rgba(244,201,103,.13),transparent 22rem),linear-gradient(140deg,#17111b,#2b1d2b 68%,#3d252a);box-shadow:0 30px 90px rgba(27,18,31,.25)}
+.mt-home__living-question>.mt-living-question{margin:0;min-height:clamp(430px,48vw,620px);padding:clamp(36px,7vw,88px)}
+.mt-living-question__content{position:relative;z-index:2;max-width:920px}
+.mt-living-question__meta{display:flex;margin-bottom:clamp(34px,6vw,72px);align-items:center;justify-content:space-between;gap:24px;color:#f4c967;font-size:.7rem;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
+.mt-living-question__meta time{color:#cfc3d1;font-weight:700;letter-spacing:.08em}
+.mt-living-question__theme{display:inline-flex!important;width:max-content;margin:0 0 18px!important;padding:7px 12px;border:1px solid rgba(244,201,103,.34);border-radius:999px;color:#ffd77b!important;background:rgba(244,201,103,.08);font-size:.72rem!important;font-weight:800;letter-spacing:.08em;line-height:1.2!important;text-transform:uppercase}
+.mt-living-question h2{max-width:18ch;margin:0;color:#fffaf3!important;font-family:var(--mt-display);font-size:clamp(2.35rem,5.6vw,5.9rem);font-weight:500;line-height:.96;letter-spacing:-.04em;overflow-wrap:normal;word-break:normal;hyphens:none}
+.mt-living-question--inline h2{font-size:clamp(2.05rem,4.4vw,4.1rem)}
+.mt-living-question__invitation{max-width:65ch;margin:24px 0 0!important;color:#d8ced9!important;font-size:clamp(.98rem,1.2vw,1.12rem)!important;line-height:1.7!important}
+.mt-living-question__actions{display:flex;flex-wrap:wrap;margin-top:30px;align-items:center;gap:12px 18px}
+.mt-living-question__actions .mt-button{margin:0;color:#211824!important;background:#f4c967;box-shadow:0 14px 36px rgba(0,0,0,.24)}
+.mt-living-question__actions .mt-button:hover{color:#211824!important;background:#ffd77b}
+.mt-living-question__reminder{min-height:50px;padding:11px 18px;border:1px solid rgba(255,250,243,.25);border-radius:999px;color:#fffaf3;background:rgba(255,255,255,.045);font:inherit;font-size:.86rem;font-weight:800;cursor:pointer;transition:border-color .2s ease,background .2s ease,transform .2s ease}
+.mt-living-question__reminder:hover{border-color:#f4c967;background:rgba(244,201,103,.09);transform:translateY(-2px)}
+.mt-living-question__reminder:disabled{cursor:default;opacity:.72;transform:none}
+.mt-living-question__status{min-height:1.4em;margin:14px 0 0!important;color:#d8ced9!important;font-size:.78rem!important;line-height:1.45!important}
+.mt-living-question__mark{position:relative;z-index:2;display:grid;width:clamp(86px,11vw,150px);aspect-ratio:1;margin:0!important;border:1px solid rgba(244,201,103,.36);border-radius:50%;place-items:center;color:#f4c967!important;background:rgba(14,10,17,.28);font-family:var(--mt-display);font-size:clamp(3.5rem,8vw,7.5rem)!important;line-height:1!important;box-shadow:inset 0 0 0 12px rgba(244,201,103,.025)}
+.mt-living-question__aura{position:absolute;inset:0;z-index:0;pointer-events:none}
+.mt-living-question__aura span{position:absolute;border:1px solid rgba(244,201,103,.1);border-radius:50%}
+.mt-living-question__aura span:nth-child(1){right:-12%;top:-35%;width:52%;aspect-ratio:1}
+.mt-living-question__aura span:nth-child(2){right:-3%;top:-16%;width:34%;aspect-ratio:1}
+.mt-living-question__aura span:nth-child(3){right:8%;top:3%;width:17%;aspect-ratio:1;background:rgba(244,201,103,.025)}
+.mt-editorial-content>.mt-living-question{max-width:none}
+@media(max-width:700px){.mt-home__living-question{width:100%;padding-block:42px}.mt-living-question,.mt-home__living-question>.mt-living-question{margin:38px calc(50% - 50vw);padding:32px max(20px,calc((100vw - 100%)/2));border-inline:0;border-radius:0;grid-template-columns:1fr}.mt-home__living-question>.mt-living-question{min-height:0;margin:0}.mt-living-question__meta{margin-bottom:34px;align-items:flex-start;flex-direction:column;gap:8px}.mt-living-question h2,.mt-living-question--inline h2{max-width:15ch;font-size:clamp(2.25rem,11.5vw,4.2rem)}.mt-living-question__mark{display:none}.mt-living-question__actions{align-items:stretch;flex-direction:column}.mt-living-question__actions .mt-button,.mt-living-question__reminder{width:100%}}
+@media(prefers-reduced-motion:reduce){.mt-living-question__reminder{transition:none}.mt-living-question__reminder:hover{transform:none}}

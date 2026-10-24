@@ -22,6 +22,11 @@ from app.core.config import settings
 from app.core.openai_compat import create_chat_completion, openai_semantic_score
 from app.core.quote_selector import QuoteSelector, QuoteCandidate
 from app.core.feedback_logger import log_quote_feedback
+from app.notifications.subscription_health import (
+    ensure_push_subscription_health_schema,
+    log_subscription_health,
+    mark_delivery_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +299,7 @@ def send_push_notification(
 
     Returns:
         "sent"    — delivered successfully
-        "expired" — subscription is gone (404/410), should be deactivated
+        "expired_404" / "expired_410" — endpoint is gone and may be retired
         "failed"  — transient error, keep subscription active
     """
     if not settings.vapid_private_key or not settings.vapid_claim_email:
@@ -346,7 +351,7 @@ def send_push_notification(
 
         if status_code in (404, 410):
             logger.info("Push subscription expired (HTTP %s), marking for removal", status_code)
-            return "expired"
+            return f"expired_{status_code}"
         else:
             logger.warning("Push notification failed (HTTP %s): %s", status_code, e)
             return "failed"
@@ -902,6 +907,9 @@ def send_qotd_notification(db: Session) -> dict:
     the next question in the pool they haven't received yet.  A refill batch is
     generated automatically when the pool headroom drops below the threshold.
     """
+    ensure_push_subscription_health_schema(db)
+    health = log_subscription_health(db, context="qotd_start")
+
     # Ensure the DB pool is seeded (no-op if already populated)
     _ensure_pool_seeded(db)
 
@@ -936,8 +944,19 @@ def send_qotd_notification(db: Session) -> dict:
     ).fetchall()
 
     if not rows:
-        logger.info("No QOTD subscribers due for delivery at this hour")
-        return {"sent": 0, "failed": 0, "expired": 0, "total_subscribers": 0}
+        logger.info(
+            "No QOTD subscribers due for delivery: total=%d active=%d qotd_enabled=%d due_now=%d",
+            health["total"], health["active"], health["qotd_enabled"], health["due_now"],
+        )
+        return {
+            "sent": 0,
+            "failed": 0,
+            "expired": 0,
+            "total_subscribers": health["total"],
+            "active_subscribers": health["active"],
+            "qotd_enabled": health["qotd_enabled"],
+            "due_subscribers": 0,
+        }
 
     logger.info("Sending individualised QOTD to %d subscribers (timezone-filtered catch-up window)", len(rows))
 
@@ -1074,6 +1093,13 @@ def send_qotd_notification(db: Session) -> dict:
             vibrate=[160, 60, 180],
             require_interaction=True,
         )
+        mark_delivery_result(
+            db,
+            subscription_id=sub_id,
+            endpoint=endpoint,
+            result=result,
+            notification_type="qotd",
+        )
 
         if result == "sent":
             sent += 1
@@ -1095,17 +1121,11 @@ def send_qotd_notification(db: Session) -> dict:
                 day_of_week=today.weekday(),
                 holiday_name=holiday_name if selection_strategy == "holiday" else None,
             )
-        elif result == "expired":
+        elif result.startswith("expired_"):
             expired_ids.append(sub_id)
             failed += 1
         else:
             failed += 1
-
-    if expired_ids:
-        db.execute(
-            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
-            {"ids": expired_ids},
-        )
 
     db.commit()
     if expired_ids:
@@ -1115,7 +1135,10 @@ def send_qotd_notification(db: Session) -> dict:
         "sent": sent,
         "failed": failed,
         "expired": len(expired_ids),
-        "total_subscribers": len(rows),
+        "total_subscribers": health["total"],
+        "active_subscribers": health["active"],
+        "qotd_enabled": health["qotd_enabled"],
+        "due_subscribers": len(rows),
     }
     logger.info("Individualised QOTD result: %s", result_summary)
     return result_summary
@@ -1403,6 +1426,7 @@ def send_midday_motivation_notification(db: Session) -> dict:
 
     Run hourly (cron: ``0 * * * *``), same as QOTD.
     """
+    ensure_push_subscription_health_schema(db)
     _ensure_motivation_pool_seeded(db)
 
     rows = db.execute(
@@ -1586,6 +1610,13 @@ def send_midday_motivation_notification(db: Session) -> dict:
             vibrate=[90, 40, 90],
             require_interaction=False,
         )
+        mark_delivery_result(
+            db,
+            subscription_id=sub_id,
+            endpoint=endpoint,
+            result=result,
+            notification_type="midday_motivation",
+        )
 
         if result == "sent":
             sent += 1
@@ -1605,17 +1636,11 @@ def send_midday_motivation_notification(db: Session) -> dict:
                     day_of_week=today.date().weekday(),
                     holiday_name=holiday_name if selection_strategy == "holiday" else None,
                 )
-        elif result == "expired":
+        elif result.startswith("expired_"):
             expired_ids.append(sub_id)
             failed += 1
         else:
             failed += 1
-
-    if expired_ids:
-        db.execute(
-            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
-            {"ids": expired_ids},
-        )
 
     db.commit()
     if expired_ids:
@@ -1692,6 +1717,7 @@ def send_streak_protection_notification(db: Session) -> dict:
     Keyed by tag 'streak-{date}' so duplicate sends within the same local day
     replace each other silently.
     """
+    ensure_push_subscription_health_schema(db)
     today = datetime.now(timezone.utc).date()
 
     # Target the local evening window, with a delivery ledger so delayed or
@@ -1772,6 +1798,13 @@ def send_streak_protection_notification(db: Session) -> dict:
             vibrate=[120, 40, 120],
             require_interaction=False,
         )
+        mark_delivery_result(
+            db,
+            subscription_id=sub_id,
+            endpoint=endpoint,
+            result=result,
+            notification_type="streak",
+        )
         if result == "sent":
             sent += 1
             db.execute(
@@ -1782,18 +1815,11 @@ def send_streak_protection_notification(db: Session) -> dict:
                 ),
                 {"sid": sub_id},
             )
-        elif result == "expired":
+        elif result.startswith("expired_"):
             expired_ids.append(sub_id)
             failed += 1
         else:
             failed += 1
-
-    if expired_ids:
-        db.execute(
-            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
-            {"ids": expired_ids},
-        )
-        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
 
     db.commit()
 
@@ -1816,6 +1842,7 @@ def send_nightly_reflection_notification(db: Session) -> dict:
     feature can ship without a schema change. The app resolves the actual
     prompt locally after open using same-day history, weekly recap, or QOTD.
     """
+    ensure_push_subscription_health_schema(db)
     today = datetime.now(timezone.utc).date()
 
     rows = db.execute(
@@ -1911,6 +1938,13 @@ def send_nightly_reflection_notification(db: Session) -> dict:
             vibrate=[70, 35, 70],
             require_interaction=False,
         )
+        mark_delivery_result(
+            db,
+            subscription_id=sub_id,
+            endpoint=endpoint,
+            result=result,
+            notification_type="night_reflection",
+        )
         if result == "sent":
             sent += 1
             db.execute(
@@ -1921,18 +1955,11 @@ def send_nightly_reflection_notification(db: Session) -> dict:
                 ),
                 {"sid": sub_id},
             )
-        elif result == "expired":
+        elif result.startswith("expired_"):
             expired_ids.append(sub_id)
             failed += 1
         else:
             failed += 1
-
-    if expired_ids:
-        db.execute(
-            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
-            {"ids": expired_ids},
-        )
-        logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
 
     db.commit()
 
@@ -2019,6 +2046,7 @@ def _broadcast_notification(
         preference_column: Optional column name to filter by (e.g. 'notify_new_episodes').
                            Must be one of the allowed preference columns.
     """
+    ensure_push_subscription_health_schema(db)
     _ALLOWED_PREF_COLUMNS = {"notify_new_episodes", "notify_qotd", "notify_midday"}
 
     if preference_column and preference_column in _ALLOWED_PREF_COLUMNS:
@@ -2066,22 +2094,24 @@ def _broadcast_notification(
             require_interaction=require_interaction,
             image=image,
         )
+        mark_delivery_result(
+            db,
+            subscription_id=sub_id,
+            endpoint=endpoint,
+            result=result,
+            notification_type=notification_type,
+        )
 
         if result == "sent":
             sent += 1
-        elif result == "expired":
+        elif result.startswith("expired_"):
             failed += 1
             expired_ids.append(sub_id)
         else:
             failed += 1
 
-    # Deactivate expired subscriptions
+    db.commit()
     if expired_ids:
-        db.execute(
-            text("UPDATE push_subscriptions SET active = false WHERE id = ANY(:ids)"),
-            {"ids": expired_ids},
-        )
-        db.commit()
         logger.info("Deactivated %d expired push subscriptions", len(expired_ids))
 
     result = {

@@ -68,7 +68,9 @@ def test_push_subscribe_rejects_missing_keys(monkeypatch):
 
 def test_push_subscribe_persists_sanitized_values(monkeypatch):
     monkeypatch.setattr(settings, "vapid_public_key", "public-key")
-    db = DummyPushDb(execute_results=[DummyExecuteResult(), DummyExecuteResult(scalar_value=4)])
+    monkeypatch.setattr(push_routes, "ensure_push_subscription_health_schema", lambda _db: None)
+    monkeypatch.setattr(push_routes, "record_subscription_event", lambda _db, **_kwargs: None)
+    db = DummyPushDb(execute_results=[DummyExecuteResult(scalar_value=41), DummyExecuteResult(scalar_value=4)])
     payload = push_routes.PushSubscriptionRequest(
         endpoint="https://example.com/sub",
         keys={"p256dh": "key-a", "auth": "key-b"},
@@ -88,7 +90,9 @@ def test_push_subscribe_persists_sanitized_values(monkeypatch):
 
 def test_push_subscribe_invalid_timezone_falls_back_to_utc(monkeypatch):
     monkeypatch.setattr(settings, "vapid_public_key", "public-key")
-    db = DummyPushDb(execute_results=[DummyExecuteResult(), DummyExecuteResult(scalar_value=1)])
+    monkeypatch.setattr(push_routes, "ensure_push_subscription_health_schema", lambda _db: None)
+    monkeypatch.setattr(push_routes, "record_subscription_event", lambda _db, **_kwargs: None)
+    db = DummyPushDb(execute_results=[DummyExecuteResult(scalar_value=42), DummyExecuteResult(scalar_value=1)])
     payload = push_routes.PushSubscriptionRequest(
         endpoint="https://example.com/sub-2",
         keys={"p256dh": "key-a", "auth": "key-b"},

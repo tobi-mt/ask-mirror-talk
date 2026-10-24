@@ -164,6 +164,28 @@ class PushSubscription(Base):
     preferred_qotd_hour: Mapped[int] = mapped_column(Integer, default=8)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_delivery_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_delivery_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deactivation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class PushSubscriptionEvent(Base):
+    """Privacy-safe subscription lifecycle audit entry."""
+
+    __tablename__ = "push_subscription_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    endpoint_hash: Mapped[str] = mapped_column(String(64), index=True)
+    event_type: Mapped[str] = mapped_column(String(48), index=True)
+    reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notification_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 
 class PushMotivationMessage(Base):

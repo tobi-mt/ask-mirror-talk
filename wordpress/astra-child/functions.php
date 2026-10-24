@@ -152,6 +152,7 @@ require_once get_stylesheet_directory() . '/inc/content-normalizer.php';
 require_once get_stylesheet_directory() . '/inc/elementor-migration.php';
 require_once get_stylesheet_directory() . '/inc/navigation.php';
 require_once get_stylesheet_directory() . '/inc/contact-forms.php';
+require_once get_stylesheet_directory() . '/inc/question-of-the-day.php';
 
 /**
  * Consistency mode: full-site service workers created several independent HTML
@@ -180,7 +181,12 @@ function mirrortalk_release_marker() {
       try {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function (registrations) {
-            return Promise.all(registrations.map(function (registration) { return registration.unregister(); }));
+            return Promise.all(registrations.map(function (registration) {
+              var worker = registration.active || registration.waiting || registration.installing;
+              var script = worker && worker.scriptURL ? worker.scriptURL : '';
+              if (script.indexOf('/mirror-talk-push-sw.js') !== -1) return Promise.resolve(false);
+              return registration.unregister();
+            }));
           }).then(function () {
             if (!navigator.serviceWorker.controller) return;
             var key = 'mt_release_reloaded_' + release;
@@ -254,6 +260,8 @@ function mirrortalk_child_enqueue_styles() {
     wp_script_add_data('mirror-talk-site', 'strategy', 'defer');
     wp_localize_script('mirror-talk-site', 'MirrorTalkSite', array(
         'apiBase' => 'https://ask-mirror-talk-production.up.railway.app',
+        'release' => mirrortalk_release_version(),
+        'pushWorkerUrl' => home_url('/mirror-talk-push-sw.js?v=' . rawurlencode(mirrortalk_release_version())),
     ));
 
     wp_enqueue_script(

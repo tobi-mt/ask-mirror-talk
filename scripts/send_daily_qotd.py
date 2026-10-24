@@ -119,8 +119,13 @@ def main():
                     print("⚠ QOTD had subscribers due, but push is not configured locally (missing VAPID keys)")
                 else:
                     print(f"⚠ QOTD attempted but {result['failed']} failed")
-            elif result["total_subscribers"] == 0:
-                print("ℹ No QOTD subscribers due at this hour")
+            elif result.get("due_subscribers", result["total_subscribers"]) == 0:
+                print(
+                    "ℹ No QOTD subscribers due at this hour "
+                    f"(stored={result.get('total_subscribers', 0)}, "
+                    f"active={result.get('active_subscribers', 0)}, "
+                    f"qotd_enabled={result.get('qotd_enabled', 0)})"
+                )
             else:
                 print(f"⚠ Notification attempted but {result['failed']} failed")
             return

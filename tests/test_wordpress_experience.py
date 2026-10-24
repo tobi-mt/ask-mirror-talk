@@ -91,6 +91,31 @@ def test_theme_has_editorial_home_and_design_tokens():
     assert "new WP_Query" in template
 
 
+def test_living_question_is_resilient_sitewide_and_does_not_restore_page_caching():
+    functions = (THEME_DIR / "functions.php").read_text()
+    feature = (THEME_DIR / "inc" / "question-of-the-day.php").read_text()
+    home = (THEME_DIR / "page-templates" / "mirror-talk-home.php").read_text()
+    script = (THEME_DIR / "mirror-talk-site.js").read_text()
+    worker = (THEME_DIR / "mirror-talk-push-sw.js").read_text()
+    css = (THEME_DIR / "mirror-talk-site.css").read_text()
+
+    assert "inc/question-of-the-day.php" in functions
+    assert "mirrortalk_render_question_of_the_day('home')" in home
+    assert "mirrortalk_insert_qotd_after_editorial_opening" in feature
+    assert "data-mt-living-question" in feature
+    assert "autoask" in feature
+    assert "ask-mirror-talk" in feature and "insights" in feature
+    assert "mirror-talk-push-sw.js" in functions
+    assert "script.indexOf('/mirror-talk-push-sw.js')" in functions
+    assert "/api/push/recover" in script
+    assert "/api/question-of-the-day" in script
+    assert "data-mt-qotd-reminder" in script
+    assert "addEventListener('fetch'" not in worker
+    assert "addEventListener('push'" in worker
+    assert ".mt-living-question" in css
+    assert "prefers-reduced-motion" in css
+
+
 def test_owned_link_hub_replaces_third_party_bio_pages():
     functions = (THEME_DIR / "functions.php").read_text()
     route = (THEME_DIR / "inc" / "link-hub.php").read_text()
@@ -398,7 +423,8 @@ def test_intelligent_slider_is_adaptive_accessible_and_privacy_first():
     assert "pointerdown" in script and "pointerup" in script
     assert "Your preferences stay in this browser" in script
     assert "geolocation" not in script.lower()
-    assert "fetch(" not in script
+    slider_runtime = script.split("// A cache-free, root-scoped worker", 1)[0]
+    assert "fetch(" not in slider_runtime
 
 
 def test_first_party_intelligence_and_native_seo_system_are_wired():

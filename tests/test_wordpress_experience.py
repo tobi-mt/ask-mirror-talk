@@ -101,7 +101,15 @@ def test_living_question_is_resilient_sitewide_and_does_not_restore_page_caching
 
     assert "inc/question-of-the-day.php" in functions
     assert "mirrortalk_render_question_of_the_day('home')" in home
+    assert home.index('mt-topics-title') < home.index('mt-home__living-question') < home.index('mt-latest-title')
     assert "mirrortalk_insert_qotd_after_editorial_opening" in feature
+    assert "mirrortalk_qotd_safe_insertion_offset" in feature
+    assert "mirrortalk_qotd_word_count" in feature
+    assert "$word_count < 250" in feature
+    assert "$progress >= .30 && $progress <= .68" in feature
+    assert "return $content . $card" not in feature
+    assert "A thoughtful pause" in feature
+    assert "if ($context === 'home')" in feature
     assert "data-mt-living-question" in feature
     assert "autoask" in feature
     assert "ask-mirror-talk" in feature and "insights" in feature

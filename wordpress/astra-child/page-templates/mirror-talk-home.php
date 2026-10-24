@@ -111,10 +111,6 @@ $contact_url = home_url('/contact/');
         </section>
     <?php endif; ?>
 
-    <section class="mt-home__shell mt-home__living-question" aria-label="<?php esc_attr_e('Today’s question from Ask Mirror Talk', 'astra-child'); ?>">
-        <?php if (function_exists('mirrortalk_render_question_of_the_day')) mirrortalk_render_question_of_the_day('home'); ?>
-    </section>
-
     <section class="mt-home__section mt-home__section--plum" aria-labelledby="mt-pathways-title">
         <div class="mt-home__shell">
             <p class="mt-section-kicker"><?php esc_html_e('Begin where you are', 'astra-child'); ?></p>
@@ -157,6 +153,10 @@ $contact_url = home_url('/contact/');
                 </a>
             <?php endforeach; ?>
         </div>
+    </section>
+
+    <section class="mt-home__shell mt-home__living-question" aria-label="<?php esc_attr_e('Today’s question from Ask Mirror Talk', 'astra-child'); ?>">
+        <?php if (function_exists('mirrortalk_render_question_of_the_day')) mirrortalk_render_question_of_the_day('home'); ?>
     </section>
 
     <section class="mt-home__shell mt-home__section" aria-labelledby="mt-latest-title">

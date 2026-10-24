@@ -80,15 +80,21 @@ function mirrortalk_render_question_of_the_day($context = 'inline', $echo = true
         <div class="mt-living-question__aura" aria-hidden="true"><span></span><span></span><span></span></div>
         <div class="mt-living-question__content">
             <div class="mt-living-question__meta">
-                <span><?php esc_html_e('The Living Question', 'astra-child'); ?></span>
+                <span><?php echo esc_html($context === 'inline' ? __('A thoughtful pause', 'astra-child') : __('The Living Question', 'astra-child')); ?></span>
                 <time datetime="<?php echo esc_attr($qotd['date']); ?>" data-mt-qotd-time><?php echo esc_html($label_date); ?></time>
             </div>
             <p class="mt-living-question__theme" data-mt-qotd-theme-label><?php echo esc_html($qotd['theme']); ?></p>
-            <h2 id="mt-living-question-title-<?php echo esc_attr($context); ?>" data-mt-qotd-question><?php echo esc_html($qotd['question']); ?></h2>
-            <p class="mt-living-question__invitation"><?php esc_html_e('Pause with the question, then enter the Living Mirror for a thoughtful response grounded in the Mirror Talk archive.', 'astra-child'); ?></p>
+            <?php if ($context === 'home') : ?>
+                <h2 class="mt-living-question__question" id="mt-living-question-title-home" data-mt-qotd-question><?php echo esc_html($qotd['question']); ?></h2>
+            <?php else : ?>
+                <p class="mt-living-question__question" id="mt-living-question-title-inline" data-mt-qotd-question><?php echo esc_html($qotd['question']); ?></p>
+            <?php endif; ?>
+            <p class="mt-living-question__invitation"><?php echo esc_html($context === 'inline' ? __('If this question meets you where you are, explore a grounded response without losing your place in the conversation.', 'astra-child') : __('Pause with the question, then enter the Living Mirror for a thoughtful response grounded in the Mirror Talk archive.', 'astra-child')); ?></p>
             <div class="mt-living-question__actions">
                 <a class="mt-button" href="<?php echo esc_url($answer_url); ?>" data-mt-qotd-answer data-mt-qotd-theme="<?php echo esc_attr($qotd['theme']); ?>"><?php esc_html_e('Explore the answer', 'astra-child'); ?> <span aria-hidden="true">→</span></a>
-                <button type="button" class="mt-living-question__reminder" data-mt-qotd-reminder><?php esc_html_e('Send me tomorrow’s question', 'astra-child'); ?></button>
+                <?php if ($context === 'home') : ?>
+                    <button type="button" class="mt-living-question__reminder" data-mt-qotd-reminder><?php esc_html_e('Send me tomorrow’s question', 'astra-child'); ?></button>
+                <?php endif; ?>
             </div>
             <p class="mt-living-question__status" data-mt-qotd-status role="status" aria-live="polite"></p>
         </div>
@@ -119,10 +125,20 @@ function mirrortalk_qotd_content_is_eligible($post_id) {
  * walk preserves the original HTML byte-for-byte and accepts only boundaries
  * where no parent element remains open.
  */
+function mirrortalk_qotd_word_count($content) {
+    $plain_text = trim(wp_strip_all_tags(strip_shortcodes($content)));
+    preg_match_all('/[\p{L}\p{N}][\p{L}\p{N}\x{2019}\x{0027}-]*/u', $plain_text, $matches);
+    return count($matches[0]);
+}
+
 function mirrortalk_qotd_safe_insertion_offset($content) {
     $void_elements = array('area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr');
     $stack = array();
+    $top_level_heading_offsets = array();
     $top_level_paragraph_ends = array();
+
+    $word_count = mirrortalk_qotd_word_count($content);
+    if ($word_count < 250) return null;
 
     if (!preg_match_all('/<!--[\s\S]*?-->|<\/?[a-zA-Z][^>]*>/', $content, $tokens, PREG_OFFSET_CAPTURE)) return null;
 
@@ -149,13 +165,37 @@ function mirrortalk_qotd_safe_insertion_offset($content) {
         if (!preg_match('/^<\s*([a-zA-Z0-9:-]+)/', $token, $opening)) continue;
         $tag = strtolower($opening[1]);
         $is_top_level = empty($stack);
-        if ($is_top_level && $tag === 'h2' && $offset >= 450) return $offset;
+        if ($is_top_level && $tag === 'h2') $top_level_heading_offsets[] = $offset;
 
         $self_closing = substr(rtrim($token), -2) === '/>' || in_array($tag, $void_elements, true);
         if (!$self_closing) $stack[] = $tag;
     }
 
-    return count($top_level_paragraph_ends) >= 3 ? $top_level_paragraph_ends[2] : null;
+    $progress_for = function($offset) use ($content, $word_count) {
+        return mirrortalk_qotd_word_count(substr($content, 0, $offset)) / max(1, $word_count);
+    };
+    $within_reading_window = function($offset) use ($progress_for) {
+        $progress = $progress_for($offset);
+        return $progress >= .30 && $progress <= .68;
+    };
+
+    $heading_candidates = array_values(array_filter($top_level_heading_offsets, $within_reading_window));
+    if (!empty($heading_candidates)) {
+        foreach ($heading_candidates as $offset) {
+            if ($progress_for($offset) >= .46) return $offset;
+        }
+        return end($heading_candidates);
+    }
+
+    $paragraph_candidates = array_values(array_filter($top_level_paragraph_ends, $within_reading_window));
+    if (!empty($paragraph_candidates)) {
+        usort($paragraph_candidates, function($left, $right) use ($progress_for) {
+            return abs($progress_for($left) - .46) <=> abs($progress_for($right) - .46);
+        });
+        return $paragraph_candidates[0];
+    }
+
+    return null;
 }
 
 function mirrortalk_insert_qotd_after_editorial_opening($content) {
@@ -167,7 +207,10 @@ function mirrortalk_insert_qotd_after_editorial_opening($content) {
     $offset = mirrortalk_qotd_safe_insertion_offset($content);
     if ($offset !== null) return substr($content, 0, $offset) . $card . substr($content, $offset);
 
-    return $content . $card;
+    // Short or structurally ambiguous documents remain uninterrupted. The
+    // persistent Ask entry point still provides access without forcing a card
+    // into an unsafe or distracting position.
+    return $content;
 }
 add_filter('the_content', 'mirrortalk_insert_qotd_after_editorial_opening', 36);
 

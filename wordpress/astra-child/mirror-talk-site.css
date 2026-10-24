@@ -302,11 +302,20 @@ body :where(a, button, input, textarea, summary):focus-visible {
 }
 
 .mt-episode-card__image {
+  display: block;
+  width: calc(100% + 36px);
   aspect-ratio: 16 / 10;
   margin: -18px -18px 24px;
   border-radius: 20px;
-  background: linear-gradient(145deg, #ead8c8, #c6a990);
+  background-color: #211824;
   object-fit: cover;
+}
+
+.mt-episode-card__image--fallback {
+  background-image: linear-gradient(135deg, rgba(24, 17, 29, 0.06), rgba(24, 17, 29, 0.28)), url("assets/art/topic-journey-atmosphere-1000.jpg");
+  background-position: center;
+  background-size: cover;
+  filter: saturate(.92) contrast(1.04);
 }
 
 .mt-episode-card__meta {

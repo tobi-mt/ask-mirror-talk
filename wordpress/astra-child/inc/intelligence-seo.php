@@ -172,7 +172,7 @@ function mirrortalk_fallback_visual($post_id = 0) {
     $choices = array(
         array('file'=>'mirror-talk-hero-atmosphere-1600.jpg','width'=>1600,'height'=>900),
         array('file'=>'topic-journey-atmosphere-1800.jpg','width'=>1800,'height'=>1200),
-        array('file'=>'ask-reflection-atmosphere-1600.jpg','width'=>1600,'height'=>900),
+        array('file'=>'mirror-talk-cover-art.jpg','width'=>1000,'height'=>1000),
     );
     $seed = $post_id ? (string)get_post_field('post_name',$post_id) : 'mirror-talk';
     $choice = $choices[abs(crc32($seed)) % count($choices)];

@@ -89,6 +89,9 @@ def test_theme_has_editorial_home_and_design_tokens():
     assert ".mt-home__hero" in site_css
     assert "Template Name: Mirror Talk Editorial Home" in template
     assert "new WP_Query" in template
+    assert "mirrortalk_document_visual(get_the_ID(), 'medium_large'" in template
+    assert "mt-episode-card__image--fallback" in template
+    assert '<span class="mt-episode-card__image" aria-hidden="true"></span>' not in template
 
 
 def test_living_question_is_resilient_sitewide_and_does_not_restore_page_caching():

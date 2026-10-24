@@ -82,7 +82,8 @@ $contact_url = home_url('/contact/');
                     <?php
                     $feature_image = get_the_post_thumbnail_url(get_the_ID(), 'large');
                     if (!$feature_image) {
-                        $feature_image = get_stylesheet_directory_uri() . '/assets/art/topic-journey-atmosphere-1800.jpg';
+                        $feature_visual = function_exists('mirrortalk_fallback_visual') ? mirrortalk_fallback_visual(get_the_ID()) : array();
+                        $feature_image = !empty($feature_visual['url']) ? $feature_visual['url'] : get_stylesheet_directory_uri() . '/assets/art/topic-journey-atmosphere-1800.jpg';
                     }
                     $feature_topic = mirrortalk_resolve_topic_context(get_the_ID());
                     $feature_words = str_word_count(wp_strip_all_tags(get_the_title() . ' ' . get_the_excerpt()));
@@ -179,11 +180,21 @@ $contact_url = home_url('/contact/');
                     ?>
                     <article class="mt-card">
                         <a class="mt-episode-card" href="<?php the_permalink(); ?>">
-                            <?php if (has_post_thumbnail()) : ?>
-                                <?php the_post_thumbnail('medium_large', array('class' => 'mt-episode-card__image', 'loading' => 'lazy', 'decoding' => 'async', 'sizes' => '(max-width: 620px) calc(100vw - 48px), (max-width: 1100px) 45vw, 360px')); ?>
-                            <?php else : ?>
-                                <span class="mt-episode-card__image" aria-hidden="true"></span>
-                            <?php endif; ?>
+                            <?php
+                            if (function_exists('mirrortalk_document_visual')) {
+                                echo mirrortalk_document_visual(get_the_ID(), 'medium_large', array(
+                                    'class' => 'mt-episode-card__image' . (has_post_thumbnail() ? '' : ' mt-episode-card__image--fallback'),
+                                    'loading' => 'lazy',
+                                    'decoding' => 'async',
+                                    'fetchpriority' => 'low',
+                                    'sizes' => '(max-width: 620px) calc(100vw - 48px), (max-width: 1100px) 45vw, 360px',
+                                )); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+                            } elseif (has_post_thumbnail()) {
+                                the_post_thumbnail('medium_large', array('class' => 'mt-episode-card__image', 'loading' => 'lazy', 'decoding' => 'async'));
+                            } else {
+                                echo '<span class="mt-episode-card__image mt-episode-card__image--fallback" aria-hidden="true"></span>';
+                            }
+                            ?>
                             <h3><?php the_title(); ?></h3>
                             <p><?php echo esc_html(wp_trim_words(get_the_excerpt(), 24)); ?></p>
                             <span class="mt-episode-card__meta"><?php echo esc_html(get_the_date()); ?></span>

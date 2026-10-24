@@ -121,6 +121,9 @@ def test_living_question_is_resilient_sitewide_and_does_not_restore_page_caching
     assert "addEventListener('fetch'" not in worker
     assert "addEventListener('push'" in worker
     assert ".mt-living-question" in css
+    assert ".mt-living-question--inline .mt-living-question__content" in css
+    assert 'grid-template-areas:"meta action" "theme action" "question action"' in css
+    assert ".mt-living-question--inline .mt-living-question__mark{display:none}" in css
     assert "prefers-reduced-motion" in css
 
 

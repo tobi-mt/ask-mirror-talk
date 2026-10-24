@@ -111,25 +111,61 @@ function mirrortalk_qotd_content_is_eligible($post_id) {
     ), true);
 }
 
+/**
+ * Find an insertion point between top-level editorial elements.
+ *
+ * A simple search for the first H2 can place the card inside a Composer
+ * takeaway, table, quote or other semantic container. This lightweight token
+ * walk preserves the original HTML byte-for-byte and accepts only boundaries
+ * where no parent element remains open.
+ */
+function mirrortalk_qotd_safe_insertion_offset($content) {
+    $void_elements = array('area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr');
+    $stack = array();
+    $top_level_paragraph_ends = array();
+
+    if (!preg_match_all('/<!--[\s\S]*?-->|<\/?[a-zA-Z][^>]*>/', $content, $tokens, PREG_OFFSET_CAPTURE)) return null;
+
+    foreach ($tokens[0] as $token_data) {
+        $token = $token_data[0];
+        $offset = (int) $token_data[1];
+        if (strncmp($token, '<!--', 4) === 0) continue;
+
+        if (preg_match('/^<\/\s*([a-zA-Z0-9:-]+)/', $token, $closing)) {
+            $tag = strtolower($closing[1]);
+            if (!empty($stack)) {
+                $opened = array_pop($stack);
+                if ($opened !== $tag) {
+                    $stack = array();
+                    continue;
+                }
+            }
+            if (empty($stack) && $tag === 'p') {
+                $top_level_paragraph_ends[] = $offset + strlen($token);
+            }
+            continue;
+        }
+
+        if (!preg_match('/^<\s*([a-zA-Z0-9:-]+)/', $token, $opening)) continue;
+        $tag = strtolower($opening[1]);
+        $is_top_level = empty($stack);
+        if ($is_top_level && $tag === 'h2' && $offset >= 450) return $offset;
+
+        $self_closing = substr(rtrim($token), -2) === '/>' || in_array($tag, $void_elements, true);
+        if (!$self_closing) $stack[] = $tag;
+    }
+
+    return count($top_level_paragraph_ends) >= 3 ? $top_level_paragraph_ends[2] : null;
+}
+
 function mirrortalk_insert_qotd_after_editorial_opening($content) {
     $post_id = get_the_ID();
     if (!mirrortalk_qotd_content_is_eligible($post_id)) return $content;
     if (strpos($content, 'data-mt-living-question') !== false) return $content;
 
     $card = mirrortalk_render_question_of_the_day('inline', false);
-    $heading_offset = null;
-    if (preg_match('/<h2\b/i', $content, $heading_match, PREG_OFFSET_CAPTURE)) {
-        $heading_offset = (int) $heading_match[0][1];
-    }
-    if ($heading_offset !== null && $heading_offset >= 450) {
-        return substr($content, 0, $heading_offset) . $card . substr($content, $heading_offset);
-    }
-
-    if (preg_match_all('/<\/p\s*>/i', $content, $paragraphs, PREG_OFFSET_CAPTURE) && count($paragraphs[0]) >= 3) {
-        $third = $paragraphs[0][2];
-        $offset = (int) $third[1] + strlen($third[0]);
-        return substr($content, 0, $offset) . $card . substr($content, $offset);
-    }
+    $offset = mirrortalk_qotd_safe_insertion_offset($content);
+    if ($offset !== null) return substr($content, 0, $offset) . $card . substr($content, $offset);
 
     return $content . $card;
 }
